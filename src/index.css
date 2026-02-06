@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,32 +7,32 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 220 20% 14%;
+    --foreground: 222 25% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 14%;
+    --card-foreground: 222 25% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 14%;
+    --popover-foreground: 222 25% 10%;
 
-    --primary: 24 95% 53%;
+    --primary: 22 100% 52%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 20% 14%;
+    --secondary: 220 20% 97%;
+    --secondary-foreground: 222 25% 10%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 10% 46%;
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 10% 44%;
 
-    --accent: 24 95% 53%;
+    --accent: 22 100% 52%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 24 95% 53%;
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 22 100% 52%;
 
     --radius: 0.5rem;
 
@@ -43,54 +43,46 @@
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 24 95% 53%;
+    --sidebar-ring: 22 100% 52%;
 
-    /* Custom Inorme tokens */
-    --inorme-dark: 220 20% 14%;
-    --inorme-charcoal: 220 15% 20%;
-    --inorme-gray: 220 10% 46%;
-    --inorme-light: 220 14% 96%;
-    --inorme-orange: 24 95% 53%;
-    --inorme-orange-light: 24 90% 60%;
-    --inorme-orange-dark: 24 95% 45%;
+    /* Inorme brand tokens */
+    --inorme-dark: 222 25% 10%;
+    --inorme-charcoal: 222 20% 16%;
+    --inorme-slate: 220 15% 26%;
+    --inorme-gray: 220 10% 44%;
+    --inorme-light: 220 20% 97%;
+    --inorme-orange: 22 100% 52%;
+    --inorme-orange-glow: 22 90% 60%;
   }
 
   .dark {
-    --background: 220 20% 10%;
+    --background: 222 25% 8%;
     --foreground: 210 40% 98%;
-
-    --card: 220 20% 14%;
+    --card: 222 25% 10%;
     --card-foreground: 210 40% 98%;
-
-    --popover: 220 20% 14%;
+    --popover: 222 25% 10%;
     --popover-foreground: 210 40% 98%;
-
-    --primary: 24 95% 53%;
+    --primary: 22 100% 52%;
     --primary-foreground: 0 0% 100%;
-
-    --secondary: 220 15% 20%;
+    --secondary: 222 20% 16%;
     --secondary-foreground: 210 40% 98%;
-
-    --muted: 220 15% 20%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 24 95% 53%;
+    --muted: 222 20% 16%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 22 100% 52%;
     --accent-foreground: 0 0% 100%;
-
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-
-    --border: 220 15% 20%;
-    --input: 220 15% 20%;
-    --ring: 24 95% 53%;
-    --sidebar-background: 220 20% 10%;
+    --border: 222 20% 16%;
+    --input: 222 20% 16%;
+    --ring: 22 100% 52%;
+    --sidebar-background: 222 25% 8%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary: 22 100% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 15% 20%;
+    --sidebar-accent: 222 20% 16%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 220 15% 20%;
-    --sidebar-ring: 24 95% 53%;
+    --sidebar-border: 222 20% 16%;
+    --sidebar-ring: 22 100% 52%;
   }
 }
 
@@ -100,8 +92,8 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
   }
 
   html {
@@ -109,17 +101,76 @@
   }
 }
 
-@layer utilities {
-  .text-gradient {
-    @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--inorme-orange-light)));
+/* Animations */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
-  .bg-dark-gradient {
-    background: linear-gradient(135deg, hsl(220 20% 10%), hsl(220 20% 18%));
-  }
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 
-  .bg-hero-gradient {
-    background: linear-gradient(160deg, hsl(220 20% 10%) 0%, hsl(220 20% 16%) 50%, hsl(220 15% 20%) 100%);
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
   }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.8s ease-out forwards;
+}
+
+.animate-fade-up-delay-1 {
+  animation: fade-up 0.8s ease-out 0.15s forwards;
+  opacity: 0;
+}
+
+.animate-fade-up-delay-2 {
+  animation: fade-up 0.8s ease-out 0.3s forwards;
+  opacity: 0;
+}
+
+.animate-fade-up-delay-3 {
+  animation: fade-up 0.8s ease-out 0.45s forwards;
+  opacity: 0;
+}
+
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+
+.scroll-reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Utilities */
+.text-gradient-orange {
+  background: linear-gradient(135deg, hsl(22 100% 52%), hsl(22 90% 60%));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bg-hero-dark {
+  background: linear-gradient(165deg, hsl(222 25% 8%) 0%, hsl(222 20% 14%) 40%, hsl(222 15% 18%) 100%);
+}
+
+.bg-section-dark {
+  background: linear-gradient(180deg, hsl(222 25% 10%) 0%, hsl(222 20% 14%) 100%);
 }
