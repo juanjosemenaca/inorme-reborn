@@ -1,28 +1,28 @@
-import { useScrollAnimation } from "@/hooks/useScrollAnimation";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { Target, Lightbulb, Handshake, Award } from "lucide-react";
 
 const stats = [
-  { value: "+20", label: "Años de experiencia" },
-  { value: "+500", label: "Proyectos realizados" },
-  { value: "+200", label: "Profesionales" },
-  { value: "+50", label: "Clientes activos" },
+  { value: "+20", label: "Años", sublabel: "de experiencia" },
+  { value: "+500", label: "Proyectos", sublabel: "realizados" },
+  { value: "+200", label: "Profesionales", sublabel: "IT en activo" },
+  { value: "+50", label: "Clientes", sublabel: "activos" },
 ];
 
 const values = [
   {
     icon: Target,
     title: "Compromiso",
-    description: "Nos involucramos en cada proyecto como si fuera nuestro propio negocio.",
+    description: "Nos involucramos en cada proyecto como si fuera propio.",
   },
   {
     icon: Lightbulb,
     title: "Innovación",
-    description: "Incorporamos las últimas tecnologías y metodologías del mercado.",
+    description: "Las últimas tecnologías y metodologías del mercado.",
   },
   {
     icon: Handshake,
     title: "Confianza",
-    description: "Relaciones duraderas basadas en la transparencia y los resultados.",
+    description: "Relaciones duraderas basadas en transparencia y resultados.",
   },
   {
     icon: Award,
@@ -32,60 +32,66 @@ const values = [
 ];
 
 const About = () => {
-  const { ref, isVisible } = useScrollAnimation();
+  const ref = useScrollReveal();
 
   return (
-    <section id="nosotros" className="py-24 lg:py-32 bg-dark-gradient">
-      <div className="container mx-auto px-6" ref={ref}>
-        <div
-          className={`transition-all duration-700 ${
-            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
-          }`}
-        >
-          {/* Intro */}
-          <div className="max-w-3xl mb-16">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-px w-8 bg-primary" />
-              <span className="text-primary font-medium text-sm tracking-widest uppercase">
-                Sobre Nosotros
-              </span>
-            </div>
-            <h2 className="text-3xl lg:text-4xl font-bold text-white mb-6">
+    <section id="nosotros" className="py-24 lg:py-32 bg-section-dark relative overflow-hidden">
+      {/* Decorative */}
+      <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full bg-primary/5 blur-[150px]" />
+
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10" ref={ref}>
+        {/* Header + description */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 mb-20">
+          <div>
+            <span className="text-primary text-sm font-semibold tracking-widest uppercase mb-3 block">
+              Sobre Nosotros
+            </span>
+            <h2 className="text-3xl lg:text-[2.75rem] font-bold text-white leading-tight">
               Tu socio tecnológico en el{" "}
-              <span className="text-gradient font-display italic">sector financiero</span>
+              <span className="font-serif italic font-normal text-gradient-orange">
+                sector financiero
+              </span>
             </h2>
-            <p className="text-white/70 text-lg leading-relaxed">
-              Inorme es una consultora tecnológica especializada en banca y seguros. 
-              Desde nuestra fundación, hemos acompañado a las principales entidades 
-              financieras en su transformación digital, aportando conocimiento sectorial 
+          </div>
+          <div className="flex items-end">
+            <p className="text-white/55 text-base lg:text-lg leading-relaxed">
+              Inorme es una consultora tecnológica especializada en banca y seguros.
+              Desde nuestra fundación, hemos acompañado a las principales entidades
+              financieras en su transformación digital, aportando conocimiento sectorial
               profundo y capacidad técnica de primer nivel.
             </p>
           </div>
+        </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
-            {stats.map((stat, i) => (
-              <div
-                key={i}
-                className="text-center p-6 rounded-2xl bg-white/5 border border-white/10"
-              >
-                <p className="text-4xl lg:text-5xl font-bold text-primary mb-2">
-                  {stat.value}
-                </p>
-                <p className="text-white/60 text-sm">{stat.label}</p>
-              </div>
-            ))}
-          </div>
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-20">
+          {stats.map((stat, i) => (
+            <div
+              key={i}
+              className="rounded-2xl bg-white/[0.04] border border-white/[0.06] p-6 lg:p-8 text-center hover:bg-white/[0.06] transition-colors"
+            >
+              <p className="text-4xl lg:text-5xl font-bold text-primary mb-1">
+                {stat.value}
+              </p>
+              <p className="text-white/80 text-sm font-semibold">{stat.label}</p>
+              <p className="text-white/40 text-xs">{stat.sublabel}</p>
+            </div>
+          ))}
+        </div>
 
-          {/* Values */}
+        {/* Values */}
+        <div>
+          <p className="text-white/40 text-xs font-semibold tracking-widest uppercase mb-8">
+            Nuestros valores
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {values.map((value, i) => (
-              <div key={i} className="p-6">
-                <div className="p-3 rounded-xl bg-primary/10 w-fit mb-4">
-                  <value.icon className="h-6 w-6 text-primary" />
+              <div key={i} className="group">
+                <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+                  <value.icon className="h-5 w-5 text-primary" />
                 </div>
                 <h3 className="text-white font-semibold text-lg mb-2">{value.title}</h3>
-                <p className="text-white/50 text-sm leading-relaxed">{value.description}</p>
+                <p className="text-white/40 text-sm leading-relaxed">{value.description}</p>
               </div>
             ))}
           </div>

@@ -1,113 +1,101 @@
-import { motion } from "framer-motion";
-import { ArrowRight, Shield, Cpu, TrendingUp } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const Hero = () => {
-  const scrollToContact = () => {
-    document.querySelector("#contacto")?.scrollIntoView({ behavior: "smooth" });
+  const scrollTo = (id: string) => {
+    document.querySelector(id)?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
-    <section className="relative min-h-screen flex items-center bg-hero-gradient overflow-hidden">
-      {/* Subtle background pattern */}
-      <div className="absolute inset-0 opacity-[0.03]">
+    <section className="relative min-h-[100vh] flex items-center bg-hero-dark overflow-hidden">
+      {/* Decorative elements */}
+      <div className="absolute inset-0">
+        {/* Grid pattern */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 opacity-[0.03]"
           style={{
-            backgroundImage:
-              "radial-gradient(circle at 1px 1px, white 1px, transparent 0)",
-            backgroundSize: "40px 40px",
+            backgroundImage: "linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)",
+            backgroundSize: "64px 64px",
           }}
         />
+        {/* Orange gradient blob */}
+        <div className="absolute top-[20%] right-[10%] w-[500px] h-[500px] rounded-full bg-primary/8 blur-[150px]" />
+        <div className="absolute bottom-[10%] left-[5%] w-[300px] h-[300px] rounded-full bg-primary/5 blur-[120px]" />
+        {/* Side accent line */}
+        <div className="absolute left-0 top-[15%] bottom-[15%] w-px bg-gradient-to-b from-transparent via-primary/30 to-transparent" />
       </div>
 
-      {/* Orange accent glow */}
-      <div className="absolute top-1/4 right-0 w-96 h-96 bg-primary/10 rounded-full blur-[120px]" />
-      <div className="absolute bottom-0 left-1/4 w-72 h-72 bg-primary/5 rounded-full blur-[100px]" />
+      <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 pt-28 pb-20 w-full">
+        <div className="max-w-[720px]">
+          {/* Badge */}
+          <div className="animate-fade-up inline-flex items-center gap-2 mb-8 px-4 py-2 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm">
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            <span className="text-white/70 text-xs font-medium tracking-widest uppercase">
+              Consultoría IT · Banca & Seguros
+            </span>
+          </div>
 
-      <div className="container mx-auto px-6 pt-24 pb-16 relative z-10">
-        <div className="max-w-4xl">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-          >
-            <div className="flex items-center gap-3 mb-8">
-              <div className="h-px w-12 bg-primary" />
-              <span className="text-primary font-medium text-sm tracking-widest uppercase">
-                Consultoría IT
-              </span>
-            </div>
+          {/* Heading */}
+          <h1 className="animate-fade-up-delay-1 text-[clamp(2.5rem,6vw,4.5rem)] font-bold text-white leading-[1.08] tracking-tight mb-6">
+            Transformamos la
+            <br />
+            <span className="font-serif italic font-normal text-gradient-orange">
+              tecnología
+            </span>{" "}
+            del sector
+            <br />
+            financiero
+          </h1>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold text-white leading-tight mb-6">
-              Transformamos la{" "}
-              <span className="text-gradient font-display italic">tecnología</span>
-              <br />
-              del sector financiero
-            </h1>
+          {/* Subtitle */}
+          <p className="animate-fade-up-delay-2 text-white/55 text-lg sm:text-xl leading-relaxed max-w-[540px] mb-10">
+            Más de 20 años impulsando la innovación en banca y seguros.
+            Soluciones a medida que generan resultados reales.
+          </p>
 
-            <p className="text-lg sm:text-xl text-white/70 max-w-2xl mb-10 leading-relaxed">
-              Más de 20 años impulsando la innovación tecnológica en banca y seguros. 
-              Soluciones a medida que generan resultados reales.
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
-            className="flex flex-col sm:flex-row gap-4 mb-16"
-          >
+          {/* CTA */}
+          <div className="animate-fade-up-delay-3 flex flex-wrap items-center gap-4">
             <Button
               size="lg"
-              onClick={scrollToContact}
-              className="rounded-full px-8 text-base h-14 gap-2 group"
+              onClick={() => scrollTo("#contacto")}
+              className="rounded-full h-13 px-8 text-[15px] font-semibold gap-2 group shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all"
             >
-              Contáctanos
+              Empezar un proyecto
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Button>
             <Button
               size="lg"
-              variant="outline"
-              onClick={() =>
-                document
-                  .querySelector("#servicios")
-                  ?.scrollIntoView({ behavior: "smooth" })
-              }
-              className="rounded-full px-8 text-base h-14 border-white/20 text-white hover:bg-white/10 hover:text-white"
+              variant="ghost"
+              onClick={() => scrollTo("#servicios")}
+              className="rounded-full h-13 px-8 text-[15px] text-white/70 hover:text-white hover:bg-white/10"
             >
-              Conoce nuestros servicios
+              Ver servicios
             </Button>
-          </motion.div>
+          </div>
+        </div>
 
-          {/* Stats cards */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.5, ease: "easeOut" }}
-            className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl"
-          >
-            {[
-              { icon: Shield, label: "Banca & Seguros", desc: "Especialización sectorial" },
-              { icon: Cpu, label: "+500 Proyectos", desc: "Ejecutados con éxito" },
-              { icon: TrendingUp, label: "+20 Años", desc: "De experiencia" },
-            ].map((stat, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-4 bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-5"
-              >
-                <div className="p-3 rounded-xl bg-primary/15">
-                  <stat.icon className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-white font-semibold text-sm">{stat.label}</p>
-                  <p className="text-white/50 text-xs">{stat.desc}</p>
-                </div>
-              </div>
-            ))}
-          </motion.div>
+        {/* Stats bar at bottom */}
+        <div className="mt-20 lg:mt-28 grid grid-cols-3 gap-px rounded-2xl overflow-hidden border border-white/[0.06] bg-white/[0.03] backdrop-blur-sm max-w-2xl">
+          {[
+            { number: "+20", text: "Años de experiencia" },
+            { number: "+500", text: "Proyectos realizados" },
+            { number: "+200", text: "Profesionales IT" },
+          ].map((stat, i) => (
+            <div key={i} className="px-6 py-5 text-center">
+              <p className="text-2xl sm:text-3xl font-bold text-white mb-1">{stat.number}</p>
+              <p className="text-white/40 text-xs font-medium tracking-wide">{stat.text}</p>
+            </div>
+          ))}
         </div>
       </div>
+
+      {/* Scroll indicator */}
+      <button
+        onClick={() => scrollTo("#servicios")}
+        className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/30 hover:text-white/60 transition-colors animate-bounce"
+      >
+        <ChevronDown className="h-6 w-6" />
+      </button>
     </section>
   );
 };
