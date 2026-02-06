@@ -64,11 +64,13 @@ export default {
         inorme: {
           dark: "hsl(var(--inorme-dark))",
           charcoal: "hsl(var(--inorme-charcoal))",
+          slate: "hsl(var(--inorme-slate))",
           gray: "hsl(var(--inorme-gray))",
           light: "hsl(var(--inorme-light))",
           orange: "hsl(var(--inorme-orange))",
           "orange-light": "hsl(var(--inorme-orange-light))",
           "orange-dark": "hsl(var(--inorme-orange-dark))",
+          "orange-glow": "hsl(var(--inorme-orange-glow))",
         },
       },
       borderRadius: {

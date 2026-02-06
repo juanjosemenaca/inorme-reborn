@@ -52,6 +52,8 @@
     --inorme-gray: 220 10% 44%;
     --inorme-light: 220 20% 97%;
     --inorme-orange: 22 100% 52%;
+    --inorme-orange-light: 22 90% 60%;
+    --inorme-orange-dark: 22 100% 42%;
     --inorme-orange-glow: 22 90% 60%;
   }
 
@@ -134,29 +136,27 @@
 }
 
 .animate-fade-up-delay-1 {
-  animation: fade-up 0.8s ease-out 0.15s forwards;
-  opacity: 0;
+  animation: fade-up 0.8s ease-out 0.15s both;
 }
 
 .animate-fade-up-delay-2 {
-  animation: fade-up 0.8s ease-out 0.3s forwards;
-  opacity: 0;
+  animation: fade-up 0.8s ease-out 0.3s both;
 }
 
 .animate-fade-up-delay-3 {
-  animation: fade-up 0.8s ease-out 0.45s forwards;
-  opacity: 0;
+  animation: fade-up 0.8s ease-out 0.45s both;
 }
 
-.scroll-reveal {
-  opacity: 0;
-  transform: translateY(30px);
-  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
-}
-
-.scroll-reveal.visible {
-  opacity: 1;
-  transform: translateY(0);
+/* Ensure content is always visible if animations are disabled */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-up-delay-1,
+  .animate-fade-up-delay-2,
+  .animate-fade-up-delay-3 {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 /* Utilities */
