@@ -1,4 +1,3 @@
-import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { Building2, Shield, Landmark, CreditCard, PiggyBank, BarChart3 } from "lucide-react";
 
 const sectors = [
@@ -26,13 +25,11 @@ const testimonials = [
 ];
 
 const Clients = () => {
-  const ref = useScrollReveal();
-
   return (
     <section id="clientes" className="py-24 lg:py-32 bg-muted/50 relative">
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
 
-      <div className="max-w-7xl mx-auto px-6 lg:px-8" ref={ref}>
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="text-center max-w-xl mx-auto mb-16">
           <span className="text-primary text-sm font-semibold tracking-widest uppercase mb-3 block">
             Clientes & Sectores
@@ -50,8 +47,8 @@ const Clients = () => {
               key={i}
               className="flex flex-col items-center gap-2.5 p-5 bg-background rounded-2xl border border-border/50 hover:border-primary/20 hover:shadow-sm transition-all duration-300 group"
             >
-              <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center group-hover:bg-primary/12 transition-colors">
-                <sector.icon className="h-4.5 w-4.5 text-primary" />
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/15 transition-colors">
+                <sector.icon className="h-5 w-5 text-primary" />
               </div>
               <span className="text-foreground/80 text-xs font-medium text-center leading-tight">
                 {sector.name}
