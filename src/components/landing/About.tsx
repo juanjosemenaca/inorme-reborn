@@ -1,4 +1,3 @@
-import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { Target, Lightbulb, Handshake, Award } from "lucide-react";
 
 const stats = [
@@ -32,14 +31,11 @@ const values = [
 ];
 
 const About = () => {
-  const ref = useScrollReveal();
-
   return (
     <section id="nosotros" className="py-24 lg:py-32 bg-section-dark relative overflow-hidden">
-      {/* Decorative */}
       <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full bg-primary/5 blur-[150px]" />
 
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10" ref={ref}>
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10">
         {/* Header + description */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 mb-20">
           <div>

@@ -1,5 +1,4 @@
 import { Monitor, Code2, FolderKanban, Users } from "lucide-react";
-import { useScrollReveal } from "@/hooks/useScrollReveal";
 
 const services = [
   {
@@ -33,14 +32,11 @@ const services = [
 ];
 
 const Services = () => {
-  const ref = useScrollReveal();
-
   return (
     <section id="servicios" className="py-24 lg:py-32 bg-background relative">
-      {/* Subtle top border gradient */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
 
-      <div className="max-w-7xl mx-auto px-6 lg:px-8" ref={ref}>
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-16">
           <div className="max-w-xl">
             <span className="text-primary text-sm font-semibold tracking-widest uppercase mb-3 block">
