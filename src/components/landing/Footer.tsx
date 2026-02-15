@@ -1,13 +1,23 @@
-import { Linkedin } from "lucide-react";
+import { useLanguage, type Language } from "@/contexts/LanguageContext";
 
-const footerLinks = [
-  { label: "Servicios", href: "#servicios" },
-  { label: "Sobre Nosotros", href: "#nosotros" },
-  { label: "Clientes", href: "#clientes" },
-  { label: "Contacto", href: "#contacto" },
+const languageLabels: Record<Language, string> = {
+  es: "ES",
+  ca: "CA",
+  en: "EN",
+  eu: "EU",
+};
+
+const footerLinkKeys = [
+  { key: "nav_company", href: "#historia" },
+  { key: "nav_services", href: "#servicios" },
+  { key: "nav_products", href: "#productos" },
+  { key: "nav_about", href: "#nosotros" },
+  { key: "nav_clients", href: "#clientes" },
+  { key: "nav_contact", href: "#contacto" },
 ];
 
 const Footer = () => {
+  const { t, language, setLanguage } = useLanguage();
   const scrollTo = (href: string) => {
     document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
   };
@@ -20,29 +30,31 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-16">
           {/* Brand */}
           <div className="md:col-span-5">
-            <span className="text-[22px] font-bold tracking-tight">
-              <span className="text-primary">in</span>
-              <span className="text-white">orme</span>
-            </span>
+            <a href="#" className="inline-block">
+              <img
+                src="/logo-inorme.png"
+                alt="Inorme S.L. - Informática, organización y métodos"
+                className="h-10 w-auto"
+              />
+            </a>
             <p className="text-white/40 mt-4 text-sm leading-relaxed max-w-sm">
-              Consultora tecnológica especializada en banca y seguros.
-              Transformamos la tecnología del sector financiero desde hace más de 20 años.
+              {t("footer_tagline")}
             </p>
           </div>
 
           {/* Links */}
           <div className="md:col-span-3">
             <h4 className="text-white/60 font-semibold mb-5 text-xs uppercase tracking-wider">
-              Navegación
+              {t("footer_nav")}
             </h4>
             <ul className="space-y-3">
-              {footerLinks.map((link) => (
+              {footerLinkKeys.map((link) => (
                 <li key={link.href}>
                   <button
                     onClick={() => scrollTo(link.href)}
                     className="text-white/40 text-sm hover:text-primary transition-colors"
                   >
-                    {link.label}
+                    {t(link.key)}
                   </button>
                 </li>
               ))}
@@ -52,30 +64,22 @@ const Footer = () => {
           {/* Contact */}
           <div className="md:col-span-4">
             <h4 className="text-white/60 font-semibold mb-5 text-xs uppercase tracking-wider">
-              Contacto
+              {t("footer_contact")}
             </h4>
             <div className="space-y-3 text-sm text-white/40">
               <p>
-                <a href="mailto:info@inorme.com" className="hover:text-primary transition-colors">
-                  info@inorme.com
+                <a href="mailto:admon@inorme.com" className="hover:text-primary transition-colors">
+                  admon@inorme.com
                 </a>
               </p>
               <p>
-                <a href="tel:+34912345678" className="hover:text-primary transition-colors">
-                  +34 91 234 56 78
-                </a>
+                {[
+                  "contact_location_madrid",
+                  "contact_location_barcelona",
+                  "contact_location_sevilla",
+                  "contact_location_pais_vasco",
+                ].map((key) => t(key)).join(", ")}
               </p>
-              <p>Madrid, España</p>
-            </div>
-            <div className="mt-6">
-              <a
-                href="https://linkedin.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 text-white/40 hover:bg-white/10 hover:text-primary transition-all"
-              >
-                <Linkedin className="h-4 w-4" />
-              </a>
             </div>
           </div>
         </div>
@@ -83,17 +87,31 @@ const Footer = () => {
         {/* Bottom */}
         <div className="border-t border-white/[0.06] pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-white/25 text-xs">
-            © {new Date().getFullYear()} Inorme. Todos los derechos reservados.
+            © {new Date().getFullYear()} Inorme. {t("footer_rights")}
           </p>
-          <div className="flex gap-6 text-xs text-white/25">
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-white/25">
+            <span className="flex items-center gap-2">
+              {(Object.keys(languageLabels) as Language[]).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => setLanguage(lang)}
+                  className={`transition-colors hover:text-white/50 ${
+                    language === lang ? "text-primary font-semibold" : ""
+                  }`}
+                >
+                  {languageLabels[lang]}
+                </button>
+              ))}
+            </span>
+            <span className="text-white/10">|</span>
             <button className="hover:text-white/50 transition-colors">
-              Aviso Legal
+              {t("footer_legal")}
             </button>
             <button className="hover:text-white/50 transition-colors">
-              Política de Privacidad
+              {t("footer_privacy")}
             </button>
             <button className="hover:text-white/50 transition-colors">
-              Cookies
+              {t("footer_cookies")}
             </button>
           </div>
         </div>

@@ -1,67 +1,42 @@
 import { Target, Lightbulb, Handshake, Award } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
-const stats = [
-  { value: "+20", label: "Años", sublabel: "de experiencia" },
-  { value: "+500", label: "Proyectos", sublabel: "realizados" },
-  { value: "+200", label: "Profesionales", sublabel: "IT en activo" },
-  { value: "+50", label: "Clientes", sublabel: "activos" },
+const statsKeys = [
+  { value: "+30", labelKey: "about_stat_years", subKey: "about_stat_years_sub" },
+  { value: "+500", labelKey: "about_stat_projects", subKey: "about_stat_projects_sub" },
+  { value: "+100", labelKey: "about_stat_professionals", subKey: "about_stat_professionals_sub" },
 ];
 
-const values = [
-  {
-    icon: Target,
-    title: "Compromiso",
-    description: "Nos involucramos en cada proyecto como si fuera propio.",
-  },
-  {
-    icon: Lightbulb,
-    title: "Innovación",
-    description: "Las últimas tecnologías y metodologías del mercado.",
-  },
-  {
-    icon: Handshake,
-    title: "Confianza",
-    description: "Relaciones duraderas basadas en transparencia y resultados.",
-  },
-  {
-    icon: Award,
-    title: "Excelencia",
-    description: "Los más altos estándares de calidad en cada entrega.",
-  },
+const valueKeys = [
+  { icon: Target, titleKey: "about_compromiso", descKey: "about_compromiso_desc" },
+  { icon: Lightbulb, titleKey: "about_innovacion", descKey: "about_innovacion_desc" },
+  { icon: Handshake, titleKey: "about_confianza", descKey: "about_confianza_desc" },
+  { icon: Award, titleKey: "about_excelencia", descKey: "about_excelencia_desc" },
 ];
 
 const About = () => {
+  const { t } = useLanguage();
   return (
     <section id="nosotros" className="py-24 lg:py-32 bg-section-dark relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full bg-primary/5 blur-[150px]" />
 
       <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10">
-        {/* Header + description */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 mb-20">
-          <div>
-            <span className="text-primary text-sm font-semibold tracking-widest uppercase mb-3 block">
-              Sobre Nosotros
+        {/* Header */}
+        <div className="mb-20">
+          <span className="text-primary text-sm font-semibold tracking-widest uppercase mb-3 block">
+            {t("about_label")}
+          </span>
+          <h2 className="text-3xl lg:text-[2.75rem] font-bold text-white leading-tight">
+            {t("about_title")}{" "}
+            <span className="font-serif italic font-normal text-gradient-orange">
+              {t("about_sector")}
             </span>
-            <h2 className="text-3xl lg:text-[2.75rem] font-bold text-white leading-tight">
-              Tu socio tecnológico en el{" "}
-              <span className="font-serif italic font-normal text-gradient-orange">
-                sector financiero
-              </span>
-            </h2>
-          </div>
-          <div className="flex items-end">
-            <p className="text-white/55 text-base lg:text-lg leading-relaxed">
-              Inorme es una consultora tecnológica especializada en banca y seguros.
-              Desde nuestra fundación, hemos acompañado a las principales entidades
-              financieras en su transformación digital, aportando conocimiento sectorial
-              profundo y capacidad técnica de primer nivel.
-            </p>
-          </div>
+          </h2>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-20">
-          {stats.map((stat, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-20 max-w-3xl mx-auto">
+          {statsKeys.map((stat, i) => (
             <div
               key={i}
               className="rounded-2xl bg-white/[0.04] border border-white/[0.06] p-6 lg:p-8 text-center hover:bg-white/[0.06] transition-colors"
@@ -69,25 +44,28 @@ const About = () => {
               <p className="text-4xl lg:text-5xl font-bold text-primary mb-1">
                 {stat.value}
               </p>
-              <p className="text-white/80 text-sm font-semibold">{stat.label}</p>
-              <p className="text-white/40 text-xs">{stat.sublabel}</p>
+              <p className="text-white/80 font-semibold text-sm">{t(stat.labelKey)}</p>
+              <p className="text-white/40 text-xs">{t(stat.subKey)}</p>
             </div>
           ))}
         </div>
 
         {/* Values */}
-        <div>
-          <p className="text-white/40 text-xs font-semibold tracking-widest uppercase mb-8">
-            Nuestros valores
+        <div className="max-w-3xl mx-auto text-center">
+          <p className="text-white/40 text-xs font-semibold tracking-widest uppercase mb-6">
+            {t("about_values")}
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {values.map((value, i) => (
-              <div key={i} className="group">
-                <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                  <value.icon className="h-5 w-5 text-primary" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {valueKeys.map((v, i) => (
+              <div
+                key={i}
+                className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-4 text-center hover:bg-white/[0.06] transition-colors"
+              >
+                <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-2">
+                  <v.icon className="h-3.5 w-3.5 text-primary" />
                 </div>
-                <h3 className="text-white font-semibold text-lg mb-2">{value.title}</h3>
-                <p className="text-white/40 text-sm leading-relaxed">{value.description}</p>
+                <p className="text-white/80 font-semibold text-sm uppercase tracking-wide mb-1">{t(v.titleKey)}</p>
+                <p className="text-white/40 text-[11px] leading-relaxed">{t(v.descKey)}</p>
               </div>
             ))}
           </div>
