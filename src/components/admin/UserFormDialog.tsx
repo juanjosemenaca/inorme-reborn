@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { PasswordInputWithToggle } from "@/components/ui/password-input";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -68,8 +69,8 @@ type Props = {
   selectableWorkers: CompanyWorkerRecord[];
   /** Ficha de trabajador vinculada al editar (si existe) */
   linkedWorker?: CompanyWorkerRecord | null;
-  onSubmitCreate: (values: UserCreateFormValues) => void;
-  onSubmitEdit: (values: UserEditFormValues) => void;
+  onSubmitCreate: (values: UserCreateFormValues) => void | Promise<void>;
+  onSubmitEdit: (values: UserEditFormValues) => void | Promise<void>;
 };
 
 export function UserFormDialog({
@@ -229,7 +230,7 @@ export function UserFormDialog({
                   <FormItem>
                     <FormLabel>Contraseña</FormLabel>
                     <FormControl>
-                      <Input type="password" autoComplete="new-password" {...field} />
+                      <PasswordInputWithToggle autoComplete="new-password" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -328,8 +329,7 @@ export function UserFormDialog({
                   <FormItem>
                     <FormLabel>Nueva contraseña (opcional)</FormLabel>
                     <FormControl>
-                      <Input
-                        type="password"
+                      <PasswordInputWithToggle
                         autoComplete="new-password"
                         placeholder="Dejar vacío para no cambiar"
                         {...field}

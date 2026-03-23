@@ -1,0 +1,38 @@
+-- Datos iniciales 2026: festivos por sede (generados desde el Excel de referencia).
+-- Idempotente: ON CONFLICT DO NOTHING.
+
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-01-01'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-01-06'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-03-19'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-04-02'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-04-03'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-04-06'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-07-25'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-08-15'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-10-12'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-12-08'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'ARRASATE_MONDRAGON'::public.work_calendar_scope, '2026-12-25'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-01-01'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-01-06'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-04-02'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-04-03'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-05-02'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-08-15'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-10-12'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-11-02'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-12-07'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-12-08'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'MADRID'::public.work_calendar_scope, '2026-12-25'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-01-01'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-01-06'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-04-03'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-04-06'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-06-24'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-08-15'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-09-11'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-10-12'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-12-08'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-12-25'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+INSERT INTO public.work_calendar_holidays (calendar_year, scope, holiday_date, label) VALUES (2026, 'BARCELONA'::public.work_calendar_scope, '2026-12-26'::date, '') ON CONFLICT (calendar_year, scope, holiday_date) DO NOTHING;
+
+NOTIFY pgrst, 'reload schema';

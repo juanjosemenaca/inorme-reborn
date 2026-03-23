@@ -5,7 +5,7 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 /**
  * Cliente de Supabase (solo si `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` están definidos).
- * Los stores del backoffice siguen usando `localStorage` hasta que migres a tablas + RLS.
+ * El backoffice usa Postgres + Supabase Auth (ver `src/api/*`).
  */
 export const supabase: SupabaseClient | null =
   typeof url === "string" &&
@@ -17,4 +17,14 @@ export const supabase: SupabaseClient | null =
 
 export function isSupabaseConfigured(): boolean {
   return supabase !== null;
+}
+
+/** Variables que faltan o están vacías (útil para mensajes en UI). */
+export function getMissingSupabaseEnvVars(): string[] {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const missing: string[] = [];
+  if (typeof url !== "string" || !url.trim()) missing.push("VITE_SUPABASE_URL");
+  if (typeof key !== "string" || !key.trim()) missing.push("VITE_SUPABASE_ANON_KEY");
+  return missing;
 }

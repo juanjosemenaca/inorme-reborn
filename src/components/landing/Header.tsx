@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useLanguage, type Language } from "@/contexts/LanguageContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 const navKeys = [
   { href: "#historia", key: "nav_company" },
@@ -13,15 +14,8 @@ const navKeys = [
   { href: "#contacto", key: "nav_contact" },
 ] as const;
 
-const languageLabels: Record<Language, string> = {
-  es: "ES",
-  ca: "CA",
-  en: "EN",
-  eu: "EU",
-};
-
 const Header = () => {
-  const { t, language, setLanguage } = useLanguage();
+  const { t } = useLanguage();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
@@ -87,22 +81,7 @@ const Header = () => {
             {t("nav_backoffice")}
           </Link>
           <span className="ml-1 flex items-center gap-1 border-l border-current/20 pl-3">
-            {(Object.keys(languageLabels) as Language[]).map((lang) => (
-              <button
-                key={lang}
-                onClick={() => setLanguage(lang)}
-                className={`text-[10px] font-medium uppercase transition-colors ${
-                  language === lang
-                    ? "text-primary opacity-100"
-                    : isScrolled
-                      ? "text-foreground/50 hover:text-foreground"
-                      : "text-white/50 hover:text-white"
-                }`}
-                aria-label={lang}
-              >
-                {languageLabels[lang]}
-              </button>
-            ))}
+            <LanguageSwitcher variant={isScrolled ? "dark" : "light"} />
           </span>
           <Button
             onClick={() => scrollTo("#contacto")}
@@ -114,24 +93,7 @@ const Header = () => {
         </nav>
 
         <div className="flex lg:hidden items-center gap-2 relative z-10">
-          <span className="flex items-center gap-1">
-            {(Object.keys(languageLabels) as Language[]).map((lang) => (
-              <button
-                key={lang}
-                onClick={() => setLanguage(lang)}
-                className={`text-[10px] font-medium uppercase px-1.5 py-1 rounded transition-colors ${
-                  language === lang
-                    ? "text-primary opacity-100"
-                    : isScrolled
-                      ? "text-foreground/50 hover:text-foreground"
-                      : "text-white/50 hover:text-white"
-                }`}
-                aria-label={lang}
-              >
-                {languageLabels[lang]}
-              </button>
-            ))}
-          </span>
+          <LanguageSwitcher variant={isScrolled ? "dark" : "light"} />
           <div className="relative">
             <button
               className="p-2 -mr-2"

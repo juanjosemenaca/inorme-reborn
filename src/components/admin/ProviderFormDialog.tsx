@@ -42,7 +42,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   initial?: ProviderRecord | null;
-  onSubmit: (values: ProviderFormValues) => void;
+  onSubmit: (values: ProviderFormValues) => void | Promise<void>;
 };
 
 export function ProviderFormDialog({ open, onOpenChange, mode, initial, onSubmit }: Props) {

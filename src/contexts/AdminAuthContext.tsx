@@ -2,128 +2,197 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
-import {
-  authenticate,
-  ensureBackofficeUsersSeeded,
-  getUserById,
-  getResolvedDisplayName,
-} from "@/lib/backofficeUserStore";
+import { resolveProfileForSession } from "@/api/backofficeUsersApi";
+import { fetchCompanyWorkers } from "@/api/companyWorkersApi";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import type { BackofficeSession, UserRole } from "@/types/backoffice";
+import { getResolvedDisplayName } from "@/types/backoffice";
+import { useLanguage } from "@/contexts/LanguageContext";
 
-const SESSION_KEY = "inorme_backoffice_session";
+export type AdminLoginResult =
+  | { ok: true }
+  | { ok: false; message: string };
 
 type AdminAuthContextValue = {
   user: BackofficeSession | null;
   isAuthenticated: boolean;
+  /** Sesión Supabase + perfil resueltos (false mientras carga). */
+  ready: boolean;
   role: UserRole | null;
   isAdmin: boolean;
   isWorker: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  /** Sincroniza nombre/email/rol tras editar el usuario actual desde Usuarios */
-  refreshSession: () => void;
+  login: (email: string, password: string) => Promise<AdminLoginResult>;
+  logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 };
 
 const AdminAuthContext = createContext<AdminAuthContextValue | null>(null);
 
-function readSessionFromStorage(): BackofficeSession | null {
-  try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as BackofficeSession;
-    if (
-      parsed &&
-      typeof parsed.userId === "string" &&
-      typeof parsed.email === "string" &&
-      typeof parsed.name === "string" &&
-      (parsed.role === "ADMIN" || parsed.role === "WORKER")
-    ) {
-      return parsed;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function getInitialSession(): BackofficeSession | null {
-  ensureBackofficeUsersSeeded();
-  const s = readSessionFromStorage();
-  if (!s) return null;
-  if (!getUserById(s.userId)) {
-    try {
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch {
-      // ignore
-    }
-    return null;
-  }
-  return s;
-}
-
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<BackofficeSession | null>(getInitialSession);
+  const { t } = useLanguage();
+  const [user, setUser] = useState<BackofficeSession | null>(null);
+  const [ready, setReady] = useState(false);
 
-  const logout = useCallback(() => {
-    try {
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch {
-      // ignore
+  const loadSessionFromAuth = useCallback(async () => {
+    if (!isSupabaseConfigured() || !supabase) {
+      setUser(null);
+      return;
     }
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setUser(null);
+      return;
+    }
+    let profile;
+    try {
+      profile = await resolveProfileForSession(session.user.id, session.user.email ?? "");
+    } catch {
+      await supabase.auth.signOut();
+      setUser(null);
+      return;
+    }
+    if (!profile || !profile.active) {
+      await supabase.auth.signOut();
+      setUser(null);
+      return;
+    }
+    const workers = await fetchCompanyWorkers();
+    setUser({
+      userId: profile.id,
+      email: profile.email,
+      name: getResolvedDisplayName(profile, workers),
+      role: profile.role,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) {
+      setReady(true);
+      return;
+    }
+    let mounted = true;
+    loadSessionFromAuth().finally(() => {
+      if (mounted) setReady(true);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      loadSessionFromAuth();
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [loadSessionFromAuth]);
+
+  const logout = useCallback(async () => {
+    if (supabase) await supabase.auth.signOut();
     setUser(null);
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    const found = authenticate(email, password);
-    if (!found) return false;
+  const login = useCallback(
+    async (email: string, password: string): Promise<AdminLoginResult> => {
+      const mapSignInError = (error: { message: string; code?: string; status?: number }): string => {
+        const { message, code } = error;
+        if (
+          code === "email_not_confirmed" ||
+          /email not confirmed/i.test(message) ||
+          /not confirmed/i.test(message)
+        ) {
+          return t("admin.auth.email_not_confirmed");
+        }
+        if (code === "user_banned" || /banned/i.test(message)) {
+          return t("admin.auth.user_banned");
+        }
+        if (
+          code === "invalid_credentials" ||
+          message === "Invalid login credentials" ||
+          /invalid login credentials/i.test(message)
+        ) {
+          return t("admin.auth.invalid_credentials");
+        }
+        if (code === "too_many_requests" || error.status === 429) {
+          return t("admin.auth.too_many_requests");
+        }
+        return message;
+      };
 
-    const session: BackofficeSession = {
-      userId: found.id,
-      email: found.email,
-      name: getResolvedDisplayName(found),
-      role: found.role,
-    };
+      if (!supabase) {
+        return { ok: false, message: t("admin.auth.supabase_not_configured") };
+      }
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (signInError) {
+        return {
+          ok: false,
+          message: mapSignInError(signInError as { message: string; code?: string; status?: number }),
+        };
+      }
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (!authUser) {
+        await supabase.auth.signOut();
+        return { ok: false, message: t("admin.auth.no_user_after_login") };
+      }
 
-    try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    } catch {
-      // ignore
-    }
-    setUser(session);
-    return true;
-  }, []);
+      let profile;
+      try {
+        profile = await resolveProfileForSession(authUser.id, authUser.email ?? email);
+      } catch (e) {
+        await supabase.auth.signOut();
+        return {
+          ok: false,
+          message:
+            e instanceof Error
+              ? `${t("admin.auth.profile_load_error_prefix")} ${e.message}`
+              : t("admin.auth.profile_load_error"),
+        };
+      }
 
-  const refreshSession = useCallback(() => {
-    const current = readSessionFromStorage();
-    if (!current) return;
-    const u = getUserById(current.userId);
-    if (!u || !u.active) {
-      logout();
-      return;
-    }
-    const next: BackofficeSession = {
-      userId: u.id,
-      email: u.email,
-      name: getResolvedDisplayName(u),
-      role: u.role,
-    };
-    try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
-    } catch {
-      // ignore
-    }
-    setUser(next);
-  }, [logout]);
+      if (!profile) {
+        await supabase.auth.signOut();
+        return {
+          ok: false,
+          message: t("admin.auth.no_profile"),
+        };
+      }
+      if (!profile.active) {
+        await supabase.auth.signOut();
+        return { ok: false, message: t("admin.auth.account_disabled") };
+      }
+
+      const workers = await fetchCompanyWorkers();
+      setUser({
+        userId: profile.id,
+        email: profile.email,
+        name: getResolvedDisplayName(profile, workers),
+        role: profile.role,
+      });
+      return { ok: true };
+    },
+    [t]
+  );
+
+  const refreshSession = useCallback(async () => {
+    await loadSessionFromAuth();
+  }, [loadSessionFromAuth]);
 
   const value = useMemo<AdminAuthContextValue>(() => {
     const role = user?.role ?? null;
     return {
       user,
       isAuthenticated: user !== null,
+      ready,
       role,
       isAdmin: role === "ADMIN",
       isWorker: role === "WORKER",
@@ -131,13 +200,9 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       logout,
       refreshSession,
     };
-  }, [user, login, logout, refreshSession]);
+  }, [user, ready, login, logout, refreshSession]);
 
-  return (
-    <AdminAuthContext.Provider value={value}>
-      {children}
-    </AdminAuthContext.Provider>
-  );
+  return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>;
 }
 
 export function useAdminAuth() {

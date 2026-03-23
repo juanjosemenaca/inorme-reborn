@@ -1,6 +1,12 @@
-import { useSyncExternalStore } from "react";
-import { getClientsSnapshot, subscribeClients } from "@/lib/clientStore";
+import { useQuery } from "@tanstack/react-query";
+import { fetchClients } from "@/api/clientsApi";
+import { queryKeys } from "@/lib/queryKeys";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 export function useClients() {
-  return useSyncExternalStore(subscribeClients, getClientsSnapshot, getClientsSnapshot);
+  return useQuery({
+    queryKey: queryKeys.clients,
+    queryFn: fetchClients,
+    enabled: isSupabaseConfigured(),
+  });
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Contact2, Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Contact2, Plus, Pencil, Trash2, Search, Loader2, Filter } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -12,6 +13,15 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SortableTableHead } from "@/components/admin/SortableTableHead";
+import { sortRows, toggleColumnSort, type ColumnSort } from "@/lib/adminListUtils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,9 +38,10 @@ import {
   createCompanyWorker,
   updateCompanyWorker,
   deleteCompanyWorker,
-} from "@/lib/companyWorkerStore";
-import { hasUsersLinkedToCompanyWorker } from "@/lib/backofficeUserStore";
-import type { CompanyWorkerRecord } from "@/types/companyWorkers";
+} from "@/api/companyWorkersApi";
+import { hasUsersLinkedToCompanyWorker } from "@/api/backofficeUsersApi";
+import { queryKeys } from "@/lib/queryKeys";
+import type { CompanyWorkerEmploymentType, CompanyWorkerRecord } from "@/types/companyWorkers";
 import {
   COMPANY_WORKER_EMPLOYMENT_LABELS,
   AUTONOMO_VIA_LABELS,
@@ -38,12 +49,19 @@ import {
 } from "@/types/companyWorkers";
 import { WorkerFormDialog, type WorkerFormValues } from "@/components/admin/WorkerFormDialog";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const AdminCompanyWorkers = () => {
-  const workers = useCompanyWorkers();
-  const providers = useProviders();
+  const queryClient = useQueryClient();
+  const { data: workers = [], isLoading, isError, error } = useCompanyWorkers();
+  const { data: providers = [] } = useProviders();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [query, setQuery] = useState("");
+  const [employmentFilter, setEmploymentFilter] = useState<"all" | CompanyWorkerEmploymentType>("all");
+  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("all");
+  const [providerFilter, setProviderFilter] = useState<string>("all");
+  const [sort, setSort] = useState<ColumnSort | null>({ key: "personName", dir: "asc" });
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
@@ -62,9 +80,16 @@ const AdminCompanyWorkers = () => {
   );
 
   const filtered = useMemo(() => {
+    let list = workers;
+    if (employmentFilter !== "all") list = list.filter((w) => w.employmentType === employmentFilter);
+    if (activeFilter === "active") list = list.filter((w) => w.active);
+    if (activeFilter === "inactive") list = list.filter((w) => !w.active);
+    if (providerFilter === "__none__") list = list.filter((w) => !w.providerId);
+    else if (providerFilter !== "all") list = list.filter((w) => w.providerId === providerFilter);
+
     const q = query.trim().toLowerCase();
-    if (!q) return workers;
-    return workers.filter((w) => {
+    if (!q) return list;
+    return list.filter((w) => {
       const provLabel =
         w.providerId && providers.find((p) => p.id === w.providerId)?.tradeName;
       const hay = [
@@ -74,12 +99,38 @@ const AdminCompanyWorkers = () => {
         w.email,
         w.city,
         provLabel ?? "",
+        t(`admin.workCalendars.scope_${w.workCalendarScope}`),
       ]
         .join(" ")
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [workers, query, providers]);
+  }, [workers, query, providers, employmentFilter, activeFilter, providerFilter, t]);
+
+  const sorted = useMemo(() => {
+    if (!sort) return filtered;
+    const provName = (w: CompanyWorkerRecord) => {
+      if (!w.providerId) return "";
+      return providers.find((p) => p.id === w.providerId)?.tradeName ?? "";
+    };
+    const getters: Record<string, (w: CompanyWorkerRecord) => string | boolean> = {
+      personName: (w) => companyWorkerDisplayName(w),
+      dni: (w) => w.dni,
+      email: (w) => w.email,
+      city: (w) => w.city,
+      employmentType: (w) => t(`admin.workers.emp.${w.employmentType}`),
+      provider: (w) => provName(w),
+      calendar: (w) => t(`admin.workCalendars.scope_${w.workCalendarScope}`),
+      active: (w) => w.active,
+    };
+    const get = getters[sort.key];
+    if (!get) return filtered;
+    return sortRows(filtered, sort.dir, get);
+  }, [filtered, sort, providers, t]);
+
+  const handleSort = (key: string) => {
+    setSort((s) => toggleColumnSort(s, key));
+  };
 
   const openCreate = () => {
     setDialogMode("create");
@@ -93,7 +144,7 @@ const AdminCompanyWorkers = () => {
     setDialogOpen(true);
   };
 
-  const handleFormSubmit = (values: WorkerFormValues) => {
+  const handleFormSubmit = async (values: WorkerFormValues) => {
     try {
       const payload = {
         firstName: values.firstName,
@@ -106,46 +157,50 @@ const AdminCompanyWorkers = () => {
         employmentType: values.employmentType,
         providerId: values.providerId?.trim() || null,
         autonomoVia: values.employmentType === "AUTONOMO" ? values.autonomoVia ?? null : null,
+        workCalendarScope: values.workCalendarScope,
         active: values.active,
       };
 
       if (dialogMode === "create") {
-        createCompanyWorker(payload);
-        toast({ title: "Ficha dada de alta" });
+        await createCompanyWorker(payload);
+        toast({ title: t("admin.workers.toast_created") });
       } else if (editing) {
-        updateCompanyWorker(editing.id, payload);
-        toast({ title: "Ficha actualizada" });
+        await updateCompanyWorker(editing.id, payload);
+        toast({ title: t("admin.workers.toast_updated") });
       }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
       setDialogOpen(false);
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "No se pudo guardar",
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : t("admin.workers.toast_save_error"),
         variant: "destructive",
       });
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
-    if (hasUsersLinkedToCompanyWorker(deleteTarget.id)) {
+    if (await hasUsersLinkedToCompanyWorker(deleteTarget.id)) {
       toast({
-        title: "No permitido",
-        description:
-          "Este trabajador tiene un usuario de acceso en Usuarios. Elimina o cambia esa cuenta primero.",
+        title: t("admin.workers.delete_blocked_title"),
+        description: t("admin.workers.delete_blocked"),
         variant: "destructive",
       });
       setDeleteTarget(null);
       return;
     }
     try {
-      deleteCompanyWorker(deleteTarget.id);
-      toast({ title: "Ficha eliminada" });
+      await deleteCompanyWorker(deleteTarget.id);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
+      toast({ title: t("admin.workers.toast_deleted") });
       setDeleteTarget(null);
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "No se pudo eliminar",
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : t("admin.workers.toast_delete_error"),
         variant: "destructive",
       });
     }
@@ -164,22 +219,39 @@ const AdminCompanyWorkers = () => {
     return null;
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        {t("admin.common.loading")}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <p className="text-destructive text-sm py-8">
+        {error instanceof Error ? error.message : t("admin.workers.load_error")}
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Contact2 className="h-7 w-7 text-primary" />
-            Trabajadores
+            {t("admin.workers.title")}
           </h2>
           <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
-            Alta de personas que trabajan en la compañía. Los subcontratados y autónomos por empresa se
-            vinculan a un <strong>proveedor</strong> dado de alta en su apartado.
+            {t("admin.workers.subtitle")}{" "}
+            <strong>{t("admin.workers.subtitle_strong")}</strong> {t("admin.workers.subtitle_end")}
           </p>
         </div>
         <Button className="gap-2 shrink-0" onClick={openCreate}>
           <Plus className="h-4 w-4" />
-          Nueva ficha
+          {t("admin.workers.new")}
         </Button>
       </div>
 
@@ -187,42 +259,142 @@ const AdminCompanyWorkers = () => {
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-base">Listado</CardTitle>
+              <CardTitle className="text-base">{t("admin.workers.list")}</CardTitle>
               <CardDescription>
-                {workers.length} ficha{workers.length === 1 ? "" : "s"}
+                {t("admin.common.showing")} {sorted.length} {t("admin.common.of")} {workers.length}
               </CardDescription>
             </div>
             <div className="relative w-full sm:max-w-xs">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nombre, DNI, ciudad…"
+                placeholder={t("admin.workers.search_ph")}
                 className="pl-9"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
           </div>
+          <div className="flex flex-wrap gap-3 items-end pt-2 border-t border-border/60">
+            <div className="flex items-center gap-2 text-muted-foreground text-xs shrink-0">
+              <Filter className="h-3.5 w-3.5" />
+              {t("admin.common.filters")}
+            </div>
+            <div className="space-y-1 min-w-[150px]">
+              <label className="text-xs text-muted-foreground">{t("admin.workers.filter_contract")}</label>
+              <Select
+                value={employmentFilter}
+                onValueChange={(v) => setEmploymentFilter(v as "all" | CompanyWorkerEmploymentType)}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
+                  {(Object.keys(COMPANY_WORKER_EMPLOYMENT_LABELS) as CompanyWorkerEmploymentType[]).map(
+                    (k) => (
+                      <SelectItem key={k} value={k}>
+                        {t(`admin.workers.emp.${k}`)}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 min-w-[140px]">
+              <label className="text-xs text-muted-foreground">{t("admin.common.status")}</label>
+              <Select value={activeFilter} onValueChange={(v) => setActiveFilter(v as typeof activeFilter)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
+                  <SelectItem value="active">{t("admin.common.filter_active")}</SelectItem>
+                  <SelectItem value="inactive">{t("admin.common.filter_inactive")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 min-w-[200px] max-w-[260px]">
+              <label className="text-xs text-muted-foreground">{t("admin.workers.filter_provider")}</label>
+              <Select value={providerFilter} onValueChange={setProviderFilter}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={t("admin.common.filter_all")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
+                  <SelectItem value="__none__">{t("admin.workers.filter_provider_none")}</SelectItem>
+                  {providers
+                    .filter((p) => p.active)
+                    .map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.tradeName}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <div className="px-6 pb-6 overflow-x-auto">
-          {filtered.length === 0 ? (
+          {sorted.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
-              {query.trim() ? "Sin resultados." : "No hay fichas."}
+              {query.trim() ||
+              employmentFilter !== "all" ||
+              activeFilter !== "all" ||
+              providerFilter !== "all"
+                ? t("admin.workers.empty_filter")
+                : t("admin.workers.empty")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Persona</TableHead>
-                  <TableHead>DNI</TableHead>
-                  <TableHead>Contacto</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Empresa (proveedor)</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right w-[100px]">Acciones</TableHead>
+                  <SortableTableHead
+                    label={t("admin.workers.col_person")}
+                    columnKey="personName"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.workers.col_dni")}
+                    columnKey="dni"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.workers.col_email")}
+                    columnKey="email"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.workers.col_type")}
+                    columnKey="employmentType"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.workers.col_provider")}
+                    columnKey="provider"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.workers.col_calendar")}
+                    columnKey="calendar"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.workers.col_status")}
+                    columnKey="active"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <TableHead className="text-right w-[100px]">{t("admin.common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((w) => (
+                {sorted.map((w) => (
                   <TableRow key={w.id}>
                     <TableCell className="font-medium">
                       <div>{companyWorkerDisplayName(w)}</div>
@@ -236,7 +408,7 @@ const AdminCompanyWorkers = () => {
                     <TableCell>
                       <div>
                         <Badge variant="secondary" className="font-normal">
-                          {COMPANY_WORKER_EMPLOYMENT_LABELS[w.employmentType]}
+                          {t(`admin.workers.emp.${w.employmentType}`)}
                         </Badge>
                       </div>
                       {employmentExtra(w) && (
@@ -248,13 +420,16 @@ const AdminCompanyWorkers = () => {
                     <TableCell className="text-sm max-w-[160px] truncate">
                       {providerLabel(w)}
                     </TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">
+                      {t(`admin.workCalendars.scope_${w.workCalendarScope}`)}
+                    </TableCell>
                     <TableCell>
                       {w.active ? (
                         <Badge className="bg-emerald-600/15 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-600/20 border-0">
-                          Activo
+                          {t("admin.common.active")}
                         </Badge>
                       ) : (
-                        <Badge variant="outline">Inactivo</Badge>
+                        <Badge variant="outline">{t("admin.common.inactive")}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -263,7 +438,7 @@ const AdminCompanyWorkers = () => {
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => openEdit(w)}
-                        aria-label="Editar"
+                        aria-label={t("admin.common.edit")}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -272,7 +447,7 @@ const AdminCompanyWorkers = () => {
                         size="icon"
                         className="h-8 w-8 text-destructive"
                         onClick={() => setDeleteTarget(w)}
-                        aria-label="Eliminar"
+                        aria-label={t("admin.common.delete")}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -297,19 +472,19 @@ const AdminCompanyWorkers = () => {
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar ficha?</AlertDialogTitle>
+            <AlertDialogTitle>{t("admin.workers.delete_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminará la ficha de{" "}
+              {t("admin.workers.delete_desc")}{" "}
               <strong>{deleteTarget ? companyWorkerDisplayName(deleteTarget) : ""}</strong>.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
-              onClick={confirmDelete}
+              onClick={() => void confirmDelete()}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Eliminar
+              {t("admin.common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

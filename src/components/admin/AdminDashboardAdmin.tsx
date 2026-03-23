@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import {
-  Mail,
   Users2,
   Building2,
+  FolderKanban,
   Truck,
   Contact2,
   ArrowRight,
@@ -10,13 +10,13 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MOCK_MESSAGES } from "@/data/mockBackofficeMessages";
 import { useBackofficeUsers } from "@/hooks/useBackofficeUsers";
 import { useClients } from "@/hooks/useClients";
 import { useProviders } from "@/hooks/useProviders";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
+import { useProjects } from "@/hooks/useProjects";
+import { useLanguage } from "@/contexts/LanguageContext";
 import type { BackofficeSession } from "@/types/backoffice";
-import { useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -40,41 +40,33 @@ type Props = {
 };
 
 export function AdminDashboardAdmin({ session }: Props) {
+  const { t, language } = useLanguage();
   const allUsers = useBackofficeUsers();
   const allClients = useClients();
   const allProviders = useProviders();
   const allCompanyWorkers = useCompanyWorkers();
-  const msgTotal = MOCK_MESSAGES.length;
-  const sinAsignar = MOCK_MESSAGES.filter((m) => !m.assignedToUserId).length;
+  const { data: allProjects = [] } = useProjects();
   const userCount = allUsers.length;
   const clientCount = allClients.length;
+  const projectCount = allProjects.length;
   const providerCount = allProviders.length;
   const workerCount = allCompanyWorkers.length;
 
-  const recientes = useMemo(
-    () =>
-      [...MOCK_MESSAGES]
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, 4),
-    []
-  );
+  const dateLocale = language === "ca" ? "ca-ES" : language === "en" ? "en-GB" : "es-ES";
 
   return (
     <div className="space-y-8">
-      {/* Cabecera */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">Panel de control</p>
+          <p className="text-sm font-medium text-muted-foreground">{t("admin.dashboard.admin_control")}</p>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Hola, {session.name.split(" ")[0]}
+            {t("admin.dashboard.admin_hello")} {session.name.split(" ")[0]}
           </h1>
-          <p className="text-muted-foreground text-sm mt-1 max-w-xl">
-            Vista global del backoffice Inorme: mensajes, usuarios, clientes, proveedores y plantilla.
-          </p>
+          <p className="text-muted-foreground text-sm mt-1 max-w-xl">{t("admin.dashboard.admin_subtitle")}</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Clock className="h-3.5 w-3.5" />
-          {new Date().toLocaleDateString("es-ES", {
+          {new Date().toLocaleDateString(dateLocale, {
             weekday: "long",
             day: "numeric",
             month: "long",
@@ -83,29 +75,11 @@ export function AdminDashboardAdmin({ session }: Props) {
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-card to-primary/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Mensajes totales
-            </CardTitle>
-            <div className="rounded-lg bg-primary/15 p-2">
-              <Mail className="h-4 w-4 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums">{msgTotal}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {sinAsignar} sin asignar
-            </p>
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Cuentas backoffice
+              {t("admin.dashboard.kpi_users")}
             </CardTitle>
             <div className="rounded-lg bg-muted p-2">
               <Users2 className="h-4 w-4 text-foreground" />
@@ -114,7 +88,7 @@ export function AdminDashboardAdmin({ session }: Props) {
           <CardContent>
             <div className="text-3xl font-bold tabular-nums">{userCount}</div>
             <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <Link to="/admin/usuarios">Ver usuarios</Link>
+              <Link to="/admin/usuarios">{t("admin.dashboard.link_users")}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -122,7 +96,7 @@ export function AdminDashboardAdmin({ session }: Props) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Clientes
+              {t("admin.dashboard.kpi_clients")}
             </CardTitle>
             <div className="rounded-lg bg-muted p-2">
               <Building2 className="h-4 w-4 text-foreground" />
@@ -131,7 +105,7 @@ export function AdminDashboardAdmin({ session }: Props) {
           <CardContent>
             <div className="text-3xl font-bold tabular-nums">{clientCount}</div>
             <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <Link to="/admin/clientes">Ver clientes</Link>
+              <Link to="/admin/clientes">{t("admin.dashboard.link_clients")}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -139,7 +113,24 @@ export function AdminDashboardAdmin({ session }: Props) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Proveedores
+              {t("admin.dashboard.kpi_projects")}
+            </CardTitle>
+            <div className="rounded-lg bg-muted p-2">
+              <FolderKanban className="h-4 w-4 text-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold tabular-nums">{projectCount}</div>
+            <Button variant="link" className="h-auto p-0 text-xs" asChild>
+              <Link to="/admin/proyectos">{t("admin.dashboard.link_projects")}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t("admin.dashboard.kpi_providers")}
             </CardTitle>
             <div className="rounded-lg bg-muted p-2">
               <Truck className="h-4 w-4 text-foreground" />
@@ -148,7 +139,7 @@ export function AdminDashboardAdmin({ session }: Props) {
           <CardContent>
             <div className="text-3xl font-bold tabular-nums">{providerCount}</div>
             <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <Link to="/admin/proveedores">Ver proveedores</Link>
+              <Link to="/admin/proveedores">{t("admin.dashboard.link_providers")}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -156,7 +147,7 @@ export function AdminDashboardAdmin({ session }: Props) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Trabajadores
+              {t("admin.dashboard.kpi_workers")}
             </CardTitle>
             <div className="rounded-lg bg-muted p-2">
               <Contact2 className="h-4 w-4 text-foreground" />
@@ -165,18 +156,17 @@ export function AdminDashboardAdmin({ session }: Props) {
           <CardContent>
             <div className="text-3xl font-bold tabular-nums">{workerCount}</div>
             <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <Link to="/admin/trabajadores">Ver plantilla</Link>
+              <Link to="/admin/trabajadores">{t("admin.dashboard.link_workers")}</Link>
             </Button>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-5">
-        {/* Gráfico */}
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle className="text-base">Contactos (demostración)</CardTitle>
-            <CardDescription>Volumen mensual de ejemplo hasta integrar datos reales.</CardDescription>
+            <CardTitle className="text-base">{t("admin.common.chart_demo")}</CardTitle>
+            <CardDescription>{t("admin.common.chart_demo_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="pl-0">
             <div className="h-[220px] w-full">
@@ -197,27 +187,17 @@ export function AdminDashboardAdmin({ session }: Props) {
           </CardContent>
         </Card>
 
-        {/* Accesos rápidos */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Accesos rápidos</CardTitle>
-            <CardDescription>Gestión diaria</CardDescription>
+            <CardTitle className="text-base">{t("admin.common.quick_links")}</CardTitle>
+            <CardDescription>{t("admin.common.quick_links_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
-            <Button variant="outline" className="justify-between h-auto py-3" asChild>
-              <Link to="/admin/mensajes">
-                <span className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-primary" />
-                  Bandeja de mensajes
-                </span>
-                <ArrowRight className="h-4 w-4 opacity-50" />
-              </Link>
-            </Button>
             <Button variant="outline" className="justify-between h-auto py-3" asChild>
               <Link to="/admin/usuarios">
                 <span className="flex items-center gap-2">
                   <Users2 className="h-4 w-4 text-primary" />
-                  Usuarios y roles
+                  {t("admin.dashboard.link_users_roles")}
                 </span>
                 <ArrowRight className="h-4 w-4 opacity-50" />
               </Link>
@@ -226,7 +206,16 @@ export function AdminDashboardAdmin({ session }: Props) {
               <Link to="/admin/clientes">
                 <span className="flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-primary" />
-                  Clientes y contactos
+                  {t("admin.dashboard.link_clients_contacts")}
+                </span>
+                <ArrowRight className="h-4 w-4 opacity-50" />
+              </Link>
+            </Button>
+            <Button variant="outline" className="justify-between h-auto py-3" asChild>
+              <Link to="/admin/proyectos">
+                <span className="flex items-center gap-2">
+                  <FolderKanban className="h-4 w-4 text-primary" />
+                  {t("admin.dashboard.link_projects")}
                 </span>
                 <ArrowRight className="h-4 w-4 opacity-50" />
               </Link>
@@ -235,7 +224,7 @@ export function AdminDashboardAdmin({ session }: Props) {
               <Link to="/admin/proveedores">
                 <span className="flex items-center gap-2">
                   <Truck className="h-4 w-4 text-primary" />
-                  Proveedores
+                  {t("admin.dashboard.kpi_providers")}
                 </span>
                 <ArrowRight className="h-4 w-4 opacity-50" />
               </Link>
@@ -244,7 +233,7 @@ export function AdminDashboardAdmin({ session }: Props) {
               <Link to="/admin/trabajadores">
                 <span className="flex items-center gap-2">
                   <Contact2 className="h-4 w-4 text-primary" />
-                  Trabajadores (plantilla)
+                  {t("admin.dashboard.link_workers_full")}
                 </span>
                 <ArrowRight className="h-4 w-4 opacity-50" />
               </Link>
@@ -252,42 +241,6 @@ export function AdminDashboardAdmin({ session }: Props) {
           </CardContent>
         </Card>
       </div>
-
-      {/* Últimos mensajes */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-base">Últimos mensajes</CardTitle>
-            <CardDescription>Ordenados por fecha</CardDescription>
-          </div>
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/admin/mensajes">Ver todo</Link>
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="divide-y rounded-lg border">
-            {recientes.map((m) => (
-              <div
-                key={m.id}
-                className="flex flex-col gap-1 py-3 px-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-medium text-sm">{m.subject}</p>
-                  <p className="text-xs text-muted-foreground">{m.fromEmail}</p>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span>{m.date}</span>
-                  {!m.assignedToUserId && (
-                    <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 dark:bg-amber-950 dark:text-amber-200">
-                      Sin asignar
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

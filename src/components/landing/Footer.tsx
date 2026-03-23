@@ -1,11 +1,5 @@
-import { useLanguage, type Language } from "@/contexts/LanguageContext";
-
-const languageLabels: Record<Language, string> = {
-  es: "ES",
-  ca: "CA",
-  en: "EN",
-  eu: "EU",
-};
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 const footerLinkKeys = [
   { key: "nav_company", href: "#historia" },
@@ -17,7 +11,7 @@ const footerLinkKeys = [
 ];
 
 const Footer = () => {
-  const { t, language, setLanguage } = useLanguage();
+  const { t } = useLanguage();
   const scrollTo = (href: string) => {
     document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
   };
@@ -90,19 +84,7 @@ const Footer = () => {
             © {new Date().getFullYear()} Inorme. {t("footer_rights")}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-white/25">
-            <span className="flex items-center gap-2">
-              {(Object.keys(languageLabels) as Language[]).map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => setLanguage(lang)}
-                  className={`transition-colors hover:text-white/50 ${
-                    language === lang ? "text-primary font-semibold" : ""
-                  }`}
-                >
-                  {languageLabels[lang]}
-                </button>
-              ))}
-            </span>
+            <LanguageSwitcher variant="light" />
             <span className="text-white/10">|</span>
             <button className="hover:text-white/50 transition-colors">
               {t("footer_legal")}

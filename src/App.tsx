@@ -12,11 +12,12 @@ import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminMessages from "./pages/admin/AdminMessages";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminClients from "./pages/admin/AdminClients";
+import AdminProjects from "./pages/admin/AdminProjects";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminCompanyWorkers from "./pages/admin/AdminCompanyWorkers";
+import AdminWorkCalendars from "./pages/admin/AdminWorkCalendars";
 
 const queryClient = new QueryClient();
 
@@ -40,7 +41,6 @@ const App = () => (
                 }
               >
                 <Route index element={<AdminDashboard />} />
-                <Route path="mensajes" element={<AdminMessages />} />
                 <Route
                   path="usuarios"
                   element={
@@ -58,6 +58,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="proyectos"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminProjects />
+                    </RoleRoute>
+                  }
+                />
+                <Route
                   path="proveedores"
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
@@ -70,6 +78,14 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
                       <AdminCompanyWorkers />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="calendarios-laborales"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminWorkCalendars />
                     </RoleRoute>
                   }
                 />

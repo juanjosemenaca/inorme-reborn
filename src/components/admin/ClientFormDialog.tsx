@@ -59,7 +59,7 @@ type Props = {
   initial?: ClientRecord | null;
   /** Clientes con tipo «final» para vincular a un intermediario (excluye el propio al editar) */
   finalClientOptions: { id: string; label: string }[];
-  onSubmit: (values: ClientFormValues) => void;
+  onSubmit: (values: ClientFormValues) => void | Promise<void>;
 };
 
 export function ClientFormDialog({

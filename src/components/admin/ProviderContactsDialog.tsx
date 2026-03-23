@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2, UserCircle2 } from "lucide-react";
 import {
   Dialog,
@@ -25,7 +26,8 @@ import {
   addProviderContact,
   removeProviderContact,
   updateProviderContact,
-} from "@/lib/providerStore";
+} from "@/api/providersApi";
+import { queryKeys } from "@/lib/queryKeys";
 import {
   ContactPersonFormDialog,
   type ContactPersonFormValues,
@@ -39,6 +41,7 @@ type Props = {
 };
 
 export function ProviderContactsDialog({ provider, open, onOpenChange }: Props) {
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -59,15 +62,16 @@ export function ProviderContactsDialog({ provider, open, onOpenChange }: Props) 
     setFormOpen(true);
   };
 
-  const handleSubmit = (values: ContactPersonFormValues) => {
+  const handleSubmit = async (values: ContactPersonFormValues) => {
     try {
       if (formMode === "create") {
-        addProviderContact(provider.id, values);
+        await addProviderContact(provider.id, values);
         toast({ title: "Contacto añadido" });
       } else if (editing) {
-        updateProviderContact(provider.id, editing.id, values);
+        await updateProviderContact(provider.id, editing.id, values);
         toast({ title: "Contacto actualizado" });
       }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.providers });
       setFormOpen(false);
     } catch (e) {
       toast({
@@ -78,10 +82,11 @@ export function ProviderContactsDialog({ provider, open, onOpenChange }: Props) 
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
     try {
-      removeProviderContact(provider.id, deleteTarget.id);
+      await removeProviderContact(provider.id, deleteTarget.id);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.providers });
       toast({ title: "Contacto eliminado" });
       setDeleteTarget(null);
     } catch (e) {
@@ -198,7 +203,7 @@ export function ProviderContactsDialog({ provider, open, onOpenChange }: Props) 
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Eliminar</AlertDialogAction>
+            <AlertDialogAction onClick={() => void confirmDelete()}>Eliminar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

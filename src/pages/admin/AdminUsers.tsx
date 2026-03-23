@@ -1,5 +1,15 @@
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, UserX, UserCheck } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  UserX,
+  UserCheck,
+  Loader2,
+  Search,
+  Filter,
+} from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -12,6 +22,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SortableTableHead } from "@/components/admin/SortableTableHead";
+import { sortRows, toggleColumnSort, type ColumnSort } from "@/lib/adminListUtils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,18 +49,18 @@ import {
   updateUser,
   deleteUser,
   countAdmins,
-  getResolvedDisplayName,
-} from "@/lib/backofficeUserStore";
-import type { BackofficeUserRecord } from "@/types/backoffice";
-import { EMPLOYMENT_LABELS } from "@/types/backoffice";
-import { getCompanyWorkerById } from "@/lib/companyWorkerStore";
+} from "@/api/backofficeUsersApi";
+import type { BackofficeUserRecord, UserRole } from "@/types/backoffice";
+import { getResolvedDisplayName } from "@/types/backoffice";
 import {
   UserFormDialog,
   type UserCreateFormValues,
   type UserEditFormValues,
 } from "@/components/admin/UserFormDialog";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
+import { queryKeys } from "@/lib/queryKeys";
 
 function initialsFromDisplayName(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -50,10 +70,12 @@ function initialsFromDisplayName(name: string) {
 }
 
 const AdminUsers = () => {
-  const users = useBackofficeUsers();
-  const companyWorkers = useCompanyWorkers();
+  const queryClient = useQueryClient();
+  const { data: users = [], isLoading, isError, error } = useBackofficeUsers();
+  const { data: companyWorkers = [] } = useCompanyWorkers();
   const { user: session, refreshSession } = useAdminAuth();
   const { toast } = useToast();
+  const { t } = useLanguage();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
@@ -61,18 +83,56 @@ const AdminUsers = () => {
 
   const [deleteTarget, setDeleteTarget] = useState<BackofficeUserRecord | null>(null);
 
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
+  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("all");
+  const [sort, setSort] = useState<ColumnSort | null>({ key: "displayName", dir: "asc" });
+
+  const filteredUsers = useMemo(() => {
+    let list = users;
+    if (roleFilter !== "all") list = list.filter((u) => u.role === roleFilter);
+    if (activeFilter === "active") list = list.filter((u) => u.active);
+    if (activeFilter === "inactive") list = list.filter((u) => !u.active);
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((u) => {
+      const name = getResolvedDisplayName(u, companyWorkers);
+      const hay = [name, u.email, u.dni, u.mobile].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }, [users, companyWorkers, query, roleFilter, activeFilter]);
+
+  const sortedUsers = useMemo(() => {
+    if (!sort) return filteredUsers;
+    const getters: Record<string, (u: BackofficeUserRecord) => string | boolean> = {
+      displayName: (u) => getResolvedDisplayName(u, companyWorkers),
+      email: (u) => u.email,
+      dni: (u) => u.dni,
+      mobile: (u) => u.mobile,
+      employmentType: (u) => t(`admin.workers.emp.${u.employmentType}`),
+      role: (u) =>
+        t(u.role === "ADMIN" ? "admin.users.role_admin_short" : "admin.users.role_worker_short"),
+      active: (u) => u.active,
+    };
+    const get = getters[sort.key];
+    if (!get) return filteredUsers;
+    return sortRows(filteredUsers, sort.dir, get);
+  }, [filteredUsers, sort, companyWorkers, t]);
+
+  const handleSort = (key: string) => {
+    setSort((s) => toggleColumnSort(s, key));
+  };
+
   const selectableWorkers = useMemo(
     () =>
-      companyWorkers.filter(
-        (w) => w.active && !users.some((u) => u.companyWorkerId === w.id)
-      ),
+      companyWorkers.filter((w) => w.active && !users.some((u) => u.companyWorkerId === w.id)),
     [companyWorkers, users]
   );
 
   const linkedWorkerForEdit = useMemo(() => {
     if (!editing?.companyWorkerId) return null;
-    return getCompanyWorkerById(editing.companyWorkerId) ?? null;
-  }, [editing]);
+    return companyWorkers.find((w) => w.id === editing.companyWorkerId) ?? null;
+  }, [editing, companyWorkers]);
 
   const openCreate = () => {
     setDialogMode("create");
@@ -86,167 +146,281 @@ const AdminUsers = () => {
     setDialogOpen(true);
   };
 
-  const handleSubmitCreate = (values: UserCreateFormValues) => {
+  const handleSubmitCreate = async (values: UserCreateFormValues) => {
     try {
-      createUser({
+      await createUser({
         companyWorkerId: values.companyWorkerId,
         email: values.email,
         password: values.password,
         role: values.role,
         active: values.active,
       });
-      toast({ title: "Usuario dado de alta" });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
+      toast({ title: t("admin.users.toast_created") });
       setDialogOpen(false);
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "Operación no realizada",
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : t("admin.users.operation_failed"),
         variant: "destructive",
       });
     }
   };
 
-  const handleSubmitEdit = (values: UserEditFormValues) => {
+  const handleSubmitEdit = async (values: UserEditFormValues) => {
     if (!editing) return;
     try {
+      const admins = await countAdmins();
       const isLastAdmin =
-        editing.role === "ADMIN" &&
-        countAdmins() === 1 &&
-        values.role === "WORKER";
+        editing.role === "ADMIN" && admins === 1 && values.role === "WORKER";
       if (isLastAdmin) {
         toast({
-          title: "No permitido",
-          description: "No puedes quitar el rol de administrador al único admin.",
+          title: t("admin.workers.delete_blocked_title"),
+          description: t("admin.users.toast_last_admin_role"),
           variant: "destructive",
         });
         return;
       }
-      updateUser(editing.id, {
-        email: values.email,
-        role: values.role,
-        active: values.active,
-        password: values.password && values.password.length > 0 ? values.password : undefined,
-      });
-      toast({ title: "Usuario actualizado" });
+      await updateUser(
+        editing.id,
+        {
+          email: values.email,
+          role: values.role,
+          active: values.active,
+          password: values.password && values.password.length > 0 ? values.password : undefined,
+        },
+        { isSelf: session?.userId === editing.id }
+      );
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
+      toast({ title: t("admin.users.toast_updated") });
       setDialogOpen(false);
       if (session?.userId === editing.id) {
-        refreshSession();
+        await refreshSession();
       }
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "Operación no realizada",
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : t("admin.users.operation_failed"),
         variant: "destructive",
       });
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
     if (session?.userId === deleteTarget.id) {
       toast({
-        title: "No permitido",
-        description: "No puedes eliminar tu propia cuenta con la sesión activa.",
+        title: t("admin.workers.delete_blocked_title"),
+        description: t("admin.users.toast_self_delete"),
         variant: "destructive",
       });
       setDeleteTarget(null);
       return;
     }
     try {
-      deleteUser(deleteTarget.id);
-      toast({ title: "Usuario eliminado" });
+      await deleteUser(deleteTarget.id);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
+      toast({ title: t("admin.users.toast_deleted") });
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "",
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : t("admin.users.operation_failed"),
         variant: "destructive",
       });
     }
     setDeleteTarget(null);
   };
 
-  const toggleActive = (u: BackofficeUserRecord) => {
+  const toggleActive = async (u: BackofficeUserRecord) => {
     if (session?.userId === u.id && u.active) {
       toast({
-        title: "No permitido",
-        description: "Cierra sesión antes de desactivarte a ti mismo.",
+        title: t("admin.workers.delete_blocked_title"),
+        description: t("admin.users.toast_self_deactivate"),
         variant: "destructive",
       });
       return;
     }
-    if (u.role === "ADMIN" && u.active && countAdmins() === 1) {
+    const admins = await countAdmins();
+    if (u.role === "ADMIN" && u.active && admins === 1) {
       toast({
-        title: "No permitido",
-        description: "No puedes desactivar al único administrador.",
+        title: t("admin.workers.delete_blocked_title"),
+        description: t("admin.users.toast_last_admin_deactivate"),
         variant: "destructive",
       });
       return;
     }
     try {
-      updateUser(u.id, { active: !u.active });
-      toast({ title: u.active ? "Usuario desactivado" : "Usuario reactivado" });
-      if (session?.userId === u.id) refreshSession();
+      await updateUser(u.id, { active: !u.active }, { isSelf: session?.userId === u.id });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
+      toast({
+        title: u.active ? t("admin.users.toast_deactivated") : t("admin.users.toast_reactivated"),
+      });
+      if (session?.userId === u.id) await refreshSession();
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "",
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : t("admin.users.operation_failed"),
         variant: "destructive",
       });
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        {t("admin.common.loading")}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <p className="text-destructive text-sm py-8">
+        {error instanceof Error ? error.message : t("admin.users.load_error")}
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Usuarios del backoffice</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("admin.users.title")}</h1>
           <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
-            Cada cuenta se asocia a una <strong>ficha de trabajador</strong> (datos en Trabajadores). Aquí defines
-            email de acceso, contraseña y rol (administrador o trabajador).
+            {t("admin.users.subtitle")} <strong>{t("admin.users.subtitle_strong")}</strong>{" "}
+            {t("admin.users.subtitle_mid")} <strong>{t("admin.users.subtitle_strong2")}</strong>
+            {t("admin.users.subtitle_end")}
           </p>
         </div>
         <Button onClick={openCreate} className="gap-2 shrink-0">
           <Plus className="h-4 w-4" />
-          Nuevo usuario
+          {t("admin.users.new")}
         </Button>
       </div>
 
       <Card className="border-primary/15 bg-gradient-to-br from-card to-primary/5">
         <CardHeader>
-          <CardTitle className="text-base">Datos personales</CardTitle>
+          <CardTitle className="text-base">{t("admin.users.card_title")}</CardTitle>
           <CardDescription>
-            Se toman de la ficha en <strong>Trabajadores</strong>. Al crear un usuario eliges el trabajador; el
-            email de acceso por defecto es el de esa ficha (puedes cambiarlo). Cuentas antiguas sin ficha siguen
-            funcionando.
+            {t("admin.users.card_desc")} <strong>{t("admin.users.card_desc_strong")}</strong>
+            {t("admin.users.card_desc_end")}
           </CardDescription>
         </CardHeader>
       </Card>
 
       <Card className="shadow-sm border-slate-200/80">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <div>
-            <CardTitle className="text-base">Directorio</CardTitle>
-            <CardDescription>{users.length} usuarios</CardDescription>
+        <CardHeader className="space-y-4 pb-2">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-base">{t("admin.users.directory")}</CardTitle>
+              <CardDescription>
+                {t("admin.common.showing")} {sortedUsers.length} {t("admin.common.of")} {users.length}
+              </CardDescription>
+            </div>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={t("admin.users.search_ph")}
+                className="pl-9"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 items-end pt-2 border-t border-border/60">
+            <div className="flex items-center gap-2 text-muted-foreground text-xs shrink-0">
+              <Filter className="h-3.5 w-3.5" />
+              {t("admin.common.filters")}
+            </div>
+            <div className="space-y-1 min-w-[140px]">
+              <label className="text-xs text-muted-foreground">{t("admin.users.filter_role")}</label>
+              <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as "all" | UserRole)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
+                  <SelectItem value="ADMIN">{t("admin.users.filter_role_admin")}</SelectItem>
+                  <SelectItem value="WORKER">{t("admin.users.filter_role_worker")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 min-w-[140px]">
+              <label className="text-xs text-muted-foreground">{t("admin.common.status")}</label>
+              <Select value={activeFilter} onValueChange={(v) => setActiveFilter(v as typeof activeFilter)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
+                  <SelectItem value="active">{t("admin.common.filter_active")}</SelectItem>
+                  <SelectItem value="inactive">{t("admin.common.filter_inactive")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <div className="px-6 pb-6 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[48px]" />
-                <TableHead>Nombre</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>DNI</TableHead>
-                <TableHead>Móvil</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Rol</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right w-[200px]">Acciones</TableHead>
+          {sortedUsers.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              {query.trim() || roleFilter !== "all" || activeFilter !== "all"
+                ? t("admin.users.empty_filter")
+                : t("admin.users.empty")}
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[48px]" />
+                  <SortableTableHead
+                    label={t("admin.users.col_name")}
+                    columnKey="displayName"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.users.col_email")}
+                    columnKey="email"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.users.col_dni")}
+                    columnKey="dni"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.users.col_mobile")}
+                    columnKey="mobile"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.users.col_type")}
+                    columnKey="employmentType"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.users.col_role")}
+                    columnKey="role"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.users.col_status")}
+                    columnKey="active"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <TableHead className="text-right w-[200px]">{t("admin.common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u) => {
-                const displayName = getResolvedDisplayName(u);
+              {sortedUsers.map((u) => {
+                const displayName = getResolvedDisplayName(u, companyWorkers);
                 return (
                   <TableRow key={u.id} className={!u.active ? "opacity-60" : undefined}>
                     <TableCell>
@@ -270,19 +444,21 @@ const AdminUsers = () => {
                     <TableCell className="text-sm whitespace-nowrap">{u.mobile}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="font-normal">
-                        {EMPLOYMENT_LABELS[u.employmentType]}
+                        {t(`admin.workers.emp.${u.employmentType}`)}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant={u.role === "ADMIN" ? "default" : "secondary"}>
-                        {u.role === "ADMIN" ? "Admin" : "Trabajador"}
+                        {u.role === "ADMIN"
+                          ? t("admin.users.role_admin_short")
+                          : t("admin.users.role_worker_short")}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       {u.active ? (
-                        <Badge className="bg-emerald-600 hover:bg-emerald-600">Activo</Badge>
+                        <Badge className="bg-emerald-600 hover:bg-emerald-600">{t("admin.common.active")}</Badge>
                       ) : (
-                        <Badge variant="secondary">Inactivo</Badge>
+                        <Badge variant="secondary">{t("admin.common.inactive")}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -292,7 +468,7 @@ const AdminUsers = () => {
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => openEdit(u)}
-                          title="Editar"
+                          title={t("admin.common.edit")}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -300,8 +476,8 @@ const AdminUsers = () => {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={() => toggleActive(u)}
-                          title={u.active ? "Desactivar" : "Reactivar"}
+                          onClick={() => void toggleActive(u)}
+                          title={u.active ? t("admin.users.title_deactivate") : t("admin.users.title_reactivate")}
                         >
                           {u.active ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
                         </Button>
@@ -310,7 +486,7 @@ const AdminUsers = () => {
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           onClick={() => setDeleteTarget(u)}
-                          title="Eliminar"
+                          title={t("admin.users.title_delete")}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -320,7 +496,8 @@ const AdminUsers = () => {
                 );
               })}
             </TableBody>
-          </Table>
+            </Table>
+          )}
         </div>
       </Card>
 
@@ -338,20 +515,22 @@ const AdminUsers = () => {
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar usuario?</AlertDialogTitle>
+            <AlertDialogTitle>{t("admin.users.delete_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Se borrará de forma permanente a{" "}
-              <strong>{deleteTarget ? getResolvedDisplayName(deleteTarget) : ""}</strong>. La ficha en Trabajadores no
-              se elimina.
+              {t("admin.users.delete_desc")}{" "}
+              <strong>
+                {deleteTarget ? getResolvedDisplayName(deleteTarget, companyWorkers) : ""}
+              </strong>
+              . {t("admin.users.delete_desc_suffix")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
-              onClick={confirmDelete}
+              onClick={() => void confirmDelete()}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Eliminar
+              {t("admin.common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

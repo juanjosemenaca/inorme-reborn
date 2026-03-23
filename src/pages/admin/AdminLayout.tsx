@@ -3,9 +3,10 @@ import {
   LayoutDashboard,
   LogOut,
   ExternalLink,
-  Mail,
   Users,
   Building2,
+  FolderKanban,
+  CalendarDays,
   Truck,
   Contact2,
   Menu,
@@ -13,22 +14,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
+const NAV_KEYS = [
+  { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
+  { to: "/admin/usuarios", labelKey: "admin.layout.nav_users", icon: Users, roles: ["ADMIN"] as const },
+  { to: "/admin/trabajadores", labelKey: "admin.layout.nav_workers", icon: Contact2, roles: ["ADMIN"] as const },
+  { to: "/admin/proveedores", labelKey: "admin.layout.nav_providers", icon: Truck, roles: ["ADMIN"] as const },
+  { to: "/admin/clientes", labelKey: "admin.layout.nav_clients", icon: Building2, roles: ["ADMIN"] as const },
+  { to: "/admin/proyectos", labelKey: "admin.layout.nav_projects", icon: FolderKanban, roles: ["ADMIN"] as const },
+  { to: "/admin/calendarios-laborales", labelKey: "admin.layout.nav_calendars", icon: CalendarDays, roles: ["ADMIN"] as const },
+] as const;
+
 const AdminLayout = () => {
   const { logout, user, isAdmin } = useAdminAuth();
+  const { t } = useLanguage();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const navItems = [
-    { to: "/admin", label: "Panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
-    { to: "/admin/mensajes", label: isAdmin ? "Mensajes" : "Mis mensajes", icon: Mail, roles: ["ADMIN", "WORKER"] as const },
-    { to: "/admin/usuarios", label: "Usuarios", icon: Users, roles: ["ADMIN"] as const },
-    { to: "/admin/clientes", label: "Clientes", icon: Building2, roles: ["ADMIN"] as const },
-    { to: "/admin/proveedores", label: "Proveedores", icon: Truck, roles: ["ADMIN"] as const },
-    { to: "/admin/trabajadores", label: "Trabajadores", icon: Contact2, roles: ["ADMIN"] as const },
-  ].filter((item) => user && item.roles.includes(user.role));
+  const navItems = NAV_KEYS.filter((item) => user && item.roles.includes(user.role));
 
   const isNavActive = (path: string) =>
     path === "/admin"
@@ -56,7 +63,7 @@ const AdminLayout = () => {
             )}
           >
             <item.icon className="h-4 w-4 shrink-0 opacity-90" />
-            {item.label}
+            {t(item.labelKey)}
           </Link>
         );
       })}
@@ -70,9 +77,9 @@ const AdminLayout = () => {
         {/* Sidebar escritorio */}
         <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-slate-800/80 bg-slate-950">
           <div className="p-6 border-b border-slate-800/80">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Inorme</p>
-            <p className="text-lg font-bold text-white tracking-tight mt-0.5">Administración</p>
-            <p className="text-xs text-slate-400 mt-2 line-clamp-2">Panel de control corporativo</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">{t("admin.layout.brand")}</p>
+            <p className="text-lg font-bold text-white tracking-tight mt-0.5">{t("admin.layout.admin_title")}</p>
+            <p className="text-xs text-slate-400 mt-2 line-clamp-2">{t("admin.layout.admin_subtitle")}</p>
           </div>
           <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
             <NavLinks />
@@ -81,7 +88,7 @@ const AdminLayout = () => {
             <div className="rounded-lg bg-slate-900/80 p-3 text-xs text-slate-400">
               <p className="font-medium text-slate-200">{user.name}</p>
               <Badge className="mt-2 bg-primary/20 text-primary hover:bg-primary/25 border-0">
-                Administrador
+                {t("admin.layout.badge_admin")}
               </Badge>
             </div>
           </div>
@@ -96,29 +103,32 @@ const AdminLayout = () => {
                 size="icon"
                 className="md:hidden shrink-0 -ml-1"
                 onClick={() => setMobileNavOpen((o) => !o)}
-                aria-label="Menú"
+                aria-label={t("admin.layout.menu")}
               >
                 <Menu className="h-5 w-5" />
               </Button>
               <span className="text-sm font-medium text-muted-foreground truncate md:hidden">
-                Inorme · Admin
+                {t("admin.layout.mobile_title")}
               </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center mr-1">
+                <LanguageSwitcher variant="dark" />
+              </div>
               <Button variant="outline" size="sm" asChild className="hidden sm:inline-flex">
                 <a href="/" target="_blank" rel="noopener noreferrer" className="gap-1.5">
                   <ExternalLink className="h-4 w-4" />
-                  Ver web pública
+                  {t("admin.layout.view_public")}
                 </a>
               </Button>
               <Button variant="ghost" size="icon" className="sm:hidden" asChild>
-                <a href="/" target="_blank" rel="noopener noreferrer" aria-label="Ver web">
+                <a href="/" target="_blank" rel="noopener noreferrer" aria-label={t("admin.layout.view_public_short")}>
                   <ExternalLink className="h-4 w-4" />
                 </a>
               </Button>
               <Button variant="default" size="sm" onClick={logout} className="gap-1.5">
                 <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Cerrar sesión</span>
+                <span className="hidden sm:inline">{t("admin.layout.logout")}</span>
               </Button>
             </div>
           </header>
@@ -128,13 +138,13 @@ const AdminLayout = () => {
               <button
                 type="button"
                 className="md:hidden fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm"
-                aria-label="Cerrar menú"
+                aria-label={t("admin.layout.close_menu")}
                 onClick={() => setMobileNavOpen(false)}
               />
               <div className="md:hidden fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] bg-slate-950 border-r border-slate-800 shadow-xl flex flex-col">
                 <div className="p-5 border-b border-slate-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Inorme</p>
-                  <p className="text-lg font-bold text-white">Administración</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">{t("admin.layout.brand")}</p>
+                  <p className="text-lg font-bold text-white">{t("admin.layout.admin_title")}</p>
                 </div>
                 <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
                   <NavLinks mobile />
@@ -162,32 +172,33 @@ const AdminLayout = () => {
               size="icon"
               className="md:hidden shrink-0"
               onClick={() => setMobileNavOpen((o) => !o)}
-              aria-label="Menú"
+              aria-label={t("admin.layout.menu")}
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <h1 className="font-semibold text-lg tracking-tight truncate">Backoffice</h1>
+            <h1 className="font-semibold text-lg tracking-tight truncate">{t("admin.common.backoffice")}</h1>
             {user && (
               <>
                 <span className="text-muted-foreground text-sm hidden sm:inline truncate">
                   {user.name}
                 </span>
                 <Badge variant="secondary" className="shrink-0">
-                  Trabajador
+                  {t("admin.layout.badge_worker")}
                 </Badge>
               </>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <LanguageSwitcher variant="dark" />
             <Button variant="ghost" size="sm" asChild>
               <a href="/" target="_blank" rel="noopener noreferrer" className="gap-1.5">
                 <ExternalLink className="h-4 w-4" />
-                <span className="hidden sm:inline">Ver web</span>
+                <span className="hidden sm:inline">{t("admin.layout.view_public_short")}</span>
               </a>
             </Button>
             <Button variant="outline" size="sm" onClick={logout} className="gap-1.5">
               <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Salir</span>
+              <span className="hidden sm:inline">{t("admin.layout.logout_short")}</span>
             </Button>
           </div>
         </div>
@@ -205,7 +216,7 @@ const AdminLayout = () => {
               >
                 <Link to={item.to}>
                   <item.icon className="h-4 w-4" />
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               </Button>
             ))}
@@ -225,7 +236,7 @@ const AdminLayout = () => {
                 >
                   <Link to={item.to}>
                     <item.icon className="h-4 w-4" />
-                    {item.label}
+                    {t(item.labelKey)}
                   </Link>
                 </Button>
               ))}

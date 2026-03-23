@@ -1,0 +1,251 @@
+import { useMemo } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import type { WorkCalendarHolidayKind, WorkCalendarHolidayRecord } from "@/types/workCalendars";
+
+type DayVisual =
+  | { type: "empty" }
+  | { type: "day"; day: number; iso: string; holiday?: WorkCalendarHolidayRecord };
+
+/** Lunes = primera columna (como en el Excel de referencia). */
+function buildMonthCells(year: number, month: number): DayVisual[][] {
+  const first = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0).getDate();
+  const mondayOffset = (first.getDay() + 6) % 7;
+  const flat: DayVisual[] = [];
+  for (let i = 0; i < mondayOffset; i++) flat.push({ type: "empty" });
+  for (let d = 1; d <= lastDay; d++) {
+    const mm = String(month).padStart(2, "0");
+    const dd = String(d).padStart(2, "0");
+    flat.push({ type: "day", day: d, iso: `${year}-${mm}-${dd}` });
+  }
+  while (flat.length % 7 !== 0) flat.push({ type: "empty" });
+  const rows: DayVisual[][] = [];
+  for (let i = 0; i < flat.length; i += 7) {
+    rows.push(flat.slice(i, i + 7));
+  }
+  return rows;
+}
+
+function isWeekendIso(iso: string): boolean {
+  const d = new Date(iso + "T12:00:00");
+  const dow = d.getDay();
+  return dow === 0 || dow === 6;
+}
+
+/** Viernes (día 5 en JS si domingo = 0). */
+function isFridayIso(iso: string): boolean {
+  return new Date(iso + "T12:00:00").getDay() === 5;
+}
+
+const kindCellClass: Record<WorkCalendarHolidayKind, string> = {
+  NACIONAL:
+    "bg-red-100 text-red-950 border-red-300/80 dark:bg-red-950/40 dark:text-red-100 dark:border-red-800/60",
+  AUTONOMICO:
+    "bg-amber-100 text-amber-950 border-amber-300/80 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-800/60",
+  LOCAL:
+    "bg-violet-100 text-violet-950 border-violet-300/80 dark:bg-violet-950/40 dark:text-violet-100 dark:border-violet-800/60",
+};
+
+function isSummerIntensiveDay(iso: string, summerIsoSet: ReadonlySet<string>): boolean {
+  return summerIsoSet.has(iso);
+}
+
+function cellClass(
+  iso: string,
+  holiday: WorkCalendarHolidayRecord | undefined,
+  weekendNoHoliday: string,
+  monThuClass: string,
+  sevenHourClass: string,
+  summerIsoSet: ReadonlySet<string>
+): string {
+  if (holiday) return cn("border font-medium", kindCellClass[holiday.holidayKind]);
+  if (isWeekendIso(iso)) return cn("border", weekendNoHoliday);
+  if (isFridayIso(iso) || isSummerIntensiveDay(iso, summerIsoSet)) return cn("border", sevenHourClass);
+  return cn("border", monThuClass);
+}
+
+type Props = {
+  year: number;
+  holidays: WorkCalendarHolidayRecord[];
+  /** Fechas ISO con jornada 7 h por horario de verano (mismo verde que viernes). */
+  summerIsoSet: ReadonlySet<string>;
+  /** Notas opcionales por fecha (desde el alta de horario verano). */
+  summerLabelByIso?: ReadonlyMap<string, string>;
+  locale: string;
+  monthTitle: (monthIndex: number) => string;
+  kindLabel: (k: WorkCalendarHolidayKind) => string;
+  legendCaption: string;
+  /** Lun–jue, jornada 8,75 h (fondo blanco / neutro). */
+  legendMonThu: string;
+  /** Leyenda única del cuadro verde: viernes + horario verano 7 h. */
+  legendSevenHour: string;
+  legendWeekend: string;
+  legendNational: string;
+  legendRegional: string;
+  legendLocal: string;
+  tooltipFriday7h: string;
+  tooltipSummer7h: string;
+};
+
+export function WorkCalendarYearGrid({
+  year,
+  holidays,
+  summerIsoSet,
+  summerLabelByIso,
+  locale,
+  monthTitle,
+  kindLabel,
+  legendCaption,
+  legendMonThu,
+  legendSevenHour,
+  legendWeekend,
+  legendNational,
+  legendRegional,
+  legendLocal,
+  tooltipFriday7h,
+  tooltipSummer7h,
+}: Props) {
+  const byDate = useMemo(() => {
+    const m = new Map<string, WorkCalendarHolidayRecord>();
+    for (const h of holidays) {
+      m.set(h.holidayDate, h);
+    }
+    return m;
+  }, [holidays]);
+
+  const weekDayLabels = useMemo(() => {
+    const refMonday = new Date(year, 0, 5);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(refMonday);
+      d.setDate(refMonday.getDate() + i);
+      return d.toLocaleDateString(locale, { weekday: "narrow" });
+    });
+  }, [year, locale]);
+
+  const weekendClass =
+    "bg-orange-50 text-orange-950/90 border-orange-200/90 dark:bg-orange-950/25 dark:text-orange-100 dark:border-orange-800/50";
+  const monThuClass =
+    "bg-white text-foreground border-border/70 dark:bg-background dark:text-foreground dark:border-border";
+  const sevenHourClass =
+    "bg-emerald-50 text-emerald-950/90 border-emerald-300/80 dark:bg-emerald-950/30 dark:text-emerald-100 dark:border-emerald-800/50";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground items-center border rounded-lg px-3 py-2 bg-muted/30">
+          <span className="font-medium text-foreground">{legendCaption}</span>
+          <span className="flex items-center gap-1.5">
+            <span className={cn("inline-block size-4 rounded border", monThuClass)} aria-hidden />
+            <span>{legendMonThu}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className={cn("inline-block size-4 rounded border", sevenHourClass)} aria-hidden />
+            <span>{legendSevenHour}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className={cn("inline-block size-4 rounded border", weekendClass)} aria-hidden />
+            <span>{legendWeekend}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className={cn("inline-block size-4 rounded border", kindCellClass.NACIONAL)} aria-hidden />
+            <span>{legendNational}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className={cn("inline-block size-4 rounded border", kindCellClass.AUTONOMICO)} aria-hidden />
+            <span>{legendRegional}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className={cn("inline-block size-4 rounded border", kindCellClass.LOCAL)} aria-hidden />
+            <span>{legendLocal}</span>
+          </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
+            const rows = buildMonthCells(year, month);
+            return (
+              <div
+                key={month}
+                className="rounded-lg border bg-card p-2 shadow-sm"
+              >
+                <p className="text-center font-semibold text-sm mb-2 capitalize">{monthTitle(month - 1)}</p>
+                <div className="grid grid-cols-7 gap-px text-[10px] sm:text-xs">
+                  {weekDayLabels.map((w, idx) => (
+                    <div
+                      key={idx}
+                      className="text-center font-medium text-muted-foreground py-1 px-0.5 truncate"
+                      title={w}
+                    >
+                      {w}
+                    </div>
+                  ))}
+                  {rows.map((row, ri) =>
+                    row.map((cell, ci) => {
+                      if (cell.type === "empty") {
+                        return (
+                          <div
+                            key={`${ri}-${ci}`}
+                            className="min-h-[1.75rem] sm:min-h-[2rem] rounded-sm bg-muted/20"
+                          />
+                        );
+                      }
+                      const h = byDate.get(cell.iso);
+                      const cls = cellClass(cell.iso, h, weekendClass, monThuClass, sevenHourClass, summerIsoSet);
+                      const prettyDate = new Date(cell.iso + "T12:00:00").toLocaleDateString(locale, {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      });
+                      const tooltipLines: string[] = [prettyDate];
+                      if (h) {
+                        tooltipLines.push(kindLabel(h.holidayKind));
+                        if (h.label) tooltipLines.push(h.label);
+                      } else if (isWeekendIso(cell.iso)) {
+                        tooltipLines.push(legendWeekend);
+                      } else {
+                        const fri = isFridayIso(cell.iso);
+                        const sum = isSummerIntensiveDay(cell.iso, summerIsoSet);
+                        if (fri && sum) {
+                          tooltipLines.push(tooltipFriday7h);
+                          tooltipLines.push(tooltipSummer7h);
+                          const noteFs = summerLabelByIso?.get(cell.iso);
+                          if (noteFs) tooltipLines.push(noteFs);
+                        } else if (fri) {
+                          tooltipLines.push(tooltipFriday7h);
+                        } else if (sum) {
+                          tooltipLines.push(tooltipSummer7h);
+                          const note = summerLabelByIso?.get(cell.iso);
+                          if (note) tooltipLines.push(note);
+                        } else {
+                          tooltipLines.push(legendMonThu);
+                        }
+                      }
+
+                      return (
+                        <Tooltip key={cell.iso}>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={cn(
+                                "min-h-[1.75rem] sm:min-h-[2rem] flex items-center justify-center rounded-sm tabular-nums cursor-default border",
+                                cls
+                              )}
+                            >
+                              {cell.day}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p className="text-xs whitespace-pre-line">{tooltipLines.join("\n")}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+}

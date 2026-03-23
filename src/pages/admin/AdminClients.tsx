@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Plus, Pencil, Trash2, Users, Search } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Building2, Plus, Pencil, Trash2, Users, Search, Loader2, Filter } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -13,6 +14,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SortableTableHead } from "@/components/admin/SortableTableHead";
+import { sortRows, toggleColumnSort, type ColumnSort } from "@/lib/adminListUtils";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -23,21 +33,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useClients } from "@/hooks/useClients";
-import {
-  createClient,
-  updateClient,
-  deleteClient,
-} from "@/lib/clientStore";
-import type { ClientRecord } from "@/types/clients";
-import { CLIENT_KIND_LABELS } from "@/types/clients";
+import { createClient, updateClient, deleteClient } from "@/api/clientsApi";
+import { queryKeys } from "@/lib/queryKeys";
+import type { ClientKind, ClientRecord } from "@/types/clients";
 import { ClientFormDialog, type ClientFormValues } from "@/components/admin/ClientFormDialog";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { ClientContactsDialog } from "@/components/admin/ClientContactsDialog";
 import { useToast } from "@/hooks/use-toast";
 
 const AdminClients = () => {
-  const clients = useClients();
+  const queryClient = useQueryClient();
+  const { data: clients = [], isLoading, isError, error } = useClients();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<"all" | ClientKind>("all");
+  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("all");
+  const [sort, setSort] = useState<ColumnSort | null>({ key: "tradeName", dir: "asc" });
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
@@ -67,9 +79,14 @@ const AdminClients = () => {
   }, [clients, editing]);
 
   const filtered = useMemo(() => {
+    let list = clients;
+    if (kindFilter !== "all") list = list.filter((c) => c.clientKind === kindFilter);
+    if (activeFilter === "active") list = list.filter((c) => c.active);
+    if (activeFilter === "inactive") list = list.filter((c) => !c.active);
+
     const q = query.trim().toLowerCase();
-    if (!q) return clients;
-    return clients.filter((c) => {
+    if (!q) return list;
+    return list.filter((c) => {
       const linkedName =
         c.linkedFinalClientId &&
         clients.find((x) => x.id === c.linkedFinalClientId)?.tradeName;
@@ -84,7 +101,32 @@ const AdminClients = () => {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [clients, query]);
+  }, [clients, query, kindFilter, activeFilter]);
+
+  const sorted = useMemo(() => {
+    if (!sort) return filtered;
+    const linkedName = (c: ClientRecord) =>
+      c.linkedFinalClientId
+        ? clients.find((x) => x.id === c.linkedFinalClientId)?.tradeName ?? ""
+        : "";
+    const getters: Record<string, (c: ClientRecord) => string | boolean> = {
+      tradeName: (c) => c.tradeName,
+      companyName: (c) => c.companyName,
+      cif: (c) => c.cif,
+      clientKind: (c) =>
+        t(c.clientKind === "FINAL" ? "admin.clients.kind_final" : "admin.clients.kind_intermediary"),
+      linkedFinal: (c) => linkedName(c),
+      contactEmail: (c) => c.contactEmail,
+      active: (c) => c.active,
+    };
+    const get = getters[sort.key];
+    if (!get) return filtered;
+    return sortRows(filtered, sort.dir, get);
+  }, [filtered, sort, clients, t]);
+
+  const handleSort = (key: string) => {
+    setSort((s) => toggleColumnSort(s, key));
+  };
 
   const openCreate = () => {
     setDialogMode("create");
@@ -98,10 +140,10 @@ const AdminClients = () => {
     setDialogOpen(true);
   };
 
-  const handleFormSubmit = (values: ClientFormValues) => {
+  const handleFormSubmit = async (values: ClientFormValues) => {
     try {
       if (dialogMode === "create") {
-        createClient({
+        await createClient({
           tradeName: values.tradeName,
           companyName: values.companyName,
           cif: values.cif,
@@ -116,9 +158,9 @@ const AdminClients = () => {
           notes: values.notes ?? "",
           active: values.active,
         });
-        toast({ title: "Cliente dado de alta" });
+        toast({ title: t("admin.clients.toast_created") });
       } else if (editing) {
-        updateClient(editing.id, {
+        await updateClient(editing.id, {
           tradeName: values.tradeName,
           companyName: values.companyName,
           cif: values.cif,
@@ -133,32 +175,51 @@ const AdminClients = () => {
           notes: values.notes ?? "",
           active: values.active,
         });
-        toast({ title: "Cliente actualizado" });
+        toast({ title: t("admin.clients.toast_updated") });
       }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.clients });
       setDialogOpen(false);
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "No se pudo guardar",
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : t("admin.clients.toast_save_error"),
         variant: "destructive",
       });
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
     try {
-      deleteClient(deleteTarget.id);
-      toast({ title: "Cliente eliminado" });
+      await deleteClient(deleteTarget.id);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+      toast({ title: t("admin.clients.toast_deleted") });
       setDeleteTarget(null);
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "No se pudo eliminar",
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : t("admin.clients.toast_delete_error"),
         variant: "destructive",
       });
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        {t("admin.common.loading")}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <p className="text-destructive text-sm py-8">
+        {error instanceof Error ? error.message : t("admin.clients.load_error")}
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -166,16 +227,13 @@ const AdminClients = () => {
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Building2 className="h-7 w-7 text-primary" />
-            Clientes
+            {t("admin.clients.title")}
           </h2>
-          <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
-            Alta y seguimiento de clientes: datos fiscales, tipo (final o intermediario) y personas de
-            contacto por empresa.
-          </p>
+          <p className="text-muted-foreground text-sm mt-1 max-w-2xl">{t("admin.clients.subtitle")}</p>
         </div>
         <Button className="gap-2 shrink-0" onClick={openCreate}>
           <Plus className="h-4 w-4" />
-          Nuevo cliente
+          {t("admin.clients.new")}
         </Button>
       </div>
 
@@ -183,43 +241,113 @@ const AdminClients = () => {
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-base">Listado</CardTitle>
+              <CardTitle className="text-base">{t("admin.clients.list")}</CardTitle>
               <CardDescription>
-                {clients.length} cliente{clients.length === 1 ? "" : "s"} en total
+                {t("admin.common.showing")} {sorted.length} {t("admin.common.of")} {clients.length}
               </CardDescription>
             </div>
             <div className="relative w-full sm:max-w-xs">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nombre, CIF, email, cliente final…"
+                placeholder={t("admin.clients.search_ph")}
                 className="pl-9"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
           </div>
+          <div className="flex flex-wrap gap-3 items-end pt-2 border-t border-border/60">
+            <div className="flex items-center gap-2 text-muted-foreground text-xs shrink-0">
+              <Filter className="h-3.5 w-3.5" />
+              {t("admin.common.filters")}
+            </div>
+            <div className="space-y-1 min-w-[160px]">
+              <label className="text-xs text-muted-foreground">{t("admin.clients.filter_kind")}</label>
+              <Select value={kindFilter} onValueChange={(v) => setKindFilter(v as "all" | ClientKind)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={t("admin.common.filter_all")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
+                  <SelectItem value="FINAL">{t("admin.clients.kind_final")}</SelectItem>
+                  <SelectItem value="INTERMEDIARIO">{t("admin.clients.kind_intermediary")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 min-w-[140px]">
+              <label className="text-xs text-muted-foreground">{t("admin.common.status")}</label>
+              <Select value={activeFilter} onValueChange={(v) => setActiveFilter(v as typeof activeFilter)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
+                  <SelectItem value="active">{t("admin.common.filter_active")}</SelectItem>
+                  <SelectItem value="inactive">{t("admin.common.filter_inactive")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <div className="px-6 pb-6 overflow-x-auto">
-          {filtered.length === 0 ? (
+          {sorted.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
-              {query.trim() ? "Ningún cliente coincide con la búsqueda." : "No hay clientes."}
+              {query.trim() || kindFilter !== "all" || activeFilter !== "all"
+                ? t("admin.clients.empty_filter")
+                : t("admin.clients.empty")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nombre comercial</TableHead>
-                  <TableHead>Empresa</TableHead>
-                  <TableHead>CIF</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="min-w-[140px]">Cliente final</TableHead>
-                  <TableHead>Contacto</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right w-[200px]">Acciones</TableHead>
+                  <SortableTableHead
+                    label={t("admin.clients.col_trade")}
+                    columnKey="tradeName"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.clients.col_company")}
+                    columnKey="companyName"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.clients.col_cif")}
+                    columnKey="cif"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.clients.col_kind")}
+                    columnKey="clientKind"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.clients.col_final_client")}
+                    columnKey="linkedFinal"
+                    currentSort={sort}
+                    onSort={handleSort}
+                    className="min-w-[140px]"
+                  />
+                  <SortableTableHead
+                    label={t("admin.clients.col_contact")}
+                    columnKey="contactEmail"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label={t("admin.clients.col_status")}
+                    columnKey="active"
+                    currentSort={sort}
+                    onSort={handleSort}
+                  />
+                  <TableHead className="text-right w-[200px]">{t("admin.common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((c) => (
+                {sorted.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell className="font-medium">{c.tradeName}</TableCell>
                     <TableCell className="text-muted-foreground max-w-[200px] truncate">
@@ -228,7 +356,11 @@ const AdminClients = () => {
                     <TableCell className="font-mono text-sm">{c.cif}</TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="font-normal">
-                        {CLIENT_KIND_LABELS[c.clientKind]}
+                        {t(
+                          c.clientKind === "FINAL"
+                            ? "admin.clients.kind_final"
+                            : "admin.clients.kind_intermediary"
+                        )}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -238,7 +370,9 @@ const AdminClients = () => {
                             {clients.find((x) => x.id === c.linkedFinalClientId)?.tradeName ?? "—"}
                           </span>
                         ) : (
-                          <span className="text-xs text-muted-foreground italic">No indicado</span>
+                          <span className="text-xs text-muted-foreground italic">
+                            {t("admin.clients.final_not_set")}
+                          </span>
                         )
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -251,10 +385,10 @@ const AdminClients = () => {
                     <TableCell>
                       {c.active ? (
                         <Badge className="bg-emerald-600/15 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-600/20 border-0">
-                          Activo
+                          {t("admin.common.active")}
                         </Badge>
                       ) : (
-                        <Badge variant="outline">Inactivo</Badge>
+                        <Badge variant="outline">{t("admin.common.inactive")}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -265,7 +399,7 @@ const AdminClients = () => {
                         onClick={() => setContactsClientId(c.id)}
                       >
                         <Users className="h-3.5 w-3.5" />
-                        Contactos
+                        {t("admin.common.contacts")}
                         {c.contacts.length > 0 && (
                           <span className="tabular-nums">({c.contacts.length})</span>
                         )}
@@ -275,7 +409,7 @@ const AdminClients = () => {
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => openEdit(c)}
-                        aria-label="Editar"
+                        aria-label={t("admin.common.edit")}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -284,7 +418,7 @@ const AdminClients = () => {
                         size="icon"
                         className="h-8 w-8 text-destructive"
                         onClick={() => setDeleteTarget(c)}
-                        aria-label="Eliminar"
+                        aria-label={t("admin.common.delete")}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -317,16 +451,19 @@ const AdminClients = () => {
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar cliente?</AlertDialogTitle>
+            <AlertDialogTitle>{t("admin.clients.delete_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminará <strong>{deleteTarget?.tradeName}</strong> y todas sus personas de contacto.
-              Esta acción no se puede deshacer.
+              {t("admin.clients.delete_desc")} <strong>{deleteTarget?.tradeName}</strong>{" "}
+              {t("admin.clients.delete_desc_suffix")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Eliminar
+            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void confirmDelete()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("admin.common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

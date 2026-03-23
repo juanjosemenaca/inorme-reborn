@@ -9,6 +9,12 @@ import type {
   ClientRow,
   CompanyWorkerInsert,
   CompanyWorkerRow,
+  ProjectDocumentRow,
+  ProjectInsert,
+  ProjectMemberRow,
+  ProjectRow,
+  WorkCalendarHolidayRow,
+  WorkCalendarSummerRangeRow,
   ProviderContactPersonInsert,
   ProviderContactPersonRow,
   ProviderInsert,
@@ -18,6 +24,98 @@ import type { BackofficeUserRecord, EmploymentType, UserRole } from "@/types/bac
 import type { ClientContactPerson, ClientKind, ClientRecord } from "@/types/clients";
 import type { AutonomoVia, CompanyWorkerEmploymentType, CompanyWorkerRecord } from "@/types/companyWorkers";
 import type { ProviderRecord } from "@/types/providers";
+import type {
+  ProjectDocumentRecord,
+  ProjectMemberRecord,
+  ProjectMemberRole,
+  ProjectRecord,
+} from "@/types/projects";
+import type {
+  WorkCalendarHolidayKind,
+  WorkCalendarHolidayRecord,
+  WorkCalendarScope,
+  WorkCalendarSummerRangeRecord,
+} from "@/types/workCalendars";
+
+// ---------------------------------------------------------------------------
+// Proyectos
+// ---------------------------------------------------------------------------
+
+export function projectRowToDomain(row: ProjectRow): ProjectRecord {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    clientId: row.client_id,
+    finalClientId: row.final_client_id,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function projectDocumentRowToDomain(row: ProjectDocumentRow): ProjectDocumentRecord {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    storagePath: row.storage_path,
+    originalFilename: row.original_filename,
+    fileSize: row.file_size,
+    mimeType: row.mime_type,
+    createdAt: row.created_at,
+  };
+}
+
+export function projectMemberRowToDomain(row: ProjectMemberRow): ProjectMemberRecord {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    companyWorkerId: row.company_worker_id,
+    role: row.role as ProjectMemberRole,
+    createdAt: row.created_at,
+  };
+}
+
+export function workCalendarHolidayRowToDomain(row: WorkCalendarHolidayRow): WorkCalendarHolidayRecord {
+  return {
+    id: row.id,
+    calendarYear: row.calendar_year,
+    scope: row.scope as WorkCalendarScope,
+    holidayDate: row.holiday_date,
+    holidayKind: (row.holiday_kind ?? "NACIONAL") as WorkCalendarHolidayKind,
+    label: row.label,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function workCalendarSummerRangeRowToDomain(row: WorkCalendarSummerRangeRow): WorkCalendarSummerRangeRecord {
+  return {
+    id: row.id,
+    calendarYear: row.calendar_year,
+    scope: row.scope as WorkCalendarScope,
+    dateStart: row.date_start,
+    dateEnd: row.date_end,
+    label: row.label,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function projectRecordToInsert(
+  record: Omit<ProjectRecord, "id" | "createdAt" | "updatedAt"> & { id?: string }
+): ProjectInsert {
+  return {
+    id: record.id || undefined,
+    title: record.title,
+    description: record.description,
+    client_id: record.clientId,
+    final_client_id: record.finalClientId,
+    start_date: record.startDate,
+    end_date: record.endDate,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Contactos (compartido cliente / proveedor)
@@ -176,6 +274,7 @@ export function companyWorkerRowToDomain(row: CompanyWorkerRow): CompanyWorkerRe
     employmentType: row.employment_type as CompanyWorkerEmploymentType,
     providerId: row.provider_id,
     autonomoVia: row.autonomo_via as AutonomoVia | null,
+    workCalendarScope: (row.work_calendar_scope ?? "BARCELONA") as WorkCalendarScope,
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -197,6 +296,7 @@ export function companyWorkerRecordToRowInsert(
     employment_type: record.employmentType,
     provider_id: record.providerId,
     autonomo_via: record.autonomoVia,
+    work_calendar_scope: record.workCalendarScope,
     active: record.active,
   };
 }

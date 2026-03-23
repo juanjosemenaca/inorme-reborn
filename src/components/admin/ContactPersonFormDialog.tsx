@@ -39,7 +39,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   initial?: ClientContactPerson | null;
-  onSubmit: (values: ContactPersonFormValues) => void;
+  onSubmit: (values: ContactPersonFormValues) => void | Promise<void>;
 };
 
 export function ContactPersonFormDialog({

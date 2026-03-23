@@ -1,3 +1,6 @@
+import type { CompanyWorkerRecord } from "@/types/companyWorkers";
+import { companyWorkerDisplayName } from "@/types/companyWorkers";
+
 /** Rol en el backoffice Inorme */
 export type UserRole = "ADMIN" | "WORKER";
 
@@ -64,4 +67,16 @@ export type BackofficeUserDefinition = Pick<
 
 export function getDisplayName(u: Pick<BackofficeUserRecord, "firstName" | "lastName">): string {
   return `${u.firstName} ${u.lastName}`.trim();
+}
+
+/** Nombre mostrado: prioriza ficha de trabajador vinculada (lista de trabajadores cargada). */
+export function getResolvedDisplayName(
+  u: BackofficeUserRecord,
+  workers: CompanyWorkerRecord[]
+): string {
+  if (u.companyWorkerId) {
+    const w = workers.find((x) => x.id === u.companyWorkerId);
+    if (w) return companyWorkerDisplayName(w);
+  }
+  return getDisplayName(u);
 }

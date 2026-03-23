@@ -10,16 +10,32 @@ import {
 import es from "@/locales/es.json";
 import ca from "@/locales/ca.json";
 import en from "@/locales/en.json";
-import eu from "@/locales/eu.json";
+import adminEs from "@/locales/admin.es.json";
+import adminCa from "@/locales/admin.ca.json";
+import adminEn from "@/locales/admin.en.json";
+import { getTranslationValue } from "@/lib/i18nResolve";
 
-export type Language = "es" | "ca" | "en" | "eu";
+/** Idiomas de la aplicación: castellano, catalán, inglés */
+export type Language = "es" | "ca" | "en";
 
-const translations: Record<Language, Record<string, unknown>> = {
+const baseTranslations: Record<Language, Record<string, unknown>> = {
   es: es as Record<string, unknown>,
   ca: ca as Record<string, unknown>,
   en: en as Record<string, unknown>,
-  eu: eu as Record<string, unknown>,
 };
+
+const adminByLang = {
+  es: adminEs as Record<string, unknown>,
+  ca: adminCa as Record<string, unknown>,
+  en: adminEn as Record<string, unknown>,
+};
+
+function mergeTranslations(lang: Language): Record<string, unknown> {
+  return {
+    ...baseTranslations[lang],
+    admin: adminByLang[lang],
+  };
+}
 
 const STORAGE_KEY = "inorme-lang";
 
@@ -32,18 +48,23 @@ type LanguageContextValue = {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
+function isLanguage(value: string | null): value is Language {
+  return value === "es" || value === "ca" || value === "en";
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored && (stored === "es" || stored === "ca" || stored === "en" || stored === "eu")) {
-        return stored as Language;
-      }
+      if (stored === "eu") return "es";
+      if (isLanguage(stored)) return stored;
     } catch {
       // ignore
     }
     return "es";
   });
+
+  const translations = useMemo(() => mergeTranslations(language), [language]);
 
   useEffect(() => {
     try {
@@ -53,28 +74,33 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, [language]);
 
+  useEffect(() => {
+    const htmlLang = language === "ca" ? "ca" : language === "en" ? "en" : "es";
+    document.documentElement.lang = htmlLang;
+  }, [language]);
+
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
   }, []);
 
   const t = useCallback(
     (key: string): string => {
-      const value = translations[language][key];
+      const value = getTranslationValue(translations, key);
       if (typeof value === "string") return value;
       return key;
     },
-    [language]
+    [translations]
   );
 
   const tArray = useCallback(
     (key: string): string[] => {
-      const value = translations[language][key];
+      const value = getTranslationValue(translations, key);
       if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
         return value as string[];
       }
       return [];
     },
-    [language]
+    [translations]
   );
 
   const value = useMemo<LanguageContextValue>(

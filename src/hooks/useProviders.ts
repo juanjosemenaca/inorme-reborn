@@ -1,6 +1,12 @@
-import { useSyncExternalStore } from "react";
-import { getProvidersSnapshot, subscribeProviders } from "@/lib/providerStore";
+import { useQuery } from "@tanstack/react-query";
+import { fetchProviders } from "@/api/providersApi";
+import { queryKeys } from "@/lib/queryKeys";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 export function useProviders() {
-  return useSyncExternalStore(subscribeProviders, getProvidersSnapshot, getProvidersSnapshot);
+  return useQuery({
+    queryKey: queryKeys.providers,
+    queryFn: fetchProviders,
+    enabled: isSupabaseConfigured(),
+  });
 }

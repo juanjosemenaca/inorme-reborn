@@ -1,6 +1,6 @@
 /**
  * Filas Postgres (snake_case) alineadas con
- * `supabase/migrations/20260206120000_initial_schema.sql`.
+ * Migraciones en `supabase/migrations/` (incl. proyectos, equipo en proyecto, calendarios laborales).
  * Úsalas con PostgREST / `supabase.from(...)` y mapea a `src/types/*.ts` con `@/lib/supabase/mappers`.
  */
 
@@ -43,6 +43,8 @@ export interface CompanyWorkerRow {
   employment_type: DbEmploymentType;
   provider_id: string | null;
   autonomo_via: DbAutonomoVia | null;
+  /** Calendario laboral por sede; opcional en clientes antiguos hasta aplicar migración. */
+  work_calendar_scope?: "BARCELONA" | "MADRID" | "ARRASATE_MONDRAGON";
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -86,6 +88,43 @@ export interface ProviderContactPersonRow {
   description: string;
 }
 
+export interface ProjectRow {
+  id: string;
+  title: string;
+  description: string;
+  client_id: string;
+  final_client_id: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectDocumentRow {
+  id: string;
+  project_id: string;
+  storage_path: string;
+  original_filename: string;
+  file_size: number;
+  mime_type: string;
+  created_at: string;
+}
+
+export type DbProjectMemberRole =
+  | "CONSULTOR"
+  | "ANALISTA_FUNCIONAL"
+  | "ANALISTA_PROGRAMADOR"
+  | "PROGRAMADOR"
+  | "JEFE_DE_EQUIPO";
+
+export interface ProjectMemberRow {
+  id: string;
+  project_id: string;
+  company_worker_id: string;
+  role: DbProjectMemberRole;
+  created_at: string;
+}
+
 export interface BackofficeUserRow {
   id: string;
   email: string;
@@ -126,6 +165,44 @@ export type ClientContactPersonInsert = Omit<ClientContactPersonRow, "id"> & {
 export type ProviderContactPersonInsert = Omit<ProviderContactPersonRow, "id"> & {
   id?: string;
 };
+
+export type ProjectInsert = Omit<ProjectRow, "id" | "created_at" | "updated_at"> & {
+  id?: string;
+};
+
+export type ProjectDocumentInsert = Omit<ProjectDocumentRow, "id" | "created_at"> & {
+  id?: string;
+};
+
+export type ProjectMemberInsert = Omit<ProjectMemberRow, "id" | "created_at"> & {
+  id?: string;
+};
+
+export type DbWorkCalendarScope = "BARCELONA" | "MADRID" | "ARRASATE_MONDRAGON";
+
+export type DbWorkCalendarHolidayKind = "NACIONAL" | "AUTONOMICO" | "LOCAL";
+
+export interface WorkCalendarHolidayRow {
+  id: string;
+  calendar_year: number;
+  scope: DbWorkCalendarScope;
+  holiday_date: string;
+  holiday_kind: DbWorkCalendarHolidayKind;
+  label: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkCalendarSummerRangeRow {
+  id: string;
+  calendar_year: number;
+  scope: DbWorkCalendarScope;
+  date_start: string;
+  date_end: string;
+  label: string;
+  created_at: string;
+  updated_at: string;
+}
 
 /** Perfil backoffice (sin contraseña; Auth en `auth.users`). */
 export type BackofficeUserInsert = Omit<

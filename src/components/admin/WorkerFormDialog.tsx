@@ -7,6 +7,9 @@ import {
   COMPANY_WORKER_EMPLOYMENT_LABELS,
   AUTONOMO_VIA_LABELS,
 } from "@/types/companyWorkers";
+import { WORK_CALENDAR_SCOPES } from "@/types/workCalendars";
+import type { WorkCalendarScope } from "@/types/workCalendars";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +48,8 @@ const employmentEnum = z.enum([
 ]);
 const autonomoViaEnum = z.enum(["CUENTA_PROPIA", "EMPRESA"]);
 
+const workCalendarScopeEnum = z.enum(["BARCELONA", "MADRID", "ARRASATE_MONDRAGON"]);
+
 const NONE_VALUE = "__none__";
 
 const schema = z
@@ -56,6 +61,7 @@ const schema = z
     mobile: z.string().min(5, "Teléfono obligatorio"),
     postalAddress: z.string().min(3, "Dirección obligatoria"),
     city: z.string().min(1, "Ciudad obligatoria"),
+    workCalendarScope: workCalendarScopeEnum,
     employmentType: employmentEnum,
     autonomoVia: autonomoViaEnum.optional().nullable(),
     providerId: z.string().optional(),
@@ -96,7 +102,7 @@ type Props = {
   initial?: CompanyWorkerRecord | null;
   /** Proveedores activos para subcontratado / autónomo por empresa */
   providerOptions: { id: string; label: string }[];
-  onSubmit: (values: WorkerFormValues) => void;
+  onSubmit: (values: WorkerFormValues) => void | Promise<void>;
 };
 
 export function WorkerFormDialog({
@@ -107,6 +113,7 @@ export function WorkerFormDialog({
   providerOptions,
   onSubmit,
 }: Props) {
+  const { t } = useLanguage();
   const form = useForm<WorkerFormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -117,6 +124,7 @@ export function WorkerFormDialog({
       mobile: "",
       postalAddress: "",
       city: "",
+      workCalendarScope: "BARCELONA",
       employmentType: "FIJO",
       autonomoVia: null,
       providerId: "",
@@ -151,6 +159,7 @@ export function WorkerFormDialog({
         mobile: initial.mobile,
         postalAddress: initial.postalAddress,
         city: initial.city,
+        workCalendarScope: initial.workCalendarScope,
         employmentType: initial.employmentType,
         autonomoVia: initial.autonomoVia,
         providerId: initial.providerId ?? "",
@@ -165,6 +174,7 @@ export function WorkerFormDialog({
         mobile: "",
         postalAddress: "",
         city: "",
+        workCalendarScope: "BARCELONA",
         employmentType: "FIJO",
         autonomoVia: null,
         providerId: "",
@@ -282,6 +292,32 @@ export function WorkerFormDialog({
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="workCalendarScope"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>{t("admin.workers.field_calendar")}</FormLabel>
+                    <p className="text-sm text-muted-foreground mb-1.5">{t("admin.workers.field_calendar_desc")}</p>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {WORK_CALENDAR_SCOPES.map((s: WorkCalendarScope) => (
+                          <SelectItem key={s} value={s}>
+                            {t(`admin.workCalendars.scope_${s}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
