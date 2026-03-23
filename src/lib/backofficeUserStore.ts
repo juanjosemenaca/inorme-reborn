@@ -6,7 +6,7 @@ import { getCompanyWorkerById } from "@/lib/companyWorkerStore";
 
 const STORAGE_KEY = "inorme_backoffice_user_db_v2";
 
-let listeners = new Set<() => void>();
+const listeners = new Set<() => void>();
 
 function emit() {
   listeners.forEach((l) => l());

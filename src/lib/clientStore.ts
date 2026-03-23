@@ -2,7 +2,7 @@ import type { ClientContactPerson, ClientKind, ClientRecord } from "@/types/clie
 
 const STORAGE_KEY = "inorme_clients_db_v1";
 
-let listeners = new Set<() => void>();
+const listeners = new Set<() => void>();
 
 function emit() {
   listeners.forEach((l) => l());

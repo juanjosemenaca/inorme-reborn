@@ -1,0 +1,255 @@
+/**
+ * Mapeo bidireccional: filas Postgres (snake_case) ↔ modelos de dominio (camelCase).
+ */
+import type {
+  BackofficeUserInsert,
+  BackofficeUserRow,
+  ClientContactPersonRow,
+  ClientInsert,
+  ClientRow,
+  CompanyWorkerInsert,
+  CompanyWorkerRow,
+  ProviderContactPersonInsert,
+  ProviderContactPersonRow,
+  ProviderInsert,
+  ProviderRow,
+} from "@/types/database";
+import type { BackofficeUserRecord, EmploymentType, UserRole } from "@/types/backoffice";
+import type { ClientContactPerson, ClientKind, ClientRecord } from "@/types/clients";
+import type { AutonomoVia, CompanyWorkerEmploymentType, CompanyWorkerRecord } from "@/types/companyWorkers";
+import type { ProviderRecord } from "@/types/providers";
+
+// ---------------------------------------------------------------------------
+// Contactos (compartido cliente / proveedor)
+// ---------------------------------------------------------------------------
+
+type ContactPersonRowCore = Pick<
+  ClientContactPersonRow,
+  "id" | "first_name" | "last_name" | "email" | "mobile" | "position" | "description"
+>;
+
+function contactPersonRowCoreToDomain(row: ContactPersonRowCore): ClientContactPerson {
+  return {
+    id: row.id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    email: row.email,
+    mobile: row.mobile,
+    position: row.position,
+    description: row.description,
+  };
+}
+
+export function clientContactRowToDomain(row: ClientContactPersonRow): ClientContactPerson {
+  return contactPersonRowCoreToDomain(row);
+}
+
+export function providerContactRowToDomain(row: ProviderContactPersonRow): ClientContactPerson {
+  return contactPersonRowCoreToDomain(row);
+}
+
+export function clientContactToClientInsert(
+  clientId: string,
+  c: ClientContactPerson
+): ClientContactPersonInsert {
+  return {
+    client_id: clientId,
+    id: c.id || undefined,
+    first_name: c.firstName,
+    last_name: c.lastName,
+    email: c.email,
+    mobile: c.mobile,
+    position: c.position,
+    description: c.description,
+  };
+}
+
+export function clientContactToProviderInsert(
+  providerId: string,
+  c: ClientContactPerson
+): ProviderContactPersonInsert {
+  return {
+    provider_id: providerId,
+    id: c.id || undefined,
+    first_name: c.firstName,
+    last_name: c.lastName,
+    email: c.email,
+    mobile: c.mobile,
+    position: c.position,
+    description: c.description,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Clientes
+// ---------------------------------------------------------------------------
+
+export function clientRowToDomain(row: ClientRow, contacts: ClientContactPersonRow[]): ClientRecord {
+  return {
+    id: row.id,
+    tradeName: row.trade_name,
+    companyName: row.company_name,
+    cif: row.cif,
+    fiscalAddress: row.fiscal_address,
+    clientKind: row.client_kind as ClientKind,
+    linkedFinalClientId: row.linked_final_client_id,
+    phone: row.phone,
+    contactEmail: row.contact_email,
+    notes: row.notes,
+    active: row.active,
+    contacts: contacts.map(clientContactRowToDomain),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Solo la fila `clients` (sin contactos). Útil para `.insert().select().single()`.
+ */
+export function clientRecordToRowInsert(record: Omit<ClientRecord, "contacts" | "createdAt" | "updatedAt">): ClientInsert {
+  return {
+    id: record.id || undefined,
+    trade_name: record.tradeName,
+    company_name: record.companyName,
+    cif: record.cif,
+    fiscal_address: record.fiscalAddress,
+    client_kind: record.clientKind,
+    linked_final_client_id: record.linkedFinalClientId,
+    phone: record.phone,
+    contact_email: record.contactEmail,
+    notes: record.notes,
+    active: record.active,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Proveedores
+// ---------------------------------------------------------------------------
+
+export function providerRowToDomain(row: ProviderRow, contacts: ProviderContactPersonRow[]): ProviderRecord {
+  return {
+    id: row.id,
+    tradeName: row.trade_name,
+    companyName: row.company_name,
+    cif: row.cif,
+    fiscalAddress: row.fiscal_address,
+    phone: row.phone,
+    contactEmail: row.contact_email,
+    notes: row.notes,
+    active: row.active,
+    contacts: contacts.map(providerContactRowToDomain),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function providerRecordToRowInsert(
+  record: Omit<ProviderRecord, "contacts" | "createdAt" | "updatedAt">
+): ProviderInsert {
+  return {
+    id: record.id || undefined,
+    trade_name: record.tradeName,
+    company_name: record.companyName,
+    cif: record.cif,
+    fiscal_address: record.fiscalAddress,
+    phone: record.phone,
+    contact_email: record.contactEmail,
+    notes: record.notes,
+    active: record.active,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Trabajadores empresa
+// ---------------------------------------------------------------------------
+
+export function companyWorkerRowToDomain(row: CompanyWorkerRow): CompanyWorkerRecord {
+  return {
+    id: row.id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    dni: row.dni,
+    email: row.email,
+    mobile: row.mobile,
+    postalAddress: row.postal_address,
+    city: row.city,
+    employmentType: row.employment_type as CompanyWorkerEmploymentType,
+    providerId: row.provider_id,
+    autonomoVia: row.autonomo_via as AutonomoVia | null,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function companyWorkerRecordToRowInsert(
+  record: Omit<CompanyWorkerRecord, "createdAt" | "updatedAt">
+): CompanyWorkerInsert {
+  return {
+    id: record.id || undefined,
+    first_name: record.firstName,
+    last_name: record.lastName,
+    dni: record.dni,
+    email: record.email,
+    mobile: record.mobile,
+    postal_address: record.postalAddress,
+    city: record.city,
+    employment_type: record.employmentType,
+    provider_id: record.providerId,
+    autonomo_via: record.autonomoVia,
+    active: record.active,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Usuarios backoffice (sin contraseña en BD)
+// ---------------------------------------------------------------------------
+
+/** Valor de `password` en dominio cuando el usuario viene solo de Supabase (Auth gestiona credenciales). */
+export const BACKOFFICE_PASSWORD_FROM_DB = "" as const;
+
+export function backofficeUserRowToDomain(
+  row: BackofficeUserRow,
+  options?: { password?: string }
+): BackofficeUserRecord {
+  return {
+    id: row.id,
+    email: row.email,
+    password: options?.password ?? BACKOFFICE_PASSWORD_FROM_DB,
+    role: row.role as UserRole,
+    companyWorkerId: row.company_worker_id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    dni: row.dni,
+    mobile: row.mobile,
+    postalAddress: row.postal_address,
+    city: row.city,
+    employmentType: row.employment_type as EmploymentType,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Campos persistibles en `public.backoffice_users` (sin password).
+ * Para enlazar Auth: añade `auth_user_id` en el objeto o tras `signUp` / `signIn`.
+ */
+export function backofficeUserRecordToRowInsert(
+  record: Omit<BackofficeUserRecord, "password" | "createdAt" | "updatedAt">
+): BackofficeUserInsert {
+  return {
+    id: record.id || undefined,
+    email: record.email,
+    role: record.role,
+    company_worker_id: record.companyWorkerId,
+    first_name: record.firstName,
+    last_name: record.lastName,
+    dni: record.dni,
+    mobile: record.mobile,
+    postal_address: record.postalAddress,
+    city: record.city,
+    employment_type: record.employmentType,
+    active: record.active,
+  };
+}

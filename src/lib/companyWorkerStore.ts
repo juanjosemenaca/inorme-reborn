@@ -7,7 +7,7 @@ import { getProviderById } from "@/lib/providerStore";
 
 const STORAGE_KEY = "inorme_company_workers_db_v1";
 
-let listeners = new Set<() => void>();
+const listeners = new Set<() => void>();
 
 function emit() {
   listeners.forEach((l) => l());

@@ -85,4 +85,13 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/c
 
 ### Base de datos / Supabase
 
-Este repositorio **no incluye aún el cliente de Supabase**. Los datos del backoffice viven en el navegador (`localStorage`). Para usar **Supabase** en producción habría que: crear el proyecto en [supabase.com](https://supabase.com), definir tablas equivalentes a los tipos en `src/types/`, sustituir los stores (`*Store.ts`) por llamadas a la API de Supabase y mover la autenticación al servidor (p. ej. Auth de Supabase + RLS). Variables de entorno: ver `.env.example`.
+Hay un cliente en `src/lib/supabaseClient.ts` (`supabase`, `isSupabaseConfigured()`). Los datos del backoffice **siguen** en el navegador (`localStorage`) hasta que sustituyas los stores (`*Store.ts`) por tablas + RLS.
+
+1. Copia `.env.example` a `.env` y pega la **anon key** (Dashboard → Project Settings → API).
+2. **SQL inicial:** ejecuta el contenido de `supabase/migrations/20260206120000_initial_schema.sql` en **Supabase → SQL → New query → Run** (o `supabase db push` si usas la CLI). Crea tablas `providers`, `company_workers`, `clients`, `client_contact_persons`, `provider_contact_persons`, `backoffice_users`, enums, RLS para rol `authenticated` y triggers `updated_at`.
+3. **Mapeo Postgres ↔ dominio:** tipos de fila en `src/types/database.ts`, funciones en `src/lib/supabase/mappers.ts` (p. ej. `clientRowToDomain`, `providerRecordToRowInsert`, `backofficeUserRowToDomain`).
+4. Autenticación: enlaza `backoffice_users.auth_user_id` con `auth.users` (Supabase Auth); no hay columna de contraseña en `public` (solo en Auth).
+
+Variables: `VITE_SUPABASE_URL` (por defecto el proyecto `grasrjavkbeboynacvzp`) y `VITE_SUPABASE_ANON_KEY`.
+
+**GitHub + Supabase:** al subir cambios a `main`, GitHub Actions ejecuta CI (lint/build) y, si cambian migraciones, despliega el esquema con `supabase db push`. Configura los secretos del repositorio y el flujo de trabajo en [`CONTRIBUTING.md`](./CONTRIBUTING.md).

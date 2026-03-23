@@ -3,7 +3,7 @@ import type { ProviderRecord } from "@/types/providers";
 
 const STORAGE_KEY = "inorme_providers_db_v1";
 
-let listeners = new Set<() => void>();
+const listeners = new Set<() => void>();
 
 function emit() {
   listeners.forEach((l) => l());
