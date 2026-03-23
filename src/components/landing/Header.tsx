@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage, type Language } from "@/contexts/LanguageContext";
@@ -75,7 +76,17 @@ const Header = () => {
               {t(link.key)}
             </button>
           ))}
-          <span className="ml-3 flex items-center gap-1 border-l border-current/20 pl-3">
+          <Link
+            to="/admin/login"
+            className={`ml-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide rounded-lg transition-colors ${
+              isScrolled
+                ? "text-foreground/60 hover:text-foreground hover:bg-muted"
+                : "text-white/60 hover:text-white hover:bg-white/10"
+            }`}
+          >
+            {t("nav_backoffice")}
+          </Link>
+          <span className="ml-1 flex items-center gap-1 border-l border-current/20 pl-3">
             {(Object.keys(languageLabels) as Language[]).map((lang) => (
               <button
                 key={lang}
@@ -151,6 +162,13 @@ const Header = () => {
                   {t(link.key)}
                 </button>
               ))}
+              <Link
+                to="/admin/login"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="block w-full px-3 py-1.5 text-center text-[11px] font-medium uppercase text-primary hover:bg-muted transition-colors"
+              >
+                {t("nav_backoffice")}
+              </Link>
               <div className="my-1 border-t border-border" />
               <div className="px-2 pt-0.5 flex justify-center">
                 <Button

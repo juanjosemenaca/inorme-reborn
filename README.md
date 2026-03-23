@@ -71,3 +71,18 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Backoffice (Inorme)
+
+- **URL:** `/admin` (login en `/admin/login`)
+- **Usuarios** (acceso al backoffice, `inorme_backoffice_user_db_v2`): el alta elige una **ficha de Trabajadores**; se asignan email de acceso (por defecto el de la ficha), contraseña y rol (admin o trabajador). Los datos personales vienen de Trabajadores y se sincronizan al guardar. Cuentas demo sin ficha siguen siendo válidas.
+- **Clientes** (`/admin/clientes`, clave `inorme_clients_db_v1`): nombre comercial, razón social, CIF, dirección fiscal, tipo (cliente final / intermediario), teléfono y email de contacto, notas; si es **intermediario**, opcionalmente un **cliente final** vinculado (si se conoce); **personas de contacto** por cliente (nombre, apellidos, email, móvil, cargo, descripción).
+- **Proveedores** (`/admin/proveedores`, `inorme_providers_db_v1`): mismos datos de alta que un cliente (fiscal, contacto, personas de contacto), para empresas externas (subcontratas, autónomos societarios, etc.).
+- **Trabajadores** (`/admin/trabajadores`, `inorme_company_workers_db_v1`): plantilla de la compañía — nombre, apellidos, DNI, email, móvil, dirección postal, ciudad de residencia, tipo (fijo, temporal, subcontratado, prácticas, autónomo); **subcontratado** y **autónomo por empresa** se vinculan a un proveedor; **autónomo** puede ser por cuenta propia o por empresa (proveedor).
+- **Roles:** **ADMIN** — gestión de usuarios y acceso global. **WORKER** — mensajes asignados y vistas permitidas.
+- La sesión se guarda en `sessionStorage` hasta cerrar sesión.
+- **Seguridad:** demo sin API (contraseñas en claro en `localStorage`); en producción usa backend con hash y base de datos real.
+
+### Base de datos / Supabase
+
+Este repositorio **no incluye aún el cliente de Supabase**. Los datos del backoffice viven en el navegador (`localStorage`). Para usar **Supabase** en producción habría que: crear el proyecto en [supabase.com](https://supabase.com), definir tablas equivalentes a los tipos en `src/types/`, sustituir los stores (`*Store.ts`) por llamadas a la API de Supabase y mover la autenticación al servidor (p. ej. Auth de Supabase + RLS). Variables de entorno: ver `.env.example`.
