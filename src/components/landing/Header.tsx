@@ -41,16 +41,8 @@ const Header = () => {
     document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const linkBtnClass = (compact: boolean) =>
-    `text-left rounded-lg transition-all duration-300 uppercase font-medium ${
-      compact
-        ? "w-full px-4 py-3 text-sm text-foreground hover:bg-muted"
-        : `px-3 py-2 text-[11px] tracking-wide rounded-lg hover:bg-white/10 xl:text-[12px] min-[1800px]:text-[13px] ${
-            isScrolled
-              ? "text-foreground/70 hover:text-foreground hover:bg-muted"
-              : "text-white/75 hover:text-white"
-          }`
-    }`;
+  const sheetLinkClass =
+    "text-left rounded-lg transition-all duration-300 uppercase font-medium w-full px-4 py-3 text-sm text-foreground hover:bg-muted";
 
   return (
     <header
@@ -81,46 +73,8 @@ const Header = () => {
           )}
         </a>
 
-        {/* Escritorio ancho (2xl = 1536px): barra horizontal — solo CSS, sin matchMedia */}
-        <nav
-          className="hidden min-w-0 2xl:flex 2xl:flex-1 2xl:flex-wrap 2xl:items-center 2xl:justify-end 2xl:gap-x-0.5 2xl:gap-y-1 2xl:pl-4"
-          aria-label="Principal"
-        >
-          {navKeys.map((link) => (
-            <button
-              key={link.href}
-              type="button"
-              onClick={() => scrollTo(link.href)}
-              className={linkBtnClass(false)}
-            >
-              {t(link.key)}
-            </button>
-          ))}
-          <Link
-            to="/admin/login"
-            className={`ml-1 px-2 py-2 text-[10px] font-medium uppercase tracking-wide rounded-lg transition-colors xl:text-[11px] ${
-              isScrolled
-                ? "text-foreground/60 hover:text-foreground hover:bg-muted"
-                : "text-white/60 hover:text-white hover:bg-white/10"
-            }`}
-          >
-            {t("nav_backoffice")}
-          </Link>
-          <span className="ml-1 flex items-center gap-1 border-l border-current/20 pl-2">
-            <LanguageSwitcher variant={isScrolled ? "dark" : "light"} />
-          </span>
-          <Button
-            type="button"
-            onClick={() => scrollTo("#contacto")}
-            size="sm"
-            className="ml-2 shrink-0 rounded-full px-5 h-9 text-[12px] font-semibold tracking-wide shadow-md shadow-primary/25 hover:shadow-lg hover:shadow-primary/30 transition-all min-[1800px]:text-[13px]"
-          >
-            {t("nav_contactBtn")}
-          </Button>
-        </nav>
-
-        {/* &lt; 2xl: idioma + panel lateral (misma UX en móvil y portátil) */}
-        <div className="flex shrink-0 items-center gap-2 2xl:hidden">
+        {/* Siempre: idioma + hamburguesa → panel lateral (sin barra horizontal en ningún ancho) */}
+        <div className="flex shrink-0 items-center gap-2">
           <LanguageSwitcher variant={isScrolled ? "dark" : "light"} />
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
@@ -137,13 +91,13 @@ const Header = () => {
               <SheetHeader className="border-b px-6 py-4 text-left">
                 <SheetTitle>{t("nav_menu_title")}</SheetTitle>
               </SheetHeader>
-              <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-4" aria-label="Principal móvil">
+              <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-4" aria-label="Principal">
                 {navKeys.map((link) => (
                   <button
                     key={link.href}
                     type="button"
                     onClick={() => scrollTo(link.href)}
-                    className={linkBtnClass(true)}
+                    className={sheetLinkClass}
                   >
                     {t(link.key)}
                   </button>
