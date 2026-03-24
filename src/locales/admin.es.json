@@ -88,7 +88,15 @@
     "env_step4_restart_bold": "reinicia",
     "env_step4_restart_suffix": "el servidor de desarrollo (para Vite,",
     "env_step4_restart_suffix2": "y otra vez",
-    "env_step4_end": ")."
+    "env_step4_end": ").",
+    "env_prod_intro": "En producción las variables se inyectan al compilar el proyecto (Vite). No basta con un .env en el servidor: hay que definirlas en el panel de tu hosting (p. ej. Vercel) y volver a desplegar.",
+    "env_prod_step1": "Vercel: proyecto → Settings → Environment Variables.",
+    "env_prod_step2": "Añade para Production (y Preview si hace falta):",
+    "env_prod_var_url": "Project URL de Supabase",
+    "env_prod_var_key": "anon public (Project API keys)",
+    "env_prod_step3": "Los valores están en Supabase →",
+    "env_prod_step3_link": "Project Settings → API",
+    "env_prod_step4": "Guarda y pulsa Redeploy en el último deployment (o haz un commit nuevo). Sin un build nuevo, el front seguirá sin esas claves."
   },
   "auth": {
     "supabase_not_configured": "Supabase no está configurado.",

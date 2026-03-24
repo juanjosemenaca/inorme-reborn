@@ -88,7 +88,15 @@
     "env_step4_restart_bold": "restart",
     "env_step4_restart_suffix": "the dev server (for Vite,",
     "env_step4_restart_suffix2": "then run again",
-    "env_step4_end": ")."
+    "env_step4_end": ").",
+    "env_prod_intro": "In production, variables are baked in at build time (Vite). A .env file on the server is not enough: set them in your host’s dashboard (e.g. Vercel) and redeploy.",
+    "env_prod_step1": "Vercel: project → Settings → Environment Variables.",
+    "env_prod_step2": "Add for Production (and Preview if needed):",
+    "env_prod_var_url": "Supabase Project URL",
+    "env_prod_var_key": "anon public (Project API keys)",
+    "env_prod_step3": "Values are in Supabase →",
+    "env_prod_step3_link": "Project Settings → API",
+    "env_prod_step4": "Save, then Redeploy the latest deployment (or push a new commit). Without a new build, the app will still lack those keys."
   },
   "auth": {
     "supabase_not_configured": "Supabase is not configured.",

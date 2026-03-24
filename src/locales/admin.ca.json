@@ -88,7 +88,15 @@
     "env_step4_restart_bold": "reinicia",
     "env_step4_restart_suffix": "el servidor de desenvolupament (per a Vite,",
     "env_step4_restart_suffix2": "i una altra vegada",
-    "env_step4_end": ")."
+    "env_step4_end": ").",
+    "env_prod_intro": "En producció les variables s'injecten en compilar el projecte (Vite). No n'hi ha prou amb un .env al servidor: cal definir-les al panell de l'hosting (p. ex. Vercel) i tornar a desplegar.",
+    "env_prod_step1": "Vercel: projecte → Settings → Environment Variables.",
+    "env_prod_step2": "Afegeix per a Production (i Preview si cal):",
+    "env_prod_var_url": "Project URL de Supabase",
+    "env_prod_var_key": "anon public (Project API keys)",
+    "env_prod_step3": "Els valors són a Supabase →",
+    "env_prod_step3_link": "Project Settings → API",
+    "env_prod_step4": "Desa i prem Redeploy a l'últim deployment (o fes un commit nou). Sense un build nou, el front seguirà sense aquestes claus."
   },
   "auth": {
     "supabase_not_configured": "Supabase no està configurat.",

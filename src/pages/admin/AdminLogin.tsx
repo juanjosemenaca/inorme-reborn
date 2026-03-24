@@ -53,49 +53,86 @@ const AdminLogin = () => {
           <CardHeader>
             <CardTitle>{t("admin.login.env_title")}</CardTitle>
             <div className="space-y-3 text-sm text-muted-foreground pt-1">
-              <p>
-                {t("admin.login.env_missing")}{" "}
-                <code className="text-xs bg-muted px-1 rounded">.env</code>{" "}
-                {t("admin.login.env_missing_vars")}{" "}
-                <strong className="text-foreground">
-                  {missing.length ? missing.join(", ") : ".env"}
-                </strong>
-                .
-              </p>
-              <ol className="list-decimal pl-4 space-y-2">
-                <li>
-                  {t("admin.login.env_step1")}{" "}
-                  <a
-                    href="https://supabase.com/dashboard/project/_/settings/api"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary underline"
-                  >
-                    {t("admin.login.env_step1_link")}
-                  </a>
-                  .
-                </li>
-                <li>
-                  {t("admin.login.env_step2")} <strong>{t("admin.login.env_step2_bold")}</strong>{" "}
-                  {t("admin.login.env_step2_suffix")}
-                </li>
-                <li>
-                  {t("admin.login.env_step3")} <code className="text-xs">.env</code>{" "}
-                  {t("admin.login.env_step3_mid")}
-                  <code className="text-xs">=</code>):
-                  <pre className="mt-2 p-3 rounded-md bg-muted text-xs overflow-x-auto">
-                    VITE_SUPABASE_ANON_KEY=eyJhbGciOiJI...
-                  </pre>
-                </li>
-                <li>
-                  <strong>{t("admin.login.env_step4")}</strong> {t("admin.login.env_step4_restart")}{" "}
-                  <strong>{t("admin.login.env_step4_restart_bold")}</strong>{" "}
-                  {t("admin.login.env_step4_restart_suffix")}{" "}
-                  <code className="text-xs">Ctrl+C</code> {t("admin.login.env_step4_restart_suffix2")}{" "}
-                  <code className="text-xs">npm run dev</code>
-                  {t("admin.login.env_step4_end")}
-                </li>
-              </ol>
+              {import.meta.env.PROD ? (
+                <>
+                  <p>{t("admin.login.env_prod_intro")}</p>
+                  <ol className="list-decimal pl-4 space-y-2">
+                    <li>{t("admin.login.env_prod_step1")}</li>
+                    <li>
+                      {t("admin.login.env_prod_step2")}
+                      <ul className="mt-2 list-disc pl-4 space-y-1">
+                        <li>
+                          <code className="text-xs bg-muted px-1 rounded">VITE_SUPABASE_URL</code> —{" "}
+                          {t("admin.login.env_prod_var_url")}
+                        </li>
+                        <li>
+                          <code className="text-xs bg-muted px-1 rounded">VITE_SUPABASE_ANON_KEY</code> —{" "}
+                          {t("admin.login.env_prod_var_key")}
+                        </li>
+                      </ul>
+                    </li>
+                    <li>
+                      {t("admin.login.env_prod_step3")}{" "}
+                      <a
+                        href="https://supabase.com/dashboard/project/_/settings/api"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        {t("admin.login.env_prod_step3_link")}
+                      </a>
+                      .
+                    </li>
+                    <li>{t("admin.login.env_prod_step4")}</li>
+                  </ol>
+                </>
+              ) : (
+                <>
+                  <p>
+                    {t("admin.login.env_missing")}{" "}
+                    <code className="text-xs bg-muted px-1 rounded">.env</code>{" "}
+                    {t("admin.login.env_missing_vars")}{" "}
+                    <strong className="text-foreground">
+                      {missing.length ? missing.join(", ") : ".env"}
+                    </strong>
+                    .
+                  </p>
+                  <ol className="list-decimal pl-4 space-y-2">
+                    <li>
+                      {t("admin.login.env_step1")}{" "}
+                      <a
+                        href="https://supabase.com/dashboard/project/_/settings/api"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        {t("admin.login.env_step1_link")}
+                      </a>
+                      .
+                    </li>
+                    <li>
+                      {t("admin.login.env_step2")} <strong>{t("admin.login.env_step2_bold")}</strong>{" "}
+                      {t("admin.login.env_step2_suffix")}
+                    </li>
+                    <li>
+                      {t("admin.login.env_step3")} <code className="text-xs">.env</code>{" "}
+                      {t("admin.login.env_step3_mid")}
+                      <code className="text-xs">=</code>):
+                      <pre className="mt-2 p-3 rounded-md bg-muted text-xs overflow-x-auto">
+                        VITE_SUPABASE_ANON_KEY=eyJhbGciOiJI...
+                      </pre>
+                    </li>
+                    <li>
+                      <strong>{t("admin.login.env_step4")}</strong> {t("admin.login.env_step4_restart")}{" "}
+                      <strong>{t("admin.login.env_step4_restart_bold")}</strong>{" "}
+                      {t("admin.login.env_step4_restart_suffix")}{" "}
+                      <code className="text-xs">Ctrl+C</code> {t("admin.login.env_step4_restart_suffix2")}{" "}
+                      <code className="text-xs">npm run dev</code>
+                      {t("admin.login.env_step4_end")}
+                    </li>
+                  </ol>
+                </>
+              )}
             </div>
           </CardHeader>
         </Card>
