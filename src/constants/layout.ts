@@ -1,3 +1,3 @@
 /**
- * Landing header: siempre idioma + icono de menú que abre un desplegable Radix (sin enlaces horizontales en la barra).
+ * Landing header: enlaces de navegación solo dentro del panel lateral (hamburguesa), sin breakpoints ni barra horizontal.
  */
