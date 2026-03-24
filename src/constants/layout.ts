@@ -1,5 +1,5 @@
 /**
- * Por debajo de este ancho se muestra el menú hamburguesa.
- * 1024px (lg) deja demasiados portátiles con barra horizontal apiñada; alineado con Tailwind `xl`.
+ * Menú horizontal solo desde el breakpoint Tailwind `2xl` (1536px).
+ * Por debajo: idioma + hamburguesa que abre un panel (Sheet).
+ * Así se evita la barra apiñada en portátiles y no dependemos de JS para el layout responsive.
  */
-export const HEADER_DESKTOP_MIN_WIDTH_PX = 1280;
