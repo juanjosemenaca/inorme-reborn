@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { HEADER_DESKTOP_MIN_WIDTH_PX } from "@/constants/layout";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { publicAssetUrl } from "@/lib/publicAssetUrl";
 
@@ -18,7 +19,7 @@ const navKeys = [
 
 const Header = () => {
   const { t } = useLanguage();
-  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const isDesktop = useMediaQuery(`(min-width: ${HEADER_DESKTOP_MIN_WIDTH_PX}px)`);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
@@ -54,9 +55,7 @@ const Header = () => {
             <img
               src={logoSrc}
               alt="Inorme S.L. - Informática, organización y métodos"
-              className="h-9 w-auto max-w-[min(180px,45vw)] object-contain object-left"
-              width={180}
-              height={36}
+              className="h-9 w-auto max-h-9 object-contain object-left [max-width:min(260px,50vw)]"
               decoding="async"
               onError={() => setLogoError(true)}
             />
@@ -69,12 +68,12 @@ const Header = () => {
         </a>
 
         {isDesktop ? (
-        <nav className="flex items-center gap-1 min-w-0 flex-1 justify-end ml-4">
+        <nav className="flex flex-wrap items-center justify-end gap-x-0.5 gap-y-1 min-w-0 flex-1 ml-3 xl:ml-4">
           {navKeys.map((link) => (
             <button
               key={link.href}
               onClick={() => scrollTo(link.href)}
-              className={`px-4 py-2 text-[13px] font-medium tracking-wide uppercase transition-all duration-300 rounded-lg hover:bg-white/10 ${
+              className={`px-2 sm:px-3 xl:px-4 py-2 text-[11px] xl:text-[13px] font-medium tracking-wide uppercase transition-all duration-300 rounded-lg hover:bg-white/10 ${
                 isScrolled
                   ? "text-foreground/70 hover:text-foreground hover:bg-muted"
                   : "text-white/75 hover:text-white"

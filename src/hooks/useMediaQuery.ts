@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 
 /**
- * Misma lógica que el breakpoint `lg` de Tailwind (1024px).
- * Evita depender solo de clases responsive en el build de producción.
+ * `matchMedia` + `resize` para que al cambiar tamaño de ventana o orientación
+ * el layout del header coincida con el ancho real (Safari, ventana encajada, etc.).
  */
 export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(() =>
@@ -10,11 +10,15 @@ export function useMediaQuery(query: string): boolean {
   );
 
   useEffect(() => {
+    const sync = () => setMatches(window.matchMedia(query).matches);
+    sync();
     const media = window.matchMedia(query);
-    setMatches(media.matches);
-    const listener = () => setMatches(media.matches);
-    media.addEventListener("change", listener);
-    return () => media.removeEventListener("change", listener);
+    media.addEventListener("change", sync);
+    window.addEventListener("resize", sync);
+    return () => {
+      media.removeEventListener("change", sync);
+      window.removeEventListener("resize", sync);
+    };
   }, [query]);
 
   return matches;

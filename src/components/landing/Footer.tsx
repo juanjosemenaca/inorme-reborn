@@ -29,9 +29,7 @@ const Footer = () => {
               <img
                 src={publicAssetUrl("logo-inorme.png")}
                 alt="Inorme S.L. - Informática, organización y métodos"
-                className="h-10 w-auto max-w-[min(200px,70vw)] object-contain object-left"
-                width={200}
-                height={40}
+                className="h-10 w-auto max-h-10 object-contain object-left [max-width:min(280px,85vw)]"
                 decoding="async"
               />
             </a>
