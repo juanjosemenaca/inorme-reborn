@@ -1,16 +1,17 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { publicAssetUrl } from "@/lib/publicAssetUrl";
 
 const navKeys = [
@@ -25,7 +26,6 @@ const navKeys = [
 const Header = () => {
   const { t } = useLanguage();
   const [isScrolled, setIsScrolled] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
 
   const logoSrc = publicAssetUrl("logo-inorme.png");
@@ -37,12 +37,8 @@ const Header = () => {
   }, []);
 
   const scrollTo = (href: string) => {
-    setSheetOpen(false);
     document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
   };
-
-  const sheetLinkClass =
-    "text-left rounded-lg transition-all duration-300 uppercase font-medium w-full px-4 py-3 text-sm text-foreground hover:bg-muted";
 
   return (
     <header
@@ -73,54 +69,51 @@ const Header = () => {
           )}
         </a>
 
-        {/* Siempre: idioma + hamburguesa → panel lateral (sin barra horizontal en ningún ancho) */}
+        {/* Siempre: idioma + menú desplegable (Radix). Sin barra horizontal en ningún ancho ni breakpoint. */}
         <div className="flex shrink-0 items-center gap-2">
           <LanguageSwitcher variant={isScrolled ? "dark" : "light"} />
-          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-            <SheetTrigger asChild>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="p-2 -mr-1 rounded-md hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="inline-flex p-2 -mr-1 rounded-md hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 aria-label={t("nav_menu_aria")}
-                aria-expanded={sheetOpen}
               >
                 <Menu className={`h-6 w-6 ${isScrolled ? "text-foreground" : "text-white"}`} />
               </button>
-            </SheetTrigger>
-            <SheetContent side="right" className="flex w-[min(100vw-2rem,20rem)] flex-col border-l bg-background p-0 sm:max-w-sm">
-              <SheetHeader className="border-b px-6 py-4 text-left">
-                <SheetTitle>{t("nav_menu_title")}</SheetTitle>
-              </SheetHeader>
-              <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-4" aria-label="Principal">
-                {navKeys.map((link) => (
-                  <button
-                    key={link.href}
-                    type="button"
-                    onClick={() => scrollTo(link.href)}
-                    className={sheetLinkClass}
-                  >
-                    {t(link.key)}
-                  </button>
-                ))}
-                <Link
-                  to="/admin/login"
-                  onClick={() => setSheetOpen(false)}
-                  className="w-full px-4 py-3 text-left text-sm font-medium uppercase text-primary hover:bg-muted rounded-lg"
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              className="z-[100] w-[min(20rem,calc(100vw-1rem))] max-h-[min(80vh,28rem)] overflow-y-auto p-2"
+            >
+              <DropdownMenuLabel className="text-base font-semibold">{t("nav_menu_title")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {navKeys.map((link) => (
+                <DropdownMenuItem
+                  key={link.href}
+                  className="cursor-pointer text-sm font-medium uppercase"
+                  onSelect={() => scrollTo(link.href)}
                 >
-                  {t("nav_backoffice")}
-                </Link>
-                <div className="mt-4 px-2">
-                  <Button
-                    type="button"
-                    onClick={() => scrollTo("#contacto")}
-                    className="w-full rounded-full"
-                  >
-                    {t("nav_contactBtn")}
-                  </Button>
-                </div>
-              </nav>
-            </SheetContent>
-          </Sheet>
+                  {t(link.key)}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild className="cursor-pointer uppercase text-primary">
+                <Link to="/admin/login">{t("nav_backoffice")}</Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild className="p-1 focus:bg-transparent">
+                <Button
+                  type="button"
+                  className="w-full rounded-full"
+                  onClick={() => scrollTo("#contacto")}
+                >
+                  {t("nav_contactBtn")}
+                </Button>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>
