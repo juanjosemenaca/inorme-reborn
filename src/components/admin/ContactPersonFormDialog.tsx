@@ -22,15 +22,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { optionalEmail } from "@/lib/zodOptional";
 
-const schema = z.object({
-  firstName: z.string().min(1, "Obligatorio"),
-  lastName: z.string().min(1, "Obligatorio"),
-  email: z.string().email("Email no válido"),
-  mobile: z.string().min(5, "Móvil obligatorio"),
-  position: z.string().min(1, "Cargo o posición"),
-  description: z.string().optional(),
-});
+const schema = z
+  .object({
+    firstName: z.string(),
+    lastName: z.string(),
+    email: optionalEmail,
+    mobile: z.string(),
+    position: z.string(),
+    description: z.string().optional(),
+  })
+  .refine((d) => d.firstName.trim().length > 0 || d.lastName.trim().length > 0, {
+    message: "Indica al menos nombre o apellidos",
+    path: ["firstName"],
+  });
 
 export type ContactPersonFormValues = z.infer<typeof schema>;
 

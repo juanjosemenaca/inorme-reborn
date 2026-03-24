@@ -4,6 +4,8 @@ import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { publicAssetUrl } from "@/lib/publicAssetUrl";
 
 const navKeys = [
   { href: "#historia", key: "nav_company" },
@@ -16,15 +18,22 @@ const navKeys = [
 
 const Header = () => {
   const { t } = useLanguage();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
+
+  const logoSrc = publicAssetUrl("logo-inorme.png");
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  useEffect(() => {
+    if (isDesktop) setIsMobileMenuOpen(false);
+  }, [isDesktop]);
 
   const scrollTo = (href: string) => {
     setIsMobileMenuOpen(false);
@@ -40,12 +49,15 @@ const Header = () => {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8 flex items-center justify-between h-[72px]">
-        <a href="#" className="relative z-10 flex items-center">
+        <a href="#" className="relative z-10 flex shrink-0 items-center min-w-0">
           {!logoError ? (
             <img
-              src="/logo-inorme.png"
+              src={logoSrc}
               alt="Inorme S.L. - Informática, organización y métodos"
-              className="h-9 w-auto"
+              className="h-9 w-auto max-w-[min(180px,45vw)] object-contain object-left"
+              width={180}
+              height={36}
+              decoding="async"
               onError={() => setLogoError(true)}
             />
           ) : (
@@ -56,7 +68,8 @@ const Header = () => {
           )}
         </a>
 
-        <nav className="hidden lg:flex items-center gap-1">
+        {isDesktop ? (
+        <nav className="flex items-center gap-1 min-w-0 flex-1 justify-end ml-4">
           {navKeys.map((link) => (
             <button
               key={link.href}
@@ -86,13 +99,13 @@ const Header = () => {
           <Button
             onClick={() => scrollTo("#contacto")}
             size="sm"
-            className="ml-4 rounded-full px-6 h-9 text-[13px] font-semibold tracking-wide shadow-md shadow-primary/25 hover:shadow-lg hover:shadow-primary/30 transition-all"
+            className="ml-4 shrink-0 rounded-full px-6 h-9 text-[13px] font-semibold tracking-wide shadow-md shadow-primary/25 hover:shadow-lg hover:shadow-primary/30 transition-all"
           >
             {t("nav_contactBtn")}
           </Button>
         </nav>
-
-        <div className="flex lg:hidden items-center gap-2 relative z-10">
+        ) : (
+        <div className="flex items-center gap-2 relative z-10 shrink-0">
           <LanguageSwitcher variant={isScrolled ? "dark" : "light"} />
           <div className="relative">
             <button
@@ -109,7 +122,7 @@ const Header = () => {
             </button>
             {/* Menú desplegable pequeño debajo del icono */}
             <div
-              className={`lg:hidden absolute right-0 top-full mt-1 min-w-[160px] rounded-lg border bg-background py-1.5 shadow-lg transition-all duration-200 text-center ${
+              className={`absolute right-0 top-full mt-1 min-w-[160px] rounded-lg border bg-background py-1.5 shadow-lg transition-all duration-200 text-center ${
                 isMobileMenuOpen
                   ? "opacity-100 visible translate-y-0"
                   : "opacity-0 invisible -translate-y-1 pointer-events-none"
@@ -144,6 +157,7 @@ const Header = () => {
             </div>
           </div>
         </div>
+        )}
       </div>
     </header>
   );

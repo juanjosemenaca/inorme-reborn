@@ -74,7 +74,10 @@ export async function createCompanyWorker(input: CreateCompanyWorkerInput): Prom
   const sb = requireSupabase();
   const rows = await fetchCompanyWorkers();
   const dniNorm = input.dni.trim().toUpperCase();
-  if (rows.some((w) => w.dni.replace(/\s/g, "") === dniNorm.replace(/\s/g, ""))) {
+  if (
+    dniNorm.length > 0 &&
+    rows.some((w) => w.dni.replace(/\s/g, "") === dniNorm.replace(/\s/g, ""))
+  ) {
     throw new Error("Ya existe una persona con ese DNI/NIE.");
   }
   const { providerId, autonomoVia } = await normalizeEmploymentFields(
@@ -115,9 +118,10 @@ export async function updateCompanyWorker(
   if (idx === -1) throw new Error("Trabajador no encontrado.");
   const current = rows[idx];
   const nextDni = input.dni !== undefined ? input.dni.trim().toUpperCase() : current.dni;
-  const dniConflict = rows.some(
-    (w, i) => i !== idx && w.dni.replace(/\s/g, "") === nextDni.replace(/\s/g, "")
-  );
+  const nextDniNorm = nextDni.replace(/\s/g, "");
+  const dniConflict =
+    nextDniNorm.length > 0 &&
+    rows.some((w, i) => i !== idx && w.dni.replace(/\s/g, "") === nextDniNorm);
   if (dniConflict) throw new Error("Ya existe otra persona con ese DNI/NIE.");
   const nextType = input.employmentType ?? current.employmentType;
   const { providerId, autonomoVia } = await normalizeEmploymentFields(

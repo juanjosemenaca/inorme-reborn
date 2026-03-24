@@ -93,7 +93,10 @@ export async function createClient(input: CreateClientInput): Promise<ClientReco
   const sb = requireSupabase();
   const all = await fetchClients();
   const cifNorm = input.cif.trim().toUpperCase();
-  if (all.some((c) => c.cif.replace(/\s/g, "") === cifNorm.replace(/\s/g, ""))) {
+  if (
+    cifNorm.length > 0 &&
+    all.some((c) => c.cif.replace(/\s/g, "") === cifNorm.replace(/\s/g, ""))
+  ) {
     throw new Error("Ya existe un cliente con ese CIF.");
   }
   const row = clientRecordToRowInsert({
@@ -125,9 +128,10 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
   if (idx === -1) throw new Error("Cliente no encontrado.");
   const current = all[idx];
   const nextCif = input.cif !== undefined ? input.cif.trim().toUpperCase() : current.cif;
-  const cifConflict = all.some(
-    (c, i) => i !== idx && c.cif.replace(/\s/g, "") === nextCif.replace(/\s/g, "")
-  );
+  const nextCifNorm = nextCif.replace(/\s/g, "");
+  const cifConflict =
+    nextCifNorm.length > 0 &&
+    all.some((c, i) => i !== idx && c.cif.replace(/\s/g, "") === nextCifNorm);
   if (cifConflict) throw new Error("Ya existe otro cliente con ese CIF.");
   const nextKind = input.clientKind ?? current.clientKind;
   const rawLink =

@@ -23,17 +23,23 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { optionalEmail } from "@/lib/zodOptional";
 
-const schema = z.object({
-  tradeName: z.string().min(1, "Obligatorio"),
-  companyName: z.string().min(1, "Obligatorio"),
-  cif: z.string().min(5, "CIF/NIF obligatorio"),
-  fiscalAddress: z.string().min(3, "Dirección fiscal obligatoria"),
-  phone: z.string().min(5, "Teléfono obligatorio"),
-  contactEmail: z.string().email("Email no válido"),
-  notes: z.string().optional(),
-  active: z.boolean(),
-});
+const schema = z
+  .object({
+    tradeName: z.string(),
+    companyName: z.string(),
+    cif: z.string(),
+    fiscalAddress: z.string(),
+    phone: z.string(),
+    contactEmail: optionalEmail,
+    notes: z.string().optional(),
+    active: z.boolean(),
+  })
+  .refine((d) => d.tradeName.trim().length > 0 || d.companyName.trim().length > 0, {
+    message: "Indica al menos nombre comercial o razón social",
+    path: ["tradeName"],
+  });
 
 export type ProviderFormValues = z.infer<typeof schema>;
 

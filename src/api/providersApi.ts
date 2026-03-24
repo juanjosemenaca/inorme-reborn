@@ -46,7 +46,10 @@ export async function createProvider(input: CreateProviderInput): Promise<Provid
   const sb = requireSupabase();
   const rows = await fetchProviders();
   const cifNorm = input.cif.trim().toUpperCase();
-  if (rows.some((p) => p.cif.replace(/\s/g, "") === cifNorm.replace(/\s/g, ""))) {
+  if (
+    cifNorm.length > 0 &&
+    rows.some((p) => p.cif.replace(/\s/g, "") === cifNorm.replace(/\s/g, ""))
+  ) {
     throw new Error("Ya existe un proveedor con ese CIF.");
   }
   const row = providerRecordToRowInsert({
@@ -75,9 +78,10 @@ export async function updateProvider(id: string, input: UpdateProviderInput): Pr
   if (idx === -1) throw new Error("Proveedor no encontrado.");
   const current = all[idx];
   const nextCif = input.cif !== undefined ? input.cif.trim().toUpperCase() : current.cif;
-  const conflict = all.some(
-    (p, i) => i !== idx && p.cif.replace(/\s/g, "") === nextCif.replace(/\s/g, "")
-  );
+  const nextCifNorm = nextCif.replace(/\s/g, "");
+  const conflict =
+    nextCifNorm.length > 0 &&
+    all.some((p, i) => i !== idx && p.cif.replace(/\s/g, "") === nextCifNorm);
   if (conflict) throw new Error("Ya existe otro proveedor con ese CIF.");
   const patch = providerRecordToRowInsert({
     id,

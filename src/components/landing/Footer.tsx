@@ -1,5 +1,6 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { publicAssetUrl } from "@/lib/publicAssetUrl";
 
 const footerLinkKeys = [
   { key: "nav_company", href: "#historia" },
@@ -26,9 +27,12 @@ const Footer = () => {
           <div className="md:col-span-5">
             <a href="#" className="inline-block">
               <img
-                src="/logo-inorme.png"
+                src={publicAssetUrl("logo-inorme.png")}
                 alt="Inorme S.L. - Informática, organización y métodos"
-                className="h-10 w-auto"
+                className="h-10 w-auto max-w-[min(200px,70vw)] object-contain object-left"
+                width={200}
+                height={40}
+                decoding="async"
               />
             </a>
             <p className="text-white/40 mt-4 text-sm leading-relaxed max-w-sm">

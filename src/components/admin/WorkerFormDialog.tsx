@@ -38,6 +38,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { optionalEmail } from "@/lib/zodOptional";
 
 const employmentEnum = z.enum([
   "FIJO",
@@ -54,18 +55,22 @@ const NONE_VALUE = "__none__";
 
 const schema = z
   .object({
-    firstName: z.string().min(1, "Obligatorio"),
-    lastName: z.string().min(1, "Obligatorio"),
-    dni: z.string().min(5, "DNI/NIE obligatorio"),
-    email: z.string().email("Email no válido"),
-    mobile: z.string().min(5, "Teléfono obligatorio"),
-    postalAddress: z.string().min(3, "Dirección obligatoria"),
-    city: z.string().min(1, "Ciudad obligatoria"),
+    firstName: z.string(),
+    lastName: z.string(),
+    dni: z.string(),
+    email: optionalEmail,
+    mobile: z.string(),
+    postalAddress: z.string(),
+    city: z.string(),
     workCalendarScope: workCalendarScopeEnum,
     employmentType: employmentEnum,
     autonomoVia: autonomoViaEnum.optional().nullable(),
     providerId: z.string().optional(),
     active: z.boolean(),
+  })
+  .refine((d) => d.firstName.trim().length > 0 || d.lastName.trim().length > 0, {
+    message: "Indica al menos nombre o apellidos",
+    path: ["firstName"],
   })
   .superRefine((data, ctx) => {
     if (data.employmentType === "SUBCONTRATADO" && !data.providerId?.trim()) {

@@ -31,24 +31,30 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { optionalEmail } from "@/lib/zodOptional";
 
 const kindEnum = z.enum(["FINAL", "INTERMEDIARIO"]);
 
 const NONE_VALUE = "__none__";
 
-const schema = z.object({
-  tradeName: z.string().min(1, "Obligatorio"),
-  companyName: z.string().min(1, "Obligatorio"),
-  cif: z.string().min(5, "CIF/NIF obligatorio"),
-  fiscalAddress: z.string().min(3, "Dirección fiscal obligatoria"),
-  clientKind: kindEnum,
-  /** Vacío o id de cliente final (solo intermediarios) */
-  linkedFinalClientId: z.string().optional(),
-  phone: z.string().min(5, "Teléfono obligatorio"),
-  contactEmail: z.string().email("Email no válido"),
-  notes: z.string().optional(),
-  active: z.boolean(),
-});
+const schema = z
+  .object({
+    tradeName: z.string(),
+    companyName: z.string(),
+    cif: z.string(),
+    fiscalAddress: z.string(),
+    clientKind: kindEnum,
+    /** Vacío o id de cliente final (solo intermediarios) */
+    linkedFinalClientId: z.string().optional(),
+    phone: z.string(),
+    contactEmail: optionalEmail,
+    notes: z.string().optional(),
+    active: z.boolean(),
+  })
+  .refine((d) => d.tradeName.trim().length > 0 || d.companyName.trim().length > 0, {
+    message: "Indica al menos nombre comercial o razón social",
+    path: ["tradeName"],
+  });
 
 export type ClientFormValues = z.infer<typeof schema>;
 
