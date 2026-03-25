@@ -10,6 +10,8 @@ import {
   Truck,
   Contact2,
   Menu,
+  IdCard,
+  Inbox,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +23,13 @@ import { cn } from "@/lib/utils";
 
 const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
+  { to: "/admin/mi-ficha", labelKey: "admin.layout.nav_my_profile", icon: IdCard, roles: ["WORKER"] as const },
+  {
+    to: "/admin/solicitudes-ficha",
+    labelKey: "admin.layout.nav_profile_requests",
+    icon: Inbox,
+    roles: ["ADMIN"] as const,
+  },
   { to: "/admin/usuarios", labelKey: "admin.layout.nav_users", icon: Users, roles: ["ADMIN"] as const },
   { to: "/admin/trabajadores", labelKey: "admin.layout.nav_workers", icon: Contact2, roles: ["ADMIN"] as const },
   { to: "/admin/proveedores", labelKey: "admin.layout.nav_providers", icon: Truck, roles: ["ADMIN"] as const },

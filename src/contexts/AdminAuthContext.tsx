@@ -82,6 +82,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       email: profile.email,
       name: getResolvedDisplayName(profile, workers),
       role: profile.role,
+      companyWorkerId: profile.companyWorkerId,
     });
   }, []);
 
@@ -196,6 +197,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         email: profile.email,
         name: getResolvedDisplayName(profile, workers),
         role: profile.role,
+        companyWorkerId: profile.companyWorkerId,
       });
       return { ok: true, needsPasswordChange: needsPwd };
     },

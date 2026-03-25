@@ -61,6 +61,8 @@ export interface BackofficeSession {
   /** Nombre completo para cabecera */
   name: string;
   role: UserRole;
+  /** Ficha en Trabajadores vinculada al usuario backoffice; null si no hay ficha. */
+  companyWorkerId: string | null;
 }
 
 /** @deprecated usar BackofficeUserRecord — mantenido por migración de tipos */

@@ -20,6 +20,8 @@ import AdminProviders from "./pages/admin/AdminProviders";
 import AdminCompanyWorkers from "./pages/admin/AdminCompanyWorkers";
 import AdminWorkCalendars from "./pages/admin/AdminWorkCalendars";
 import AdminChangePassword from "./pages/admin/AdminChangePassword";
+import WorkerMyProfile from "./pages/admin/WorkerMyProfile";
+import AdminWorkerProfileRequests from "./pages/admin/AdminWorkerProfileRequests";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +47,22 @@ const App = () => (
                 }
               >
                 <Route path="cambiar-contrasena" element={<AdminChangePassword />} />
+                <Route
+                  path="mi-ficha"
+                  element={
+                    <RoleRoute allowedRoles={["WORKER"]}>
+                      <WorkerMyProfile />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="solicitudes-ficha"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminWorkerProfileRequests />
+                    </RoleRoute>
+                  }
+                />
                 <Route index element={<AdminDashboard />} />
                 <Route
                   path="usuarios"

@@ -297,6 +297,33 @@ export async function updateUser(
   return backofficeUserRowToDomain(updated as BackofficeUserRow);
 }
 
+/**
+ * Tras actualizar `company_workers`, alinea la fila en `backoffice_users` vinculada (nombre, DNI, email de ficha, etc.).
+ */
+export async function syncBackofficeUserFromCompanyWorker(companyWorkerId: string): Promise<void> {
+  const sb = requireSupabase();
+  const users = await fetchBackofficeUsers();
+  const u = users.find((x) => x.companyWorkerId === companyWorkerId);
+  if (!u) return;
+  const w = await getCompanyWorkerById(companyWorkerId);
+  if (!w) return;
+  const d = denormalizeFromWorker(w);
+  const { error } = await sb
+    .from("backoffice_users")
+    .update({
+      email: w.email.trim().toLowerCase(),
+      first_name: d.firstName,
+      last_name: d.lastName,
+      dni: d.dni,
+      mobile: d.mobile,
+      postal_address: d.postalAddress,
+      city: d.city,
+      employment_type: d.employmentType,
+    })
+    .eq("id", u.id);
+  if (error) throw error;
+}
+
 export async function deleteUser(id: string): Promise<void> {
   const sb = requireSupabase();
   const users = await fetchBackofficeUsers();

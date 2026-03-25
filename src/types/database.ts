@@ -125,6 +125,23 @@ export interface ProjectMemberRow {
   created_at: string;
 }
 
+export type DbWorkerProfileChangeStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface WorkerProfileChangeRequestRow {
+  id: string;
+  company_worker_id: string;
+  backoffice_user_id: string;
+  status: DbWorkerProfileChangeStatus;
+  worker_message: string;
+  suggested: Record<string, unknown>;
+  previous_snapshot: Record<string, unknown> | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface BackofficeUserRow {
   id: string;
   email: string;
