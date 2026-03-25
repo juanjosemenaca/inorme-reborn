@@ -326,6 +326,8 @@ export function backofficeUserRowToDomain(
     city: row.city,
     employmentType: row.employment_type as EmploymentType,
     active: row.active,
+    mustChangePassword: row.must_change_password,
+    passwordChangedAt: row.password_changed_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -351,5 +353,7 @@ export function backofficeUserRecordToRowInsert(
     city: record.city,
     employment_type: record.employmentType,
     active: record.active,
+    must_change_password: record.mustChangePassword,
+    password_changed_at: record.passwordChangedAt,
   };
 }

@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -28,6 +29,19 @@ import { Input } from "@/components/ui/input";
 import { PasswordInputWithToggle } from "@/components/ui/password-input";
 import { Button } from "@/components/ui/button";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -35,30 +49,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-
-const NONE_WORKER = "__none__";
+import { cn } from "@/lib/utils";
+import { Check, ChevronsUpDown } from "lucide-react";
 const roleEnum = z.enum(["ADMIN", "WORKER"]);
 
-const createSchema = z.object({
-  companyWorkerId: z.string().min(1, "Elige un trabajador"),
-  email: z.string().email("Email no válido"),
-  password: z.string().min(8, "Mínimo 8 caracteres"),
-  role: roleEnum,
-  active: z.boolean(),
-});
+export type UserCreateFormValues = {
+  companyWorkerId: string;
+  email: string;
+  password: string;
+  role: z.infer<typeof roleEnum>;
+  active: boolean;
+};
 
-const editSchema = z.object({
-  email: z.string().email("Email no válido"),
-  password: z
-    .string()
-    .optional()
-    .refine((v) => !v || v.length >= 8, "Mínimo 8 caracteres si cambias la contraseña"),
-  role: roleEnum,
-  active: z.boolean(),
-});
-
-export type UserCreateFormValues = z.infer<typeof createSchema>;
-export type UserEditFormValues = z.infer<typeof editSchema>;
+export type UserEditFormValues = {
+  email: string;
+  password?: string;
+  role: z.infer<typeof roleEnum>;
+  active: boolean;
+};
 
 type Props = {
   open: boolean;
@@ -73,7 +81,7 @@ type Props = {
   onSubmitEdit: (values: UserEditFormValues) => void | Promise<void>;
 };
 
-export function UserFormDialog({
+function UserFormDialogInner({
   open,
   onOpenChange,
   mode,
@@ -83,6 +91,37 @@ export function UserFormDialog({
   onSubmitCreate,
   onSubmitEdit,
 }: Props) {
+  const { t } = useLanguage();
+
+  const createSchema = useMemo(
+    () =>
+      z.object({
+        companyWorkerId: z.string().min(1, t("admin.users.validation_worker")),
+        email: z.string().email(t("admin.users.validation_email")),
+        password: z.string().refine(
+          (v) => v.length === 0 || v.length >= 8,
+          t("admin.users.password_optional_refine")
+        ),
+        role: roleEnum,
+        active: z.boolean(),
+      }),
+    [t]
+  );
+
+  const editSchema = useMemo(
+    () =>
+      z.object({
+        email: z.string().email(t("admin.users.validation_email")),
+        password: z
+          .string()
+          .optional()
+          .refine((v) => !v || v.length >= 8, t("admin.users.edit_password_refine")),
+        role: roleEnum,
+        active: z.boolean(),
+      }),
+    [t]
+  );
+
   const createForm = useForm<UserCreateFormValues>({
     resolver: zodResolver(createSchema),
     defaultValues: {
@@ -104,11 +143,20 @@ export function UserFormDialog({
     },
   });
 
+  const [workerComboOpen, setWorkerComboOpen] = useState(false);
+
   const watchedWorkerId = createForm.watch("companyWorkerId");
   const selectedWorker = useMemo(
     () => selectableWorkers.find((w) => w.id === watchedWorkerId),
     [selectableWorkers, watchedWorkerId]
   );
+
+  const workerSearchValue = (w: CompanyWorkerRecord) =>
+    `${w.firstName} ${w.lastName} ${w.dni} ${w.email} ${companyWorkerDisplayName(w)} ${w.id}`.trim();
+
+  useEffect(() => {
+    if (!open) setWorkerComboOpen(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -154,33 +202,84 @@ export function UserFormDialog({
                 control={createForm.control}
                 name="companyWorkerId"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="flex flex-col">
                     <FormLabel>Trabajador</FormLabel>
-                    <Select
-                      value={field.value ? field.value : NONE_WORKER}
-                      onValueChange={(v) => {
-                        const id = v === NONE_WORKER ? "" : v;
-                        field.onChange(id);
-                        const w = selectableWorkers.find((x) => x.id === id);
-                        if (w?.email) {
-                          createForm.setValue("email", w.email.trim().toLowerCase());
-                        }
-                      }}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona una ficha…" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE_WORKER}>— Seleccionar —</SelectItem>
-                        {selectableWorkers.map((w) => (
-                          <SelectItem key={w.id} value={w.id}>
-                            {companyWorkerDisplayName(w)} · {w.dni}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={workerComboOpen} onOpenChange={setWorkerComboOpen}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={workerComboOpen}
+                            disabled={selectableWorkers.length === 0}
+                            className={cn(
+                              "w-full justify-between font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value
+                              ? (() => {
+                                  const w = selectableWorkers.find((x) => x.id === field.value);
+                                  return w
+                                    ? `${companyWorkerDisplayName(w)} · ${w.dni}`
+                                    : "Selecciona una ficha…";
+                                })()
+                              : "Selecciona una ficha…"}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="p-0 w-[min(calc(100vw-2rem),32rem)]" align="start">
+                        <Command>
+                          <CommandInput placeholder="Buscar por nombre, apellidos o DNI…" />
+                          <CommandList>
+                            <CommandEmpty>No hay coincidencias.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="__clear__ sin seleccionar"
+                                onSelect={() => {
+                                  field.onChange("");
+                                  setWorkerComboOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    !field.value ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                — Sin seleccionar —
+                              </CommandItem>
+                              {selectableWorkers.map((w) => (
+                                <CommandItem
+                                  key={w.id}
+                                  value={workerSearchValue(w)}
+                                  onSelect={() => {
+                                    field.onChange(w.id);
+                                    if (w.email.trim()) {
+                                      createForm.setValue(
+                                        "email",
+                                        w.email.trim().toLowerCase()
+                                      );
+                                    }
+                                    setWorkerComboOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      field.value === w.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {companyWorkerDisplayName(w)} · {w.dni}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                     {selectableWorkers.length === 0 && (
                       <p className="text-xs text-amber-700 dark:text-amber-300">
                         No hay trabajadores disponibles (activos sin usuario). Crea la ficha en
@@ -228,10 +327,15 @@ export function UserFormDialog({
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Contraseña</FormLabel>
+                    <FormLabel>{t("admin.users.password_optional_label")}</FormLabel>
                     <FormControl>
-                      <PasswordInputWithToggle autoComplete="new-password" {...field} />
+                      <PasswordInputWithToggle
+                        autoComplete="new-password"
+                        placeholder={t("admin.users.password_optional_ph")}
+                        {...field}
+                      />
                     </FormControl>
+                    <p className="text-xs text-muted-foreground">{t("admin.users.password_optional_help")}</p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -390,4 +494,9 @@ export function UserFormDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+export function UserFormDialog(props: Props) {
+  const { language } = useLanguage();
+  return <UserFormDialogInner key={language} {...props} />;
 }

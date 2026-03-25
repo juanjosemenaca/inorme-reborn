@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { ProtectedRoute } from "@/components/admin/ProtectedRoute";
+import { PasswordChangeGate } from "@/components/admin/PasswordChangeGate";
 import { RoleRoute } from "@/components/admin/RoleRoute";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -18,6 +19,7 @@ import AdminProjects from "./pages/admin/AdminProjects";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminCompanyWorkers from "./pages/admin/AdminCompanyWorkers";
 import AdminWorkCalendars from "./pages/admin/AdminWorkCalendars";
+import AdminChangePassword from "./pages/admin/AdminChangePassword";
 
 const queryClient = new QueryClient();
 
@@ -36,10 +38,13 @@ const App = () => (
                 path="/admin"
                 element={
                   <ProtectedRoute>
-                    <AdminLayout />
+                    <PasswordChangeGate>
+                      <AdminLayout />
+                    </PasswordChangeGate>
                   </ProtectedRoute>
                 }
               >
+                <Route path="cambiar-contrasena" element={<AdminChangePassword />} />
                 <Route index element={<AdminDashboard />} />
                 <Route
                   path="usuarios"

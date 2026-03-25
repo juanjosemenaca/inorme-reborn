@@ -139,6 +139,10 @@ export interface BackofficeUserRow {
   employment_type: DbEmploymentType;
   active: boolean;
   auth_user_id: string | null;
+  /** Si true, debe cambiar contraseña antes de usar el backoffice (salvo pantalla dedicada). */
+  must_change_password: boolean;
+  /** Último cambio de contraseña registrado en la app (Auth). */
+  password_changed_at: string | null;
   created_at: string;
   updated_at: string;
 }

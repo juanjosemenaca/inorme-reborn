@@ -9,6 +9,8 @@ import {
   Loader2,
   Search,
   Filter,
+  KeyRound,
+  Copy,
 } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -61,6 +63,7 @@ import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { queryKeys } from "@/lib/queryKeys";
+import { nextPasswordRenewalDeadline } from "@/lib/passwordPolicy";
 
 function initialsFromDisplayName(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -75,13 +78,25 @@ const AdminUsers = () => {
   const { data: companyWorkers = [] } = useCompanyWorkers();
   const { user: session, refreshSession } = useAdminAuth();
   const { toast } = useToast();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
   const [editing, setEditing] = useState<BackofficeUserRecord | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<BackofficeUserRecord | null>(null);
+  const [initialPasswordReveal, setInitialPasswordReveal] = useState<string | null>(null);
+  const [forceTarget, setForceTarget] = useState<BackofficeUserRecord | null>(null);
+
+  const localeTag =
+    language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
+
+  const formatShortDate = (iso: string | null) => {
+    if (!iso) return t("admin.common.none");
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return t("admin.common.none");
+    return d.toLocaleDateString(localeTag, { day: "2-digit", month: "short", year: "numeric" });
+  };
 
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
@@ -148,7 +163,7 @@ const AdminUsers = () => {
 
   const handleSubmitCreate = async (values: UserCreateFormValues) => {
     try {
-      await createUser({
+      const { initialPassword } = await createUser({
         companyWorkerId: values.companyWorkerId,
         email: values.email,
         password: values.password,
@@ -158,6 +173,7 @@ const AdminUsers = () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
       toast({ title: t("admin.users.toast_created") });
       setDialogOpen(false);
+      setInitialPasswordReveal(initialPassword);
     } catch (e) {
       toast({
         title: t("admin.common.error"),
@@ -229,6 +245,22 @@ const AdminUsers = () => {
       });
     }
     setDeleteTarget(null);
+  };
+
+  const confirmForcePasswordChange = async () => {
+    if (!forceTarget) return;
+    try {
+      await updateUser(forceTarget.id, { forcePasswordChange: true });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
+      toast({ title: t("admin.users.toast_force_change") });
+    } catch (e) {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : t("admin.users.operation_failed"),
+        variant: "destructive",
+      });
+    }
+    setForceTarget(null);
   };
 
   const toggleActive = async (u: BackofficeUserRecord) => {
@@ -415,7 +447,10 @@ const AdminUsers = () => {
                     currentSort={sort}
                     onSort={handleSort}
                   />
-                  <TableHead className="text-right w-[200px]">{t("admin.common.actions")}</TableHead>
+                  <TableHead className="min-w-[150px] whitespace-normal">
+                    {t("admin.users.col_password_policy")}
+                  </TableHead>
+                  <TableHead className="text-right min-w-[220px]">{t("admin.common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -461,6 +496,38 @@ const AdminUsers = () => {
                         <Badge variant="secondary">{t("admin.common.inactive")}</Badge>
                       )}
                     </TableCell>
+                    <TableCell className="text-sm align-top">
+                      <div className="space-y-1 max-w-[220px]">
+                        {u.mustChangePassword ? (
+                          <Badge
+                            variant="outline"
+                            className="font-normal border-amber-600/50 text-amber-900 dark:text-amber-200"
+                          >
+                            {t("admin.users.must_change_badge")}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {formatShortDate(u.passwordChangedAt)}
+                          </span>
+                        )}
+                        {!u.mustChangePassword && u.passwordChangedAt ? (() => {
+                          const deadline = nextPasswordRenewalDeadline(u.passwordChangedAt);
+                          if (!deadline) return null;
+                          const overdue = deadline.getTime() < Date.now();
+                          return (
+                            <p
+                              className={
+                                overdue ? "text-xs text-destructive" : "text-xs text-muted-foreground"
+                              }
+                            >
+                              {overdue
+                                ? t("admin.users.renewal_overdue")
+                                : `${t("admin.users.renewal_due")} ${formatShortDate(deadline.toISOString())}`}
+                            </p>
+                          );
+                        })() : null}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1 flex-wrap">
                         <Button
@@ -472,6 +539,17 @@ const AdminUsers = () => {
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        {session?.role === "ADMIN" && session?.userId !== u.id && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setForceTarget(u)}
+                            title={t("admin.users.force_change")}
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -531,6 +609,54 @@ const AdminUsers = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {t("admin.common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!initialPasswordReveal} onOpenChange={(o) => !o && setInitialPasswordReveal(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.users.initial_password_title")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("admin.users.initial_password_desc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-2">
+            <Input readOnly value={initialPasswordReveal ?? ""} className="font-mono text-sm" />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title={t("admin.users.initial_password_copy")}
+              onClick={() => {
+                if (initialPasswordReveal) void navigator.clipboard.writeText(initialPasswordReveal);
+              }}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setInitialPasswordReveal(null)}>
+              {t("admin.common.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!forceTarget} onOpenChange={(o) => !o && setForceTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.users.force_change_title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("admin.users.force_change_desc")}{" "}
+              <strong>
+                {forceTarget ? getResolvedDisplayName(forceTarget, companyWorkers) : ""}
+              </strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmForcePasswordChange()}>
+              {t("admin.common.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

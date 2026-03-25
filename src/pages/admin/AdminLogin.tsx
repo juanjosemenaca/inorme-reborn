@@ -119,7 +119,7 @@ const AdminLogin = () => {
                       {t("admin.login.env_step3_mid")}
                       <code className="text-xs">=</code>):
                       <pre className="mt-2 p-3 rounded-md bg-muted text-xs overflow-x-auto">
-                        VITE_SUPABASE_ANON_KEY=eyJhbGciOiJI...
+                        {`VITE_SUPABASE_ANON_KEY=pega_aqui_la_clave_anon_del_dashboard`}
                       </pre>
                     </li>
                     <li>

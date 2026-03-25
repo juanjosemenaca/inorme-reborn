@@ -37,6 +37,25 @@ const AdminLayout = () => {
 
   const navItems = NAV_KEYS.filter((item) => user && item.roles.includes(user.role));
 
+  /** Pantalla obligatoria de nueva contraseña: sin menú lateral para evitar eludir la política. */
+  if (user && location.pathname === "/admin/cambiar-contrasena") {
+    return (
+      <div className="min-h-screen bg-muted/40 flex flex-col">
+        <header className="border-b bg-card px-4 py-3 flex justify-between items-center gap-2 shrink-0">
+          <span className="font-semibold text-sm truncate">{t("admin.passwordChange.header_title")}</span>
+          <Button variant="outline" size="sm" onClick={logout} className="gap-1.5 shrink-0">
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("admin.layout.logout")}</span>
+            <span className="sm:hidden">{t("admin.layout.logout_short")}</span>
+          </Button>
+        </header>
+        <main className="flex-1 flex items-center justify-center p-4">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
+
   const isNavActive = (path: string) =>
     path === "/admin"
       ? location.pathname === "/admin"

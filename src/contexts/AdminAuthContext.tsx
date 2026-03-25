@@ -9,6 +9,7 @@ import {
 } from "react";
 import { resolveProfileForSession } from "@/api/backofficeUsersApi";
 import { fetchCompanyWorkers } from "@/api/companyWorkersApi";
+import { profileRequiresPasswordChange } from "@/lib/passwordPolicy";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import type { BackofficeSession, UserRole } from "@/types/backoffice";
 import { getResolvedDisplayName } from "@/types/backoffice";
@@ -23,6 +24,8 @@ type AdminAuthContextValue = {
   isAuthenticated: boolean;
   /** Sesión Supabase + perfil resueltos (false mientras carga). */
   ready: boolean;
+  /** Debe ir a /admin/cambiar-contrasena antes del resto del backoffice. */
+  needsPasswordChange: boolean;
   role: UserRole | null;
   isAdmin: boolean;
   isWorker: boolean;
@@ -37,10 +40,12 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const { t } = useLanguage();
   const [user, setUser] = useState<BackofficeSession | null>(null);
   const [ready, setReady] = useState(false);
+  const [needsPasswordChange, setNeedsPasswordChange] = useState(false);
 
   const loadSessionFromAuth = useCallback(async () => {
     if (!isSupabaseConfigured() || !supabase) {
       setUser(null);
+      setNeedsPasswordChange(false);
       return;
     }
     const {
@@ -48,6 +53,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     } = await supabase.auth.getSession();
     if (!session?.user) {
       setUser(null);
+      setNeedsPasswordChange(false);
       return;
     }
     let profile;
@@ -56,14 +62,19 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     } catch {
       await supabase.auth.signOut();
       setUser(null);
+      setNeedsPasswordChange(false);
       return;
     }
     if (!profile || !profile.active) {
       await supabase.auth.signOut();
       setUser(null);
+      setNeedsPasswordChange(false);
       return;
     }
     const workers = await fetchCompanyWorkers();
+    setNeedsPasswordChange(
+      profileRequiresPasswordChange(profile.mustChangePassword, profile.passwordChangedAt)
+    );
     setUser({
       userId: profile.id,
       email: profile.email,
@@ -95,6 +106,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
     setUser(null);
+    setNeedsPasswordChange(false);
   }, []);
 
   const login = useCallback(
@@ -172,6 +184,9 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       }
 
       const workers = await fetchCompanyWorkers();
+      setNeedsPasswordChange(
+        profileRequiresPasswordChange(profile.mustChangePassword, profile.passwordChangedAt)
+      );
       setUser({
         userId: profile.id,
         email: profile.email,
@@ -193,6 +208,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated: user !== null,
       ready,
+      needsPasswordChange,
       role,
       isAdmin: role === "ADMIN",
       isWorker: role === "WORKER",
@@ -200,7 +216,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       logout,
       refreshSession,
     };
-  }, [user, ready, login, logout, refreshSession]);
+  }, [user, ready, needsPasswordChange, login, logout, refreshSession]);
 
   return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>;
 }

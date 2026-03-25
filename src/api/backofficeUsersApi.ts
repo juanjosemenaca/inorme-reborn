@@ -1,6 +1,7 @@
 import { requireSupabase } from "@/api/supabaseRequire";
 import { getCompanyWorkerById } from "@/api/companyWorkersApi";
 import { createMemorySupabaseClient } from "@/lib/supabaseMemoryClient";
+import { generateInitialPassword } from "@/lib/passwordPolicy";
 import { backofficeUserRowToDomain } from "@/lib/supabase/mappers";
 import type { BackofficeUserRow } from "@/types/database";
 import type { BackofficeUserRecord, EmploymentType, UserRole } from "@/types/backoffice";
@@ -117,12 +118,19 @@ export async function countAdmins(): Promise<number> {
 export type CreateUserInput = {
   companyWorkerId: string;
   email: string;
+  /** Si viene vacío, se genera una contraseña temporal (se devuelve en la respuesta). */
   password: string;
   role: UserRole;
   active: boolean;
 };
 
-export async function createUser(input: CreateUserInput): Promise<BackofficeUserRecord> {
+export type CreateUserResult = {
+  user: BackofficeUserRecord;
+  /** Contraseña inicial (solo esta vez; el usuario debe cambiarla al primer acceso). */
+  initialPassword: string;
+};
+
+export async function createUser(input: CreateUserInput): Promise<CreateUserResult> {
   const sb = requireSupabase();
   const all = await fetchBackofficeUsers();
   const worker = await getCompanyWorkerById(input.companyWorkerId);
@@ -136,10 +144,13 @@ export async function createUser(input: CreateUserInput): Promise<BackofficeUser
     throw new Error("Ya existe un usuario con ese email.");
   }
 
+  const initialPassword =
+    input.password.trim().length >= 8 ? input.password.trim() : generateInitialPassword();
+
   const mem = createMemorySupabaseClient();
   const { data: authData, error: authErr } = await mem.auth.signUp({
     email: emailNorm,
-    password: input.password,
+    password: initialPassword,
   });
   if (authErr) throw new Error(authErr.message);
   if (!authData.user) throw new Error("No se pudo crear el usuario de acceso.");
@@ -159,11 +170,36 @@ export async function createUser(input: CreateUserInput): Promise<BackofficeUser
     employment_type: fromWorker.employmentType,
     active: input.active,
     auth_user_id: authData.user.id,
+    must_change_password: true,
+    password_changed_at: null as string | null,
   };
 
   const { data: inserted, error } = await sb.from("backoffice_users").insert(insertRow).select("*").single();
   if (error) throw error;
-  return backofficeUserRowToDomain(inserted as BackofficeUserRow);
+  return {
+    user: backofficeUserRowToDomain(inserted as BackofficeUserRow),
+    initialPassword,
+  };
+}
+
+export async function completePasswordChange(newPassword: string): Promise<void> {
+  const sb = requireSupabase();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) throw new Error("Sesión no válida.");
+  const { error: pwErr } = await sb.auth.updateUser({ password: newPassword });
+  if (pwErr) throw new Error(pwErr.message);
+  const profile = await getProfileByAuthUserId(user.id);
+  if (!profile) throw new Error("Perfil no encontrado.");
+  const { error } = await sb
+    .from("backoffice_users")
+    .update({
+      must_change_password: false,
+      password_changed_at: new Date().toISOString(),
+    })
+    .eq("id", profile.id);
+  if (error) throw error;
 }
 
 export type UpdateUserInput = {
@@ -171,6 +207,8 @@ export type UpdateUserInput = {
   password?: string;
   role?: UserRole;
   active?: boolean;
+  /** Solo administradores: obligar al usuario a cambiar contraseña en el próximo acceso. */
+  forcePasswordChange?: boolean;
 };
 
 export async function updateUser(
@@ -215,8 +253,19 @@ export async function updateUser(
     role: input.role ?? current.role,
     active: input.active !== undefined ? input.active : current.active,
     password: current.password,
+    mustChangePassword: current.mustChangePassword,
+    passwordChangedAt: current.passwordChangedAt,
     updatedAt: new Date().toISOString(),
   };
+
+  if (input.password !== undefined && input.password.length > 0 && options?.isSelf) {
+    merged.mustChangePassword = false;
+    merged.passwordChangedAt = new Date().toISOString();
+  }
+
+  if (input.forcePasswordChange !== undefined) {
+    merged.mustChangePassword = input.forcePasswordChange;
+  }
 
   if (merged.companyWorkerId) {
     const w = await getCompanyWorkerById(merged.companyWorkerId);
@@ -239,6 +288,8 @@ export async function updateUser(
     postal_address: merged.postalAddress,
     city: merged.city,
     employment_type: merged.employmentType,
+    must_change_password: merged.mustChangePassword,
+    password_changed_at: merged.passwordChangedAt,
   };
 
   const { data: updated, error } = await sb.from("backoffice_users").update(patch).eq("id", id).select("*").single();

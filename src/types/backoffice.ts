@@ -46,6 +46,10 @@ export interface BackofficeUserRecord {
   employmentType: EmploymentType;
   /** Si false, no puede iniciar sesión */
   active: boolean;
+  /** Obligatorio cambiar contraseña (alta o forzado por administrador). */
+  mustChangePassword: boolean;
+  /** Último cambio de contraseña (política anual). Null si aún no consta. */
+  passwordChangedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
