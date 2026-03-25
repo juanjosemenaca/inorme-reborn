@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { resolveProfileForSession } from "@/api/backofficeUsersApi";
 import { fetchCompanyWorkers } from "@/api/companyWorkersApi";
 import { profileRequiresPasswordChange } from "@/lib/passwordPolicy";
@@ -16,7 +17,7 @@ import { getResolvedDisplayName } from "@/types/backoffice";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 export type AdminLoginResult =
-  | { ok: true }
+  | { ok: true; needsPasswordChange: boolean }
   | { ok: false; message: string };
 
 type AdminAuthContextValue = {
@@ -42,15 +43,16 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [needsPasswordChange, setNeedsPasswordChange] = useState(false);
 
-  const loadSessionFromAuth = useCallback(async () => {
+  const loadSessionFromAuth = useCallback(async (sessionOverride?: Session | null) => {
     if (!isSupabaseConfigured() || !supabase) {
       setUser(null);
       setNeedsPasswordChange(false);
       return;
     }
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const session =
+      sessionOverride !== undefined
+        ? sessionOverride
+        : (await supabase.auth.getSession()).data.session;
     if (!session?.user) {
       setUser(null);
       setNeedsPasswordChange(false);
@@ -93,8 +95,8 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       if (mounted) setReady(true);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      loadSessionFromAuth();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      void loadSessionFromAuth(session);
     });
 
     return () => {
@@ -184,16 +186,18 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       }
 
       const workers = await fetchCompanyWorkers();
-      setNeedsPasswordChange(
-        profileRequiresPasswordChange(profile.mustChangePassword, profile.passwordChangedAt)
+      const needsPwd = profileRequiresPasswordChange(
+        profile.mustChangePassword,
+        profile.passwordChangedAt
       );
+      setNeedsPasswordChange(needsPwd);
       setUser({
         userId: profile.id,
         email: profile.email,
         name: getResolvedDisplayName(profile, workers),
         role: profile.role,
       });
-      return { ok: true };
+      return { ok: true, needsPasswordChange: needsPwd };
     },
     [t]
   );

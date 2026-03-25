@@ -15,11 +15,11 @@ export function generateInitialPassword(): string {
  * Hay que forzar pantalla de cambio: primer acceso, admin lo marcó, o pasó el plazo anual.
  */
 export function profileRequiresPasswordChange(
-  mustChangePassword: boolean,
-  passwordChangedAt: string | null
+  mustChangePassword: boolean | null | undefined,
+  passwordChangedAt: string | null | undefined
 ): boolean {
-  if (mustChangePassword) return true;
-  if (!passwordChangedAt) return true;
+  if (mustChangePassword === true) return true;
+  if (passwordChangedAt == null || passwordChangedAt === "") return true;
   const last = new Date(passwordChangedAt).getTime();
   if (Number.isNaN(last)) return true;
   const maxMs = PASSWORD_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;

@@ -12,7 +12,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { getMissingSupabaseEnvVars, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 const AdminLogin = () => {
-  const { isAuthenticated, login, ready } = useAdminAuth();
+  const { isAuthenticated, login, ready, needsPasswordChange } = useAdminAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,7 +24,12 @@ const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    return <Navigate to="/admin" replace />;
+    return (
+      <Navigate
+        to={needsPasswordChange ? "/admin/cambiar-contrasena" : "/admin"}
+        replace
+      />
+    );
   }
 
   if (!ready) {
@@ -147,7 +152,10 @@ const AdminLogin = () => {
     const result = await login(email, password);
     setLoading(false);
     if (result.ok) {
-      navigate(from, { replace: true });
+      navigate(
+        result.needsPasswordChange ? "/admin/cambiar-contrasena" : from,
+        { replace: true }
+      );
     } else {
       setError(result.message);
     }

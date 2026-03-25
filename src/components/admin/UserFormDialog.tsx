@@ -50,6 +50,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { nextPasswordRenewalDeadline } from "@/lib/passwordPolicy";
+import { Badge } from "@/components/ui/badge";
 import { Check, ChevronsUpDown } from "lucide-react";
 const roleEnum = z.enum(["ADMIN", "WORKER"]);
 
@@ -91,7 +93,7 @@ function UserFormDialogInner({
   onSubmitCreate,
   onSubmitEdit,
 }: Props) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const createSchema = useMemo(
     () =>
@@ -179,6 +181,15 @@ function UserFormDialogInner({
   }, [open, mode, initial, createForm, editForm]);
 
   const title = mode === "create" ? "Alta de usuario" : "Modificar usuario";
+
+  const localeTag =
+    language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
+  const formatShortDate = (iso: string | null) => {
+    if (!iso) return t("admin.common.none");
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return t("admin.common.none");
+    return d.toLocaleDateString(localeTag, { day: "2-digit", month: "short", year: "numeric" });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -409,6 +420,48 @@ function UserFormDialogInner({
                 <div className="rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
                   Usuario sin ficha de trabajador vinculada (cuenta anterior). Puedes seguir
                   editando email y rol.
+                </div>
+              )}
+
+              {initial && (
+                <div className="rounded-lg border bg-muted/30 px-3 py-3 text-sm space-y-2">
+                  <p className="font-medium text-foreground">{t("admin.users.password_security_title")}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {t("admin.users.password_not_visible")}
+                  </p>
+                  <div className="flex flex-wrap gap-2 items-center text-xs">
+                    {initial.mustChangePassword ? (
+                      <Badge
+                        variant="outline"
+                        className="font-normal border-amber-600/50 text-amber-900 dark:text-amber-200"
+                      >
+                        {t("admin.users.must_change_badge")}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {t("admin.users.last_password_change")}:{" "}
+                        <span className="text-foreground font-medium">
+                          {formatShortDate(initial.passwordChangedAt)}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                  {!initial.mustChangePassword && initial.passwordChangedAt ? (() => {
+                    const deadline = nextPasswordRenewalDeadline(initial.passwordChangedAt);
+                    if (!deadline) return null;
+                    const overdue = deadline.getTime() < Date.now();
+                    return (
+                      <p
+                        className={
+                          overdue ? "text-xs text-destructive" : "text-xs text-muted-foreground"
+                        }
+                      >
+                        {overdue
+                          ? t("admin.users.renewal_overdue")
+                          : `${t("admin.users.renewal_due")} ${formatShortDate(deadline.toISOString())}`}
+                      </p>
+                    );
+                  })() : null}
                 </div>
               )}
 
