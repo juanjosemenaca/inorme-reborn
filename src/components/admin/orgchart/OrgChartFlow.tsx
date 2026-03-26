@@ -44,7 +44,6 @@ function OrgChartFlowInner({
   onDirectionChange,
   onEmployeeClick,
 }: Props) {
-  const { t } = useLanguage();
   const built = useMemo(
     () => buildOrgChartElements(employees, direction),
     [employees, direction]
