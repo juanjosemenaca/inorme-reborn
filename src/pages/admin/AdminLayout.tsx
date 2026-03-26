@@ -12,6 +12,7 @@ import {
   Menu,
   IdCard,
   Inbox,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,12 @@ const NAV_KEYS = [
     to: "/admin/solicitudes-ficha",
     labelKey: "admin.layout.nav_profile_requests",
     icon: Inbox,
+    roles: ["ADMIN"] as const,
+  },
+  {
+    to: "/admin/usuarios/alta-masiva",
+    labelKey: "admin.layout.nav_users_bulk",
+    icon: UserPlus,
     roles: ["ADMIN"] as const,
   },
   { to: "/admin/usuarios", labelKey: "admin.layout.nav_users", icon: Users, roles: ["ADMIN"] as const },
@@ -65,10 +72,13 @@ const AdminLayout = () => {
     );
   }
 
-  const isNavActive = (path: string) =>
-    path === "/admin"
-      ? location.pathname === "/admin"
-      : location.pathname.startsWith(path);
+  const isNavActive = (path: string) => {
+    const { pathname } = location;
+    if (path === "/admin") return pathname === "/admin";
+    /** Evita marcar «Usuarios» activo en rutas hijas como alta masiva. */
+    if (path === "/admin/usuarios") return pathname === "/admin/usuarios";
+    return pathname === path || pathname.startsWith(`${path}/`);
+  };
 
   const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
     <>

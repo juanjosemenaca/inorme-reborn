@@ -14,6 +14,7 @@ import AdminLogin from "./pages/admin/AdminLogin";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
+import AdminUsersBulk from "./pages/admin/AdminUsersBulk";
 import AdminClients from "./pages/admin/AdminClients";
 import AdminProjects from "./pages/admin/AdminProjects";
 import AdminProviders from "./pages/admin/AdminProviders";
@@ -64,6 +65,14 @@ const App = () => (
                   }
                 />
                 <Route index element={<AdminDashboard />} />
+                <Route
+                  path="usuarios/alta-masiva"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminUsersBulk />
+                    </RoleRoute>
+                  }
+                />
                 <Route
                   path="usuarios"
                   element={

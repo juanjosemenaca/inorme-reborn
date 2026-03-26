@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   Plus,
   Pencil,
@@ -11,6 +12,7 @@ import {
   Filter,
   KeyRound,
   Copy,
+  UserPlus,
 } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -64,6 +66,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { queryKeys } from "@/lib/queryKeys";
 import { nextPasswordRenewalDeadline } from "@/lib/passwordPolicy";
+import { isWorkerEligibleForNewBackofficeUser } from "@/lib/workerBackofficeUserEligibility";
 
 function initialsFromDisplayName(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -139,8 +142,7 @@ const AdminUsers = () => {
   };
 
   const selectableWorkers = useMemo(
-    () =>
-      companyWorkers.filter((w) => w.active && !users.some((u) => u.companyWorkerId === w.id)),
+    () => companyWorkers.filter((w) => isWorkerEligibleForNewBackofficeUser(w, users)),
     [companyWorkers, users]
   );
 
@@ -325,10 +327,18 @@ const AdminUsers = () => {
             {t("admin.users.subtitle_end")}
           </p>
         </div>
-        <Button onClick={openCreate} className="gap-2 shrink-0">
-          <Plus className="h-4 w-4" />
-          {t("admin.users.new")}
-        </Button>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button variant="outline" asChild className="gap-2">
+            <Link to="/admin/usuarios/alta-masiva">
+              <UserPlus className="h-4 w-4" />
+              {t("admin.users.bulk_link")}
+            </Link>
+          </Button>
+          <Button onClick={openCreate} className="gap-2">
+            <Plus className="h-4 w-4" />
+            {t("admin.users.new")}
+          </Button>
+        </div>
       </div>
 
       <Card className="border-primary/15 bg-gradient-to-br from-card to-primary/5">

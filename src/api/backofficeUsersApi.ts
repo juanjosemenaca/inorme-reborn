@@ -5,6 +5,7 @@ import { generateInitialPassword } from "@/lib/passwordPolicy";
 import { backofficeUserRowToDomain } from "@/lib/supabase/mappers";
 import type { BackofficeUserRow } from "@/types/database";
 import type { BackofficeUserRecord, EmploymentType, UserRole } from "@/types/backoffice";
+import { getDisplayName } from "@/types/backoffice";
 import type { CompanyWorkerRecord } from "@/types/companyWorkers";
 
 function denormalizeFromWorker(w: CompanyWorkerRecord): {
@@ -180,6 +181,102 @@ export async function createUser(input: CreateUserInput): Promise<CreateUserResu
     user: backofficeUserRowToDomain(inserted as BackofficeUserRow),
     initialPassword,
   };
+}
+
+/** Contraseña inicial por defecto para altas masivas (el usuario debe cambiarla al primer acceso). */
+export const DEFAULT_BULK_INITIAL_PASSWORD = "12345678";
+
+export type BulkCreateUsersResult = {
+  success: { email: string; name: string }[];
+  failed: { companyWorkerId: string; email: string; name: string; message: string }[];
+  initialPassword: string;
+};
+
+/**
+ * Crea varios usuarios de backoffice para fichas de trabajador sin cuenta.
+ * Se procesa en serie para mantener coherencia con la lista de usuarios existentes.
+ */
+export async function bulkCreateUsersFromWorkers(
+  companyWorkerIds: string[],
+  options?: { password?: string; role?: UserRole; active?: boolean }
+): Promise<BulkCreateUsersResult> {
+  const password = (options?.password ?? DEFAULT_BULK_INITIAL_PASSWORD).trim();
+  if (password.length < 8) {
+    throw new Error("La contraseña debe tener al menos 8 caracteres.");
+  }
+  const role = options?.role ?? "WORKER";
+  const active = options?.active ?? true;
+  const success: BulkCreateUsersResult["success"] = [];
+  const failed: BulkCreateUsersResult["failed"] = [];
+  const emailsInBatch = new Set<string>();
+
+  for (const id of companyWorkerIds) {
+    let worker: CompanyWorkerRecord | undefined;
+    try {
+      worker = await getCompanyWorkerById(id);
+      if (!worker) {
+        failed.push({
+          companyWorkerId: id,
+          email: "",
+          name: "",
+          message: "Trabajador no encontrado.",
+        });
+        continue;
+      }
+      const name = getDisplayName(worker);
+      if (!worker.active) {
+        failed.push({
+          companyWorkerId: id,
+          email: worker.email,
+          name,
+          message: "La ficha del trabajador está inactiva.",
+        });
+        continue;
+      }
+      const emailNorm = worker.email.trim().toLowerCase();
+      if (!emailNorm) {
+        failed.push({
+          companyWorkerId: id,
+          email: "",
+          name,
+          message: "La ficha no tiene email; complétalo en Trabajadores.",
+        });
+        continue;
+      }
+      if (emailsInBatch.has(emailNorm)) {
+        failed.push({
+          companyWorkerId: id,
+          email: emailNorm,
+          name,
+          message: "Email duplicado en la selección.",
+        });
+        continue;
+      }
+      emailsInBatch.add(emailNorm);
+      const result = await createUser({
+        companyWorkerId: id,
+        email: emailNorm,
+        password,
+        role,
+        active,
+      });
+      success.push({
+        email: result.user.email,
+        name: getDisplayName(result.user),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error desconocido.";
+      const w = worker ?? (await getCompanyWorkerById(id));
+      failed.push({
+        companyWorkerId: id,
+        email: w?.email ?? "",
+        name: w ? getDisplayName(w) : "",
+        message: msg,
+      });
+    }
+  }
+
+  return { success, failed, initialPassword: password };
 }
 
 export async function completePasswordChange(newPassword: string): Promise<void> {
