@@ -46,6 +46,12 @@ export interface CompanyWorkerRow {
   work_calendar_site_id: string;
   vacation_days: number;
   active: boolean;
+  /** Responsable directo (organigrama). */
+  manager_id: string | null;
+  /** Roles mostrados en organigrama. */
+  org_roles: string[];
+  /** Equipos (edges secundarios). */
+  team_labels: string[];
   created_at: string;
   updated_at: string;
 }

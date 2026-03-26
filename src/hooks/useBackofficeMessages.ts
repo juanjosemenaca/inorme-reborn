@@ -19,6 +19,9 @@ export function useMyUnreadBackofficeMessageCount(enabled = true) {
     queryKey: queryKeys.backofficeMessageUnreadCount,
     queryFn: countMyUnreadBackofficeMessages,
     enabled: isSupabaseConfigured() && enabled,
-    staleTime: 60_000,
+    /** Sin caché larga: el menú debe reflejar al instante los mensajes leídos / nuevos. */
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 }

@@ -215,6 +215,26 @@ export async function approveWorkerVacationChangeRequest(requestId: string): Pro
     })
     .eq("id", requestId);
   if (upErr) throwErr(upErr);
+
+  try {
+    const datesSummary =
+      proposed.length === 0
+        ? "No quedan dias de vacaciones asignados para ese ano."
+        : `Se han registrado ${proposed.length} dia(s) de vacaciones para ${year}.`;
+    await createBackofficeMessage(req.backoffice_user_id, {
+      category: "VACATION_REQUEST",
+      title: "Solicitud de vacaciones aprobada",
+      body: `Tu solicitud de cambios de vacaciones para ${year} ha sido aprobada.\n\n${datesSummary}`,
+      payload: {
+        requestId,
+        calendarYear: year,
+        status: "APPROVED",
+        kind: "vacation_change",
+      },
+    });
+  } catch (e) {
+    console.error("[messages] No se pudo crear mensaje de aprobacion de vacaciones:", e);
+  }
 }
 
 export async function rejectWorkerVacationChangeRequest(
