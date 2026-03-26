@@ -47,12 +47,6 @@ export interface CompanyWorkerRecord {
   /** Días de vacaciones anuales (solo administración). */
   vacationDays: number;
   active: boolean;
-  /** Responsable directo en organigrama (otro trabajador). */
-  managerId: string | null;
-  /** Roles mostrados en el organigrama (vacío → se usa el tipo de relación laboral). */
-  orgRoles: string[];
-  /** Etiquetas de equipo (relaciones punteadas entre compañeros). */
-  teamLabels: string[];
   createdAt: string;
   updatedAt: string;
 }

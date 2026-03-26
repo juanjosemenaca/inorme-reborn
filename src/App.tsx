@@ -19,7 +19,6 @@ import AdminClients from "./pages/admin/AdminClients";
 import AdminProjects from "./pages/admin/AdminProjects";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminCompanyWorkers from "./pages/admin/AdminCompanyWorkers";
-import AdminOrgChart from "./pages/admin/AdminOrgChart";
 import AdminWorkCalendars from "./pages/admin/AdminWorkCalendars";
 import AdminVacations from "./pages/admin/AdminVacations";
 import AdminVacationRequests from "./pages/admin/AdminVacationRequests";
@@ -131,14 +130,6 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
                       <AdminCompanyWorkers />
-                    </RoleRoute>
-                  }
-                />
-                <Route
-                  path="organigrama"
-                  element={
-                    <RoleRoute allowedRoles={["ADMIN"]}>
-                      <AdminOrgChart />
                     </RoleRoute>
                   }
                 />

@@ -10,23 +10,6 @@ import type {
   CompanyWorkerRecord,
 } from "@/types/companyWorkers";
 
-function assertManagerAcyclic(
-  managerId: string,
-  employeeId: string,
-  byId: Map<string, CompanyWorkerRecord>
-): void {
-  const seen = new Set<string>();
-  let cur: string | null = managerId;
-  while (cur) {
-    if (cur === employeeId) {
-      throw new Error("El responsable indicado crearía un ciclo en el organigrama.");
-    }
-    if (seen.has(cur)) return;
-    seen.add(cur);
-    cur = byId.get(cur)?.managerId ?? null;
-  }
-}
-
 async function normalizeEmploymentFields(
   employmentType: CompanyWorkerEmploymentType,
   providerId: string | null | undefined,
@@ -104,11 +87,6 @@ export async function createCompanyWorker(input: CreateCompanyWorkerInput): Prom
     input.autonomoVia
   );
   const vd = Math.min(365, Math.max(0, Math.floor(input.vacationDays)));
-  const byId = new Map(rows.map((w) => [w.id, w] as const));
-  const nextManagerId = input.managerId?.trim() || null;
-  if (nextManagerId && !byId.has(nextManagerId)) {
-    throw new Error("El responsable seleccionado no existe.");
-  }
   const record = companyWorkerRecordToRowInsert({
     id: "",
     firstName: input.firstName.trim(),
@@ -124,9 +102,6 @@ export async function createCompanyWorker(input: CreateCompanyWorkerInput): Prom
     workCalendarSiteId: input.workCalendarSiteId,
     vacationDays: vd,
     active: input.active,
-    managerId: nextManagerId,
-    orgRoles: input.orgRoles ?? [],
-    teamLabels: input.teamLabels ?? [],
   });
   delete (record as { id?: string }).id;
   const { data: inserted, error } = await sb.from("company_workers").insert(record).select("*").single();
@@ -162,17 +137,6 @@ export async function updateCompanyWorker(
     input.vacationDays !== undefined
       ? Math.min(365, Math.max(0, Math.floor(input.vacationDays)))
       : current.vacationDays;
-  const byId = new Map(rows.map((w) => [w.id, w] as const));
-  const nextManagerId =
-    input.managerId !== undefined ? input.managerId?.trim() || null : current.managerId;
-  if (nextManagerId && !byId.has(nextManagerId)) {
-    throw new Error("El responsable seleccionado no existe.");
-  }
-  if (nextManagerId) {
-    assertManagerAcyclic(nextManagerId, id, byId);
-  }
-  const nextOrgRoles = input.orgRoles !== undefined ? input.orgRoles : current.orgRoles;
-  const nextTeamLabels = input.teamLabels !== undefined ? input.teamLabels : current.teamLabels;
   const patch = companyWorkerRecordToRowInsert({
     id,
     firstName: input.firstName !== undefined ? input.firstName.trim() : current.firstName,
@@ -188,9 +152,6 @@ export async function updateCompanyWorker(
     workCalendarSiteId: nextSiteId,
     vacationDays: nextVacation,
     active: input.active !== undefined ? input.active : current.active,
-    managerId: nextManagerId,
-    orgRoles: nextOrgRoles,
-    teamLabels: nextTeamLabels,
   });
   const { data: updated, error } = await sb
     .from("company_workers")
@@ -208,9 +169,6 @@ export async function updateCompanyWorker(
       work_calendar_site_id: patch.work_calendar_site_id,
       vacation_days: patch.vacation_days,
       active: patch.active,
-      manager_id: patch.manager_id,
-      org_roles: patch.org_roles,
-      team_labels: patch.team_labels,
     })
     .eq("id", id)
     .select("*")

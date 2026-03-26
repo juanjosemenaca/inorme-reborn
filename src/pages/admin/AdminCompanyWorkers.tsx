@@ -152,19 +152,6 @@ const AdminCompanyWorkers = () => {
     setDialogOpen(true);
   };
 
-  const parseCommaList = (s: string) =>
-    s
-      .split(/[,;]/)
-      .map((x) => x.trim())
-      .filter(Boolean);
-
-  const managerOptions = useMemo(() => {
-    return workers
-      .filter((w) => (editing ? w.id !== editing.id : true))
-      .map((w) => ({ id: w.id, label: companyWorkerDisplayName(w) }))
-      .sort((a, b) => a.label.localeCompare(b.label, "es"));
-  }, [workers, editing]);
-
   const handleFormSubmit = async (values: WorkerFormValues) => {
     try {
       const payload = {
@@ -181,9 +168,6 @@ const AdminCompanyWorkers = () => {
         workCalendarSiteId: values.workCalendarSiteId,
         vacationDays: values.vacationDays,
         active: values.active,
-        managerId: values.managerId?.trim() || null,
-        orgRoles: parseCommaList(values.orgRolesLine ?? ""),
-        teamLabels: parseCommaList(values.teamLabelsLine ?? ""),
       };
 
       if (dialogMode === "create") {
@@ -492,7 +476,6 @@ const AdminCompanyWorkers = () => {
         mode={dialogMode}
         initial={editing}
         providerOptions={providerOptions}
-        workerOptionsForManager={managerOptions}
         calendarSites={calendarSites}
         onSubmit={handleFormSubmit}
       />

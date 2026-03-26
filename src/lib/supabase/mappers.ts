@@ -291,9 +291,6 @@ export function companyWorkerRowToDomain(row: CompanyWorkerRow): CompanyWorkerRe
     workCalendarSiteId: row.work_calendar_site_id,
     vacationDays: row.vacation_days,
     active: row.active,
-    managerId: row.manager_id ?? null,
-    orgRoles: Array.isArray(row.org_roles) ? row.org_roles : [],
-    teamLabels: Array.isArray(row.team_labels) ? row.team_labels : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -317,9 +314,6 @@ export function companyWorkerRecordToRowInsert(
     work_calendar_site_id: record.workCalendarSiteId,
     vacation_days: record.vacationDays,
     active: record.active,
-    manager_id: record.managerId ?? null,
-    org_roles: record.orgRoles ?? [],
-    team_labels: record.teamLabels ?? [],
   };
 }
 

@@ -1,5 +1,4 @@
 import { requireSupabase } from "@/api/supabaseRequire";
-import { createBackofficeMessage } from "@/api/backofficeMessagesApi";
 import { syncBackofficeUserFromCompanyWorker, getProfileByAuthUserId } from "@/api/backofficeUsersApi";
 import { getCompanyWorkerById, updateCompanyWorker } from "@/api/companyWorkersApi";
 import type { WorkerProfileChangeRequestRow } from "@/types/database";
@@ -184,18 +183,6 @@ export async function approveWorkerProfileChangeRequest(requestId: string): Prom
     })
     .eq("id", requestId);
   if (upErr) throw upErr;
-
-  try {
-    await createBackofficeMessage(r.backoffice_user_id, {
-      category: "PROFILE_REQUEST",
-      title: "Solicitud de modificación de ficha aprobada",
-      body:
-        "Tu solicitud de cambio de datos personales ha sido aprobada y la ficha ya está actualizada con los nuevos datos.",
-      payload: { requestId, status: "APPROVED", kind: "profile_change" },
-    });
-  } catch (e) {
-    console.error("[messages] No se pudo crear mensaje de aprobacion de ficha:", e);
-  }
 }
 
 export async function rejectWorkerProfileChangeRequest(
@@ -232,20 +219,4 @@ export async function rejectWorkerProfileChangeRequest(
     })
     .eq("id", requestId);
   if (error) throw error;
-
-  try {
-    await createBackofficeMessage(r.backoffice_user_id, {
-      category: "PROFILE_REQUEST",
-      title: "Solicitud de modificación de ficha rechazada",
-      body: `Tu solicitud de cambio de datos personales ha sido rechazada.\nMotivo: ${reason}`,
-      payload: {
-        requestId,
-        status: "REJECTED",
-        kind: "profile_change",
-        rejectionReason: reason,
-      },
-    });
-  } catch (e) {
-    console.error("[messages] No se pudo crear mensaje de rechazo de ficha:", e);
-  }
 }

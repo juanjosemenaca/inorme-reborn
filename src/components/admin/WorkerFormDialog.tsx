@@ -65,9 +65,6 @@ const schema = z
     autonomoVia: autonomoViaEnum.optional().nullable(),
     providerId: z.string().optional(),
     active: z.boolean(),
-    managerId: z.string().optional(),
-    orgRolesLine: z.string().optional(),
-    teamLabelsLine: z.string().optional(),
   })
   .refine((d) => d.firstName.trim().length > 0 || d.lastName.trim().length > 0, {
     message: "Indica al menos nombre o apellidos",
@@ -108,8 +105,6 @@ type Props = {
   initial?: CompanyWorkerRecord | null;
   /** Proveedores activos para subcontratado / autónomo por empresa */
   providerOptions: { id: string; label: string }[];
-  /** Otros trabajadores para elegir responsable en organigrama (excluye la ficha en edición). */
-  workerOptionsForManager?: { id: string; label: string }[];
   /** Sedes laborales (calendarios); debe estar cargado antes de abrir el diálogo. */
   calendarSites: WorkCalendarSiteRecord[];
   onSubmit: (values: WorkerFormValues) => void | Promise<void>;
@@ -121,7 +116,6 @@ export function WorkerFormDialog({
   mode,
   initial,
   providerOptions,
-  workerOptionsForManager = [],
   calendarSites,
   onSubmit,
 }: Props) {
@@ -147,9 +141,6 @@ export function WorkerFormDialog({
       autonomoVia: null,
       providerId: "",
       active: true,
-      managerId: "",
-      orgRolesLine: "",
-      teamLabelsLine: "",
     },
   });
 
@@ -186,9 +177,6 @@ export function WorkerFormDialog({
         autonomoVia: initial.autonomoVia,
         providerId: initial.providerId ?? "",
         active: initial.active,
-        managerId: initial.managerId ?? "",
-        orgRolesLine: initial.orgRoles.join(", "),
-        teamLabelsLine: initial.teamLabels.join(", "),
       });
     } else {
       form.reset({
@@ -205,9 +193,6 @@ export function WorkerFormDialog({
         autonomoVia: null,
         providerId: "",
         active: true,
-        managerId: "",
-        orgRolesLine: "",
-        teamLabelsLine: "",
       });
     }
   }, [open, mode, initial, form, defaultSiteId, defaultVacation]);
@@ -430,66 +415,6 @@ export function WorkerFormDialog({
                   )}
                 />
               )}
-
-              {workerOptionsForManager.length > 0 ? (
-                <FormField
-                  control={form.control}
-                  name="managerId"
-                  render={({ field }) => (
-                    <FormItem className="sm:col-span-2">
-                      <FormLabel>{t("admin.workers.org_manager")}</FormLabel>
-                      <p className="text-sm text-muted-foreground mb-1.5">{t("admin.workers.org_manager_desc")}</p>
-                      <Select
-                        value={field.value ? field.value : NONE_VALUE}
-                        onValueChange={(v) => field.onChange(v === NONE_VALUE ? "" : v)}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={t("admin.workers.org_manager")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={NONE_VALUE}>{t("admin.workers.org_manager_none")}</SelectItem>
-                          {workerOptionsForManager.map((opt) => (
-                            <SelectItem key={opt.id} value={opt.id}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ) : null}
-              <FormField
-                control={form.control}
-                name="orgRolesLine"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>{t("admin.workers.org_roles")}</FormLabel>
-                    <p className="text-sm text-muted-foreground mb-1.5">{t("admin.workers.org_roles_desc")}</p>
-                    <FormControl>
-                      <Input placeholder={t("admin.workers.org_roles_placeholder")} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="teamLabelsLine"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>{t("admin.workers.org_teams")}</FormLabel>
-                    <p className="text-sm text-muted-foreground mb-1.5">{t("admin.workers.org_teams_desc")}</p>
-                    <FormControl>
-                      <Input placeholder={t("admin.workers.org_teams_placeholder")} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
               {showProviderSelect && (
                 <FormField
