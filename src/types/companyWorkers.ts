@@ -1,5 +1,3 @@
-import type { WorkCalendarScope } from "@/types/workCalendars";
-
 /**
  * Relación laboral de una persona que trabaja en la compañía (no confundir con usuario del backoffice).
  */
@@ -45,7 +43,9 @@ export interface CompanyWorkerRecord {
   /** Solo si `employmentType === "AUTONOMO"` */
   autonomoVia: AutonomoVia | null;
   /** Sede / calendario laboral (festivos y horario de verano). */
-  workCalendarScope: WorkCalendarScope;
+  workCalendarSiteId: string;
+  /** Días de vacaciones anuales (solo administración). */
+  vacationDays: number;
   active: boolean;
   createdAt: string;
   updatedAt: string;

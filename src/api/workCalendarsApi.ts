@@ -6,7 +6,6 @@ import type { WorkCalendarHolidayRow, WorkCalendarSummerRangeRow } from "@/types
 import type {
   WorkCalendarHolidayKind,
   WorkCalendarHolidayRecord,
-  WorkCalendarScope,
   WorkCalendarSummerRangeRecord,
 } from "@/types/workCalendars";
 
@@ -37,7 +36,7 @@ export async function createWorkCalendarHoliday(
     .from("work_calendar_holidays")
     .insert({
       calendar_year: holiday.calendarYear,
-      scope: holiday.scope,
+      site_id: holiday.siteId,
       holiday_date: holidayDateIso,
       holiday_kind: holiday.holidayKind,
       label: holiday.label.trim(),
@@ -125,7 +124,7 @@ export async function createWorkCalendarSummerRange(
     .from("work_calendar_summer_days")
     .insert({
       calendar_year: row.calendarYear,
-      scope: row.scope,
+      site_id: row.siteId,
       date_start: row.dateStart,
       date_end: row.dateEnd,
       label: row.label.trim(),
@@ -204,7 +203,7 @@ export function parseSummerRangeImportLines(text: string): { dateStart: string; 
 
 export async function bulkImportWorkCalendarSummerRanges(
   calendarYear: number,
-  scope: WorkCalendarScope,
+  siteId: string,
   ranges: { dateStart: string; dateEnd: string }[]
 ): Promise<{ inserted: number; skipped: number }> {
   const sb = requireSupabase();
@@ -219,7 +218,7 @@ export async function bulkImportWorkCalendarSummerRanges(
     }
     const { error } = await sb.from("work_calendar_summer_days").insert({
       calendar_year: calendarYear,
-      scope,
+      site_id: siteId,
       date_start: r.dateStart,
       date_end: r.dateEnd,
       label: "",
@@ -311,7 +310,7 @@ export function parseHolidayImportLines(text: string): BulkHolidayRow[] {
 
 export async function bulkImportWorkCalendarHolidays(
   calendarYear: number,
-  scope: WorkCalendarScope,
+  siteId: string,
   rows: BulkHolidayRow[]
 ): Promise<{ inserted: number; skipped: number }> {
   const sb = requireSupabase();
@@ -325,7 +324,7 @@ export async function bulkImportWorkCalendarHolidays(
     }
     const { error } = await sb.from("work_calendar_holidays").insert({
       calendar_year: calendarYear,
-      scope,
+      site_id: siteId,
       holiday_date: r.holidayDate,
       holiday_kind: r.holidayKind,
       label: r.label,

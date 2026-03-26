@@ -7,29 +7,53 @@ import {
   Building2,
   FolderKanban,
   CalendarDays,
+  CalendarRange,
+  Palmtree,
   Truck,
   Contact2,
   Menu,
   IdCard,
   Inbox,
   UserPlus,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import {
   useHasPendingWorkerRequest,
   usePendingWorkerProfileChangeRequests,
 } from "@/hooks/useWorkerProfileChangeRequests";
+import { usePendingWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
+import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
 
 const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
+  { to: "/admin/vacaciones", labelKey: "admin.layout.nav_vacations", icon: Palmtree, roles: ["ADMIN"] as const },
+  {
+    to: "/admin/solicitudes-vacaciones",
+    labelKey: "admin.layout.nav_vacation_requests",
+    icon: Inbox,
+    roles: ["ADMIN"] as const,
+  },
   { to: "/admin/mi-ficha", labelKey: "admin.layout.nav_my_profile", icon: IdCard, roles: ["WORKER"] as const },
+  {
+    to: "/admin/mi-calendario",
+    labelKey: "admin.layout.nav_my_calendar",
+    icon: CalendarRange,
+    roles: ["WORKER"] as const,
+  },
+  {
+    to: "/admin/mensajes",
+    labelKey: "admin.layout.nav_messages",
+    icon: Inbox,
+    roles: ["WORKER"] as const,
+  },
   {
     to: "/admin/solicitudes-ficha",
     labelKey: "admin.layout.nav_profile_requests",
@@ -50,6 +74,15 @@ const NAV_KEYS = [
   { to: "/admin/calendarios-laborales", labelKey: "admin.layout.nav_calendars", icon: CalendarDays, roles: ["ADMIN"] as const },
 ] as const;
 
+const ADMIN_MESSAGE_CHILD_ROUTES = ["/admin/solicitudes-vacaciones", "/admin/solicitudes-ficha"] as const;
+
+function normalizeRole(value: unknown): "ADMIN" | "WORKER" | null {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (raw === "ADMIN") return "ADMIN";
+  if (raw === "WORKER") return "WORKER";
+  return null;
+}
+
 const AdminLayout = () => {
   const { logout, user, isAdmin } = useAdminAuth();
   const { t } = useLanguage();
@@ -61,15 +94,41 @@ const AdminLayout = () => {
     isAdmin && supabaseOk && !!user
   );
   const pendingAdminProfileCount = pendingProfileRequests.length;
+  const userRole = normalizeRole(user?.role);
   const { data: workerHasPendingProfileRequest = false } = useHasPendingWorkerRequest(
-    user?.role === "WORKER" ? user.companyWorkerId : null
+    userRole === "WORKER" ? user?.companyWorkerId ?? null : null
   );
+  const { data: unreadMessageCount = 0 } = useMyUnreadBackofficeMessageCount(
+    !isAdmin && supabaseOk && !!user
+  );
+  const { data: pendingVacationRequests = [] } = usePendingWorkerVacationChangeRequests(
+    isAdmin && supabaseOk && !!user
+  );
+  const pendingVacationRequestCount = pendingVacationRequests.length;
+  const pendingAdminMessagesCount = pendingAdminProfileCount + pendingVacationRequestCount;
 
-  const navItems = NAV_KEYS.filter((item) => user && item.roles.includes(user.role));
+  const navItems = NAV_KEYS.filter((item) => userRole !== null && item.roles.includes(userRole));
+  const adminMessageItems = navItems.filter((item) =>
+    ADMIN_MESSAGE_CHILD_ROUTES.includes(item.to as (typeof ADMIN_MESSAGE_CHILD_ROUTES)[number])
+  );
+  const navItemsWithoutAdminMessages = navItems.filter(
+    (item) => !ADMIN_MESSAGE_CHILD_ROUTES.includes(item.to as (typeof ADMIN_MESSAGE_CHILD_ROUTES)[number])
+  );
+  const isAdminMessagesSectionActive = ADMIN_MESSAGE_CHILD_ROUTES.some(
+    (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
+  );
+  const [adminMessagesOpen, setAdminMessagesOpen] = useState(isAdminMessagesSectionActive);
+
+  useEffect(() => {
+    if (isAdminMessagesSectionActive) setAdminMessagesOpen(true);
+  }, [isAdminMessagesSectionActive]);
 
   const navNeedsAttention = (to: string) => {
-    if (to === "/admin/solicitudes-ficha" && user?.role === "ADMIN") return pendingAdminProfileCount > 0;
-    if (to === "/admin/mi-ficha" && user?.role === "WORKER") return workerHasPendingProfileRequest;
+    if (to === "/admin/solicitudes-ficha" && userRole === "ADMIN") return pendingAdminProfileCount > 0;
+    if (to === "/admin/solicitudes-vacaciones" && userRole === "ADMIN")
+      return pendingVacationRequestCount > 0;
+    if (to === "/admin/mensajes" && userRole === "WORKER") return unreadMessageCount > 0;
+    if (to === "/admin/mi-ficha" && userRole === "WORKER") return workerHasPendingProfileRequest;
     return false;
   };
 
@@ -100,9 +159,15 @@ const AdminLayout = () => {
     return pathname === path || pathname.startsWith(`${path}/`);
   };
 
-  const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
+  const NavLinks = ({
+    mobile = false,
+    vacationNotifyCount: vacCount = 0,
+  }: {
+    mobile?: boolean;
+    vacationNotifyCount?: number;
+  }) => (
     <>
-      {navItems.map((item) => {
+      {navItemsWithoutAdminMessages.map((item) => {
         const active = isNavActive(item.to);
         const attention = navNeedsAttention(item.to);
         const pendingLabel =
@@ -113,7 +178,11 @@ const AdminLayout = () => {
               )
             : attention && item.to === "/admin/mi-ficha"
               ? t("admin.layout.nav_my_profile_pending_aria")
-              : undefined;
+              : attention && item.to === "/admin/mensajes"
+                ? t("admin.layout.nav_messages_pending_aria").replace("{{count}}", String(unreadMessageCount))
+              : attention && item.to === "/admin/solicitudes-vacaciones" && vacCount > 0
+                ? t("admin.layout.nav_vacation_requests_pending_aria").replace("{{count}}", String(vacCount))
+                : undefined;
         return (
           <Link
             key={item.to}
@@ -122,7 +191,7 @@ const AdminLayout = () => {
             aria-label={pendingLabel}
             title={pendingLabel}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+              "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full",
               attention ? "font-bold" : "font-medium",
               isAdmin
                 ? active
@@ -141,17 +210,127 @@ const AdminLayout = () => {
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            <item.icon
-              className={cn(
-                "h-4 w-4 shrink-0 opacity-90",
-                attention && isAdmin && "text-red-400 opacity-100",
-                attention && !isAdmin && "text-red-600 dark:text-red-400 opacity-100"
-              )}
-            />
-            {t(item.labelKey)}
+            <span className="flex items-center gap-3 min-w-0">
+              <item.icon
+                className={cn(
+                  "h-4 w-4 shrink-0 opacity-90",
+                  attention && isAdmin && "text-red-400 opacity-100",
+                  attention && !isAdmin && "text-red-600 dark:text-red-400 opacity-100"
+                )}
+              />
+              <span className="truncate">{t(item.labelKey)}</span>
+            </span>
+            {item.to === "/admin/solicitudes-vacaciones" && vacCount > 0 ? (
+              <Badge
+                variant="secondary"
+                className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
+              >
+                {vacCount > 99 ? "99+" : vacCount}
+              </Badge>
+            ) : null}
           </Link>
         );
       })}
+      {isAdmin && adminMessageItems.length > 0 ? (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => setAdminMessagesOpen((v) => !v)}
+            aria-label={
+              pendingAdminMessagesCount > 0
+                ? t("admin.layout.nav_messages_hub_pending_aria").replace(
+                    "{{count}}",
+                    String(pendingAdminMessagesCount)
+                  )
+                : undefined
+            }
+            className={cn(
+              "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full",
+              pendingAdminMessagesCount > 0
+                ? "font-bold text-red-400 border-l-2 border-transparent hover:bg-slate-800 hover:text-red-300"
+                : "font-medium text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
+            )}
+          >
+            <span className="flex items-center gap-3 min-w-0">
+              <Inbox
+                className={cn(
+                  "h-4 w-4 shrink-0 opacity-90",
+                  pendingAdminMessagesCount > 0 && "text-red-400 opacity-100"
+                )}
+              />
+              <span className="truncate">{t("admin.layout.nav_messages_hub")}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              {pendingAdminMessagesCount > 0 ? (
+                <Badge
+                  variant="secondary"
+                  className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
+                >
+                  {pendingAdminMessagesCount > 99 ? "99+" : pendingAdminMessagesCount}
+                </Badge>
+              ) : null}
+              <ChevronDown
+                className={cn("h-4 w-4 shrink-0 transition-transform", adminMessagesOpen && "rotate-180")}
+              />
+            </span>
+          </button>
+          {adminMessagesOpen ? (
+            <div className="space-y-1 pl-8">
+              {adminMessageItems.map((item) => {
+                const active = isNavActive(item.to);
+                const attention = navNeedsAttention(item.to);
+                const childCount =
+                  item.to === "/admin/solicitudes-vacaciones"
+                    ? pendingVacationRequestCount
+                    : item.to === "/admin/solicitudes-ficha"
+                      ? pendingAdminProfileCount
+                      : 0;
+                const pendingLabel =
+                  item.to === "/admin/solicitudes-ficha" && pendingAdminProfileCount > 0
+                    ? t("admin.layout.nav_pending_profile_requests_aria").replace(
+                        "{{count}}",
+                        String(pendingAdminProfileCount)
+                      )
+                    : item.to === "/admin/solicitudes-vacaciones" && pendingVacationRequestCount > 0
+                      ? t("admin.layout.nav_vacation_requests_pending_aria").replace(
+                          "{{count}}",
+                          String(pendingVacationRequestCount)
+                        )
+                      : undefined;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => mobile && setMobileNavOpen(false)}
+                    aria-label={pendingLabel}
+                    title={pendingLabel}
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors w-full",
+                      active
+                        ? attention
+                          ? "bg-red-950/50 text-red-400"
+                          : "bg-primary/20 text-primary"
+                        : attention
+                          ? "text-red-400 hover:bg-slate-800 hover:text-red-300"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    )}
+                  >
+                    <span className="truncate">{t(item.labelKey)}</span>
+                    {childCount > 0 ? (
+                      <Badge
+                        variant="secondary"
+                        className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
+                      >
+                        {childCount > 99 ? "99+" : childCount}
+                      </Badge>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 
@@ -167,7 +346,7 @@ const AdminLayout = () => {
             <p className="text-xs text-slate-400 mt-2 line-clamp-2">{t("admin.layout.admin_subtitle")}</p>
           </div>
           <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-            <NavLinks />
+            <NavLinks vacationNotifyCount={pendingVacationRequestCount} />
           </nav>
           <div className="p-4 border-t border-slate-800/80">
             <div className="rounded-lg bg-slate-900/80 p-3 text-xs text-slate-400">
@@ -232,7 +411,7 @@ const AdminLayout = () => {
                   <p className="text-lg font-bold text-white">{t("admin.layout.admin_title")}</p>
                 </div>
                 <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-                  <NavLinks mobile />
+                  <NavLinks mobile vacationNotifyCount={pendingVacationRequestCount} />
                 </nav>
               </div>
             </>

@@ -1,0 +1,113 @@
+import { fetchCompanyWorkers } from "@/api/companyWorkersApi";
+import { fetchWorkCalendarSites } from "@/api/workCalendarSitesApi";
+import { requireSupabase } from "@/api/supabaseRequire";
+import { getErrorMessage } from "@/lib/errorMessage";
+import { isoDateOnlyFromDb } from "@/lib/isoDate";
+import { companyWorkerDisplayName } from "@/types/companyWorkers";
+import type { CompanyWorkerRecord } from "@/types/companyWorkers";
+
+function throwSupabaseError(err: unknown): never {
+  throw new Error(getErrorMessage(err));
+}
+
+export type WorkerVacationAdminSummary = {
+  workerId: string;
+  workerName: string;
+  active: boolean;
+  siteName: string;
+  /** Cupo anual según la ficha actual (`vacation_days`). */
+  annualAllowance: number;
+  /** Días aprobados (marcados) del año seleccionado, sin filtrar por fecha actual. */
+  usedInSelectedYear: number;
+  /** Días usados cuyo día ya pasó respecto a hoy (disfrutados). */
+  enjoyedInSelectedYear: number;
+  pendingInSelectedYear: number;
+  selectedYear: number;
+  previousYear: number;
+  usedInPreviousYear: number;
+  /** max(0, cupo − usados en el año natural anterior al seleccionado). */
+  unusedFromPreviousYear: number;
+};
+
+export async function fetchVacationBookingRowsForYearRange(
+  fromYear: number,
+  toYear: number
+): Promise<{ companyWorkerId: string; vacationDate: string }[]> {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from("company_worker_vacation_days")
+    .select("company_worker_id, vacation_date")
+    .gte("vacation_date", `${fromYear}-01-01`)
+    .lte("vacation_date", `${toYear}-12-31`);
+  if (error) throwSupabaseError(error);
+  return (data ?? []).map((r) => ({
+    companyWorkerId: (r as { company_worker_id: string }).company_worker_id,
+    vacationDate: isoDateOnlyFromDb(String((r as { vacation_date: string }).vacation_date)),
+  }));
+}
+
+export function computeVacationSummaries(
+  workers: CompanyWorkerRecord[],
+  siteNameById: Map<string, string>,
+  rows: { companyWorkerId: string; vacationDate: string }[],
+  selectedYear: number
+): WorkerVacationAdminSummary[] {
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate()
+  ).padStart(2, "0")}`;
+  const prevYear = selectedYear - 1;
+  const byWorkerYear = new Map<string, Map<number, number>>();
+  const enjoyedBeforeTodayByWorker = new Map<string, number>();
+  for (const r of rows) {
+    const y = parseInt(r.vacationDate.slice(0, 4), 10);
+    if (y !== selectedYear && y !== prevYear) continue;
+    if (!byWorkerYear.has(r.companyWorkerId)) {
+      byWorkerYear.set(r.companyWorkerId, new Map());
+    }
+    const ym = byWorkerYear.get(r.companyWorkerId)!;
+    ym.set(y, (ym.get(y) ?? 0) + 1);
+    if (y === selectedYear && r.vacationDate < todayIso) {
+      enjoyedBeforeTodayByWorker.set(
+        r.companyWorkerId,
+        (enjoyedBeforeTodayByWorker.get(r.companyWorkerId) ?? 0) + 1
+      );
+    }
+  }
+
+  return workers.map((w) => {
+    const allowance = w.vacationDays;
+    const ym = byWorkerYear.get(w.id);
+    const usedSel = ym?.get(selectedYear) ?? 0;
+    const enjoyedSel = enjoyedBeforeTodayByWorker.get(w.id) ?? 0;
+    const usedPrev = ym?.get(prevYear) ?? 0;
+    return {
+      workerId: w.id,
+      workerName: companyWorkerDisplayName(w),
+      active: w.active,
+      siteName: siteNameById.get(w.workCalendarSiteId) ?? "—",
+      annualAllowance: allowance,
+      usedInSelectedYear: usedSel,
+      enjoyedInSelectedYear: enjoyedSel,
+      pendingInSelectedYear: Math.max(0, allowance - usedSel),
+      selectedYear,
+      previousYear: prevYear,
+      usedInPreviousYear: usedPrev,
+      unusedFromPreviousYear: Math.max(0, allowance - usedPrev),
+    };
+  });
+}
+
+/**
+ * Listado admin: trabajadores con cupo, usados y pendientes del año seleccionado,
+ * y días no disfrutados del año natural anterior (mismo cupo actual de ficha).
+ */
+export async function fetchAdminVacationSummaries(
+  selectedYear: number
+): Promise<WorkerVacationAdminSummary[]> {
+  const [workers, sites] = await Promise.all([fetchCompanyWorkers(), fetchWorkCalendarSites()]);
+  const siteNameById = new Map(sites.map((s) => [s.id, s.name] as const));
+  const prevYear = selectedYear - 1;
+  const rows = await fetchVacationBookingRowsForYearRange(prevYear, selectedYear);
+  return computeVacationSummaries(workers, siteNameById, rows, selectedYear);
+}

@@ -1,5 +1,6 @@
 import { requireSupabase } from "@/api/supabaseRequire";
 import { getProfileByAuthUserId } from "@/api/backofficeUsersApi";
+import { getWorkCalendarSiteById } from "@/api/workCalendarSitesApi";
 import { getProviderById } from "@/api/providersApi";
 import { companyWorkerRecordToRowInsert, companyWorkerRowToDomain } from "@/lib/supabase/mappers";
 import type { CompanyWorkerRow } from "@/types/database";
@@ -8,7 +9,6 @@ import type {
   CompanyWorkerEmploymentType,
   CompanyWorkerRecord,
 } from "@/types/companyWorkers";
-import type { WorkCalendarScope } from "@/types/workCalendars";
 
 async function normalizeEmploymentFields(
   employmentType: CompanyWorkerEmploymentType,
@@ -66,8 +66,8 @@ export type CreateCompanyWorkerInput = {
   employmentType: CompanyWorkerEmploymentType;
   providerId?: string | null;
   autonomoVia?: AutonomoVia | null;
-  /** Sede / calendario laboral (por defecto Barcelona). */
-  workCalendarScope?: WorkCalendarScope;
+  workCalendarSiteId: string;
+  vacationDays: number;
   active: boolean;
 };
 
@@ -86,6 +86,7 @@ export async function createCompanyWorker(input: CreateCompanyWorkerInput): Prom
     input.providerId,
     input.autonomoVia
   );
+  const vd = Math.min(365, Math.max(0, Math.floor(input.vacationDays)));
   const record = companyWorkerRecordToRowInsert({
     id: "",
     firstName: input.firstName.trim(),
@@ -98,7 +99,8 @@ export async function createCompanyWorker(input: CreateCompanyWorkerInput): Prom
     employmentType: input.employmentType,
     providerId,
     autonomoVia,
-    workCalendarScope: input.workCalendarScope ?? "BARCELONA",
+    workCalendarSiteId: input.workCalendarSiteId,
+    vacationDays: vd,
     active: input.active,
   });
   delete (record as { id?: string }).id;
@@ -130,7 +132,11 @@ export async function updateCompanyWorker(
     input.providerId !== undefined ? input.providerId : current.providerId,
     input.autonomoVia !== undefined ? input.autonomoVia : current.autonomoVia
   );
-  const nextScope = input.workCalendarScope ?? current.workCalendarScope;
+  const nextSiteId = input.workCalendarSiteId ?? current.workCalendarSiteId;
+  const nextVacation =
+    input.vacationDays !== undefined
+      ? Math.min(365, Math.max(0, Math.floor(input.vacationDays)))
+      : current.vacationDays;
   const patch = companyWorkerRecordToRowInsert({
     id,
     firstName: input.firstName !== undefined ? input.firstName.trim() : current.firstName,
@@ -143,7 +149,8 @@ export async function updateCompanyWorker(
     employmentType: nextType,
     providerId,
     autonomoVia,
-    workCalendarScope: nextScope,
+    workCalendarSiteId: nextSiteId,
+    vacationDays: nextVacation,
     active: input.active !== undefined ? input.active : current.active,
   });
   const { data: updated, error } = await sb
@@ -159,7 +166,8 @@ export async function updateCompanyWorker(
       employment_type: patch.employment_type,
       provider_id: patch.provider_id,
       autonomo_via: patch.autonomo_via,
-      work_calendar_scope: patch.work_calendar_scope,
+      work_calendar_site_id: patch.work_calendar_site_id,
+      vacation_days: patch.vacation_days,
       active: patch.active,
     })
     .eq("id", id)
@@ -170,12 +178,12 @@ export async function updateCompanyWorker(
 }
 
 /**
- * Actualiza solo la sede / calendario laboral de la ficha vinculada al usuario autenticado.
- * Rechaza si el `companyWorkerId` no coincide con el del perfil (no permite editar otras fichas).
+ * Actualiza sede y días de vacaciones según el calendario por defecto de la nueva sede.
+ * Solo la ficha vinculada al usuario autenticado.
  */
-export async function updateMyWorkCalendarScope(
+export async function updateMyWorkCalendarSite(
   companyWorkerId: string,
-  workCalendarScope: WorkCalendarScope
+  workCalendarSiteId: string
 ): Promise<CompanyWorkerRecord> {
   const sb = requireSupabase();
   const {
@@ -186,7 +194,12 @@ export async function updateMyWorkCalendarScope(
   if (!profile?.companyWorkerId || profile.companyWorkerId !== companyWorkerId) {
     throw new Error("No puedes modificar la ficha de otro trabajador.");
   }
-  return updateCompanyWorker(companyWorkerId, { workCalendarScope });
+  const site = await getWorkCalendarSiteById(workCalendarSiteId);
+  if (!site) throw new Error("Sede no encontrada.");
+  return updateCompanyWorker(companyWorkerId, {
+    workCalendarSiteId,
+    vacationDays: site.vacationDaysDefault,
+  });
 }
 
 export async function deleteCompanyWorker(id: string): Promise<void> {

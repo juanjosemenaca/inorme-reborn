@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { isWeekendIso } from "@/lib/calendarIso";
+import { isoDateOnlyFromDb } from "@/lib/isoDate";
 import type { WorkCalendarHolidayKind, WorkCalendarHolidayRecord } from "@/types/workCalendars";
 
 type DayVisual =
@@ -25,12 +27,6 @@ function buildMonthCells(year: number, month: number): DayVisual[][] {
     rows.push(flat.slice(i, i + 7));
   }
   return rows;
-}
-
-function isWeekendIso(iso: string): boolean {
-  const d = new Date(iso + "T12:00:00");
-  const dow = d.getDay();
-  return dow === 0 || dow === 6;
 }
 
 /** Viernes (día 5 en JS si domingo = 0). */
@@ -86,6 +82,12 @@ type Props = {
   legendLocal: string;
   tooltipFriday7h: string;
   tooltipSummer7h: string;
+  /** Días marcados como vacaciones (vista trabajador). */
+  vacationIsoSet?: ReadonlySet<string>;
+  onVacationDayClick?: (iso: string) => void;
+  vacationDayCanClick?: (iso: string) => boolean;
+  vacationLegendLabel?: string;
+  vacationTooltipLine?: string;
 };
 
 export function WorkCalendarYearGrid({
@@ -105,11 +107,16 @@ export function WorkCalendarYearGrid({
   legendLocal,
   tooltipFriday7h,
   tooltipSummer7h,
+  vacationIsoSet,
+  onVacationDayClick,
+  vacationDayCanClick,
+  vacationLegendLabel,
+  vacationTooltipLine,
 }: Props) {
   const byDate = useMemo(() => {
     const m = new Map<string, WorkCalendarHolidayRecord>();
     for (const h of holidays) {
-      m.set(h.holidayDate, h);
+      m.set(isoDateOnlyFromDb(h.holidayDate), h);
     }
     return m;
   }, [holidays]);
@@ -129,6 +136,8 @@ export function WorkCalendarYearGrid({
     "bg-white text-foreground border-border/70 dark:bg-background dark:text-foreground dark:border-border";
   const sevenHourClass =
     "bg-emerald-50 text-emerald-950/90 border-emerald-300/80 dark:bg-emerald-950/30 dark:text-emerald-100 dark:border-emerald-800/50";
+  const vacationRingClass =
+    "ring-2 ring-sky-600/85 ring-inset shadow-[inset_0_0_0_1px_rgba(2,132,199,0.35)] bg-sky-50/90 dark:bg-sky-950/35 dark:ring-sky-500/80";
 
   return (
     <div className="space-y-4">
@@ -158,6 +167,15 @@ export function WorkCalendarYearGrid({
             <span className={cn("inline-block size-4 rounded border", kindCellClass.LOCAL)} aria-hidden />
             <span>{legendLocal}</span>
           </span>
+          {vacationLegendLabel ? (
+            <span className="flex items-center gap-1.5">
+              <span
+                className="inline-block size-4 rounded border border-sky-600/60 bg-sky-100 dark:bg-sky-950/50"
+                aria-hidden
+              />
+              <span>{vacationLegendLabel}</span>
+            </span>
+          ) : null}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -191,6 +209,9 @@ export function WorkCalendarYearGrid({
                       }
                       const h = byDate.get(cell.iso);
                       const cls = cellClass(cell.iso, h, weekendClass, monThuClass, sevenHourClass, summerIsoSet);
+                      const isVac = vacationIsoSet?.has(cell.iso) ?? false;
+                      const canVac =
+                        !!onVacationDayClick && (vacationDayCanClick ? vacationDayCanClick(cell.iso) : true);
                       const prettyDate = new Date(cell.iso + "T12:00:00").toLocaleDateString(locale, {
                         weekday: "long",
                         day: "numeric",
@@ -221,18 +242,41 @@ export function WorkCalendarYearGrid({
                           tooltipLines.push(legendMonThu);
                         }
                       }
+                      if (isVac && vacationTooltipLine) {
+                        tooltipLines.push(vacationTooltipLine);
+                      }
+
+                      const cellInteractiveCls =
+                        onVacationDayClick && canVac
+                          ? "cursor-pointer hover:brightness-[0.98] active:scale-[0.98]"
+                          : onVacationDayClick && !canVac
+                            ? "cursor-not-allowed opacity-70"
+                            : "cursor-default";
+
+                      const cellClassName = cn(
+                        "min-h-[1.75rem] sm:min-h-[2rem] w-full flex items-center justify-center rounded-sm tabular-nums border",
+                        cls,
+                        isVac && vacationRingClass,
+                        cellInteractiveCls
+                      );
 
                       return (
                         <Tooltip key={cell.iso}>
                           <TooltipTrigger asChild>
-                            <div
-                              className={cn(
-                                "min-h-[1.75rem] sm:min-h-[2rem] flex items-center justify-center rounded-sm tabular-nums cursor-default border",
-                                cls
-                              )}
-                            >
-                              {cell.day}
-                            </div>
+                            {onVacationDayClick ? (
+                              <button
+                                type="button"
+                                className={cellClassName}
+                                onClick={
+                                  canVac ? () => onVacationDayClick(cell.iso) : undefined
+                                }
+                                disabled={!canVac}
+                              >
+                                {cell.day}
+                              </button>
+                            ) : (
+                              <div className={cellClassName}>{cell.day}</div>
+                            )}
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-xs">
                             <p className="text-xs whitespace-pre-line">{tooltipLines.join("\n")}</p>

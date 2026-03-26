@@ -7,8 +7,7 @@ import {
   COMPANY_WORKER_EMPLOYMENT_LABELS,
   AUTONOMO_VIA_LABELS,
 } from "@/types/companyWorkers";
-import { WORK_CALENDAR_SCOPES } from "@/types/workCalendars";
-import type { WorkCalendarScope } from "@/types/workCalendars";
+import type { WorkCalendarSiteRecord } from "@/types/workCalendars";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Dialog,
@@ -49,8 +48,6 @@ const employmentEnum = z.enum([
 ]);
 const autonomoViaEnum = z.enum(["CUENTA_PROPIA", "EMPRESA"]);
 
-const workCalendarScopeEnum = z.enum(["BARCELONA", "MADRID", "ARRASATE_MONDRAGON"]);
-
 const NONE_VALUE = "__none__";
 
 const schema = z
@@ -62,7 +59,8 @@ const schema = z
     mobile: z.string(),
     postalAddress: z.string(),
     city: z.string(),
-    workCalendarScope: workCalendarScopeEnum,
+    workCalendarSiteId: z.string().uuid(),
+    vacationDays: z.coerce.number().int().min(0).max(365),
     employmentType: employmentEnum,
     autonomoVia: autonomoViaEnum.optional().nullable(),
     providerId: z.string().optional(),
@@ -107,6 +105,8 @@ type Props = {
   initial?: CompanyWorkerRecord | null;
   /** Proveedores activos para subcontratado / autónomo por empresa */
   providerOptions: { id: string; label: string }[];
+  /** Sedes laborales (calendarios); debe estar cargado antes de abrir el diálogo. */
+  calendarSites: WorkCalendarSiteRecord[];
   onSubmit: (values: WorkerFormValues) => void | Promise<void>;
 };
 
@@ -116,9 +116,15 @@ export function WorkerFormDialog({
   mode,
   initial,
   providerOptions,
+  calendarSites,
   onSubmit,
 }: Props) {
   const { t } = useLanguage();
+  const defaultSiteId =
+    calendarSites.find((s) => s.slug === "BARCELONA")?.id ?? calendarSites[0]?.id ?? "";
+  const defaultVacation =
+    calendarSites.find((s) => s.id === defaultSiteId)?.vacationDaysDefault ?? 22;
+
   const form = useForm<WorkerFormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -129,7 +135,8 @@ export function WorkerFormDialog({
       mobile: "",
       postalAddress: "",
       city: "",
-      workCalendarScope: "BARCELONA",
+      workCalendarSiteId: defaultSiteId,
+      vacationDays: defaultVacation,
       employmentType: "FIJO",
       autonomoVia: null,
       providerId: "",
@@ -164,7 +171,8 @@ export function WorkerFormDialog({
         mobile: initial.mobile,
         postalAddress: initial.postalAddress,
         city: initial.city,
-        workCalendarScope: initial.workCalendarScope,
+        workCalendarSiteId: initial.workCalendarSiteId,
+        vacationDays: initial.vacationDays,
         employmentType: initial.employmentType,
         autonomoVia: initial.autonomoVia,
         providerId: initial.providerId ?? "",
@@ -179,14 +187,15 @@ export function WorkerFormDialog({
         mobile: "",
         postalAddress: "",
         city: "",
-        workCalendarScope: "BARCELONA",
+        workCalendarSiteId: defaultSiteId,
+        vacationDays: defaultVacation,
         employmentType: "FIJO",
         autonomoVia: null,
         providerId: "",
         active: true,
       });
     }
-  }, [open, mode, initial, form]);
+  }, [open, mode, initial, form, defaultSiteId, defaultVacation]);
 
   const title = useMemo(
     () => (mode === "create" ? "Nueva persona" : "Editar ficha de trabajador"),
@@ -304,25 +313,48 @@ export function WorkerFormDialog({
 
               <FormField
                 control={form.control}
-                name="workCalendarScope"
+                name="workCalendarSiteId"
                 render={({ field }) => (
                   <FormItem className="sm:col-span-2">
                     <FormLabel>{t("admin.workers.field_calendar")}</FormLabel>
                     <p className="text-sm text-muted-foreground mb-1.5">{t("admin.workers.field_calendar_desc")}</p>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={(id) => {
+                        field.onChange(id);
+                        const s = calendarSites.find((x) => x.id === id);
+                        if (s) form.setValue("vacationDays", s.vacationDaysDefault);
+                      }}
+                      value={field.value}
+                      disabled={calendarSites.length === 0}
+                    >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder={t("admin.workers.field_calendar")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {WORK_CALENDAR_SCOPES.map((s: WorkCalendarScope) => (
-                          <SelectItem key={s} value={s}>
-                            {t(`admin.workCalendars.scope_${s}`)}
+                        {calendarSites.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="vacationDays"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>{t("admin.workers.field_vacation_days")}</FormLabel>
+                    <p className="text-sm text-muted-foreground mb-1.5">{t("admin.workers.field_vacation_days_desc")}</p>
+                    <FormControl>
+                      <Input type="number" min={0} max={365} step={1} {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

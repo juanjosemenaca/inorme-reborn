@@ -1,12 +1,3 @@
-/** Sede / calendario laboral corporativo. */
-export type WorkCalendarScope = "BARCELONA" | "MADRID" | "ARRASATE_MONDRAGON";
-
-export const WORK_CALENDAR_SCOPES: WorkCalendarScope[] = [
-  "BARCELONA",
-  "MADRID",
-  "ARRASATE_MONDRAGON",
-];
-
 /** Ámbito del festivo respecto al calendario laboral. */
 export type WorkCalendarHolidayKind = "NACIONAL" | "AUTONOMICO" | "LOCAL";
 
@@ -16,11 +7,25 @@ export const WORK_CALENDAR_HOLIDAY_KINDS: WorkCalendarHolidayKind[] = [
   "LOCAL",
 ];
 
+/** Sede / calendario laboral (dinámico en BD; Barcelona, Madrid y Arrasate son sedes «de sistema»). */
+export interface WorkCalendarSiteRecord {
+  id: string;
+  /** Identificador estable (p. ej. BARCELONA o VALENCIA). */
+  slug: string;
+  name: string;
+  /** Días de vacaciones por defecto al asignar esta sede a un trabajador. */
+  vacationDaysDefault: number;
+  /** No se puede eliminar desde la app. */
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Festivo o día no laborable registrado para un año y sede. */
 export interface WorkCalendarHolidayRecord {
   id: string;
   calendarYear: number;
-  scope: WorkCalendarScope;
+  siteId: string;
   /** Fecha en formato ISO `YYYY-MM-DD`. */
   holidayDate: string;
   /** Nacional, autonómico o local. */
@@ -35,7 +40,7 @@ export interface WorkCalendarHolidayRecord {
 export interface WorkCalendarSummerRangeRecord {
   id: string;
   calendarYear: number;
-  scope: WorkCalendarScope;
+  siteId: string;
   /** Inicio del rango ISO `YYYY-MM-DD` (inclusive). */
   dateStart: string;
   /** Fin del rango ISO `YYYY-MM-DD` (inclusive). */

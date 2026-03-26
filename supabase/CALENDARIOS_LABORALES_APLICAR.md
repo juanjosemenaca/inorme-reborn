@@ -24,6 +24,7 @@ Eso aplica **todas** las migraciones pendientes, incluidas:
 - `20260206220000_work_calendar_summer_days_schema_repair.sql` (**reparación** si ves el error `column work_calendar_summer_days.date_start does not exist`: alinea el esquema con rangos `date_start` / `date_end`)
 - `20260206230000_company_workers_work_calendar_scope.sql` (columna `work_calendar_scope` en `company_workers`: sede / calendario asignado a cada trabajador)
 - `20260326120000_work_calendar_holiday_kind_repair.sql` (**reparación** si ves el error `Could not find the 'holiday_kind' column`: añade la columna de forma idempotente)
+- `20260327100000_work_calendar_sites_and_vacation_days.sql` (**sedes dinámicas** + `vacation_days` en trabajadores; sustituye el enum `work_calendar_scope` por `work_calendar_sites` y `site_id` en festivos / verano)
 
 ### Error: `Could not find the 'holiday_kind' column` (schema cache)
 

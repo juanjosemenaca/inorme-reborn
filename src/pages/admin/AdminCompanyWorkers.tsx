@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
 import { useProviders } from "@/hooks/useProviders";
+import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
 import {
   createCompanyWorker,
   updateCompanyWorker,
@@ -55,6 +56,7 @@ const AdminCompanyWorkers = () => {
   const queryClient = useQueryClient();
   const { data: workers = [], isLoading, isError, error } = useCompanyWorkers();
   const { data: providers = [] } = useProviders();
+  const { data: calendarSites = [] } = useWorkCalendarSites();
   const { toast } = useToast();
   const { t } = useLanguage();
   const [query, setQuery] = useState("");
@@ -79,6 +81,12 @@ const AdminCompanyWorkers = () => {
     [providers]
   );
 
+  const siteNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of calendarSites) m.set(s.id, s.name);
+    return m;
+  }, [calendarSites]);
+
   const filtered = useMemo(() => {
     let list = workers;
     if (employmentFilter !== "all") list = list.filter((w) => w.employmentType === employmentFilter);
@@ -99,13 +107,13 @@ const AdminCompanyWorkers = () => {
         w.email,
         w.city,
         provLabel ?? "",
-        t(`admin.workCalendars.scope_${w.workCalendarScope}`),
+        siteNameById.get(w.workCalendarSiteId) ?? "",
       ]
         .join(" ")
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [workers, query, providers, employmentFilter, activeFilter, providerFilter, t]);
+  }, [workers, query, providers, employmentFilter, activeFilter, providerFilter, siteNameById]);
 
   const sorted = useMemo(() => {
     if (!sort) return filtered;
@@ -120,13 +128,13 @@ const AdminCompanyWorkers = () => {
       city: (w) => w.city,
       employmentType: (w) => t(`admin.workers.emp.${w.employmentType}`),
       provider: (w) => provName(w),
-      calendar: (w) => t(`admin.workCalendars.scope_${w.workCalendarScope}`),
+      calendar: (w) => siteNameById.get(w.workCalendarSiteId) ?? "",
       active: (w) => w.active,
     };
     const get = getters[sort.key];
     if (!get) return filtered;
     return sortRows(filtered, sort.dir, get);
-  }, [filtered, sort, providers, t]);
+  }, [filtered, sort, providers, t, siteNameById]);
 
   const handleSort = (key: string) => {
     setSort((s) => toggleColumnSort(s, key));
@@ -157,7 +165,8 @@ const AdminCompanyWorkers = () => {
         employmentType: values.employmentType,
         providerId: values.providerId?.trim() || null,
         autonomoVia: values.employmentType === "AUTONOMO" ? values.autonomoVia ?? null : null,
-        workCalendarScope: values.workCalendarScope,
+        workCalendarSiteId: values.workCalendarSiteId,
+        vacationDays: values.vacationDays,
         active: values.active,
       };
 
@@ -170,6 +179,7 @@ const AdminCompanyWorkers = () => {
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
       await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
+      await queryClient.invalidateQueries({ queryKey: ["adminVacationSummaries"] });
       setDialogOpen(false);
     } catch (e) {
       toast({
@@ -421,7 +431,7 @@ const AdminCompanyWorkers = () => {
                       {providerLabel(w)}
                     </TableCell>
                     <TableCell className="text-sm whitespace-nowrap">
-                      {t(`admin.workCalendars.scope_${w.workCalendarScope}`)}
+                      {siteNameById.get(w.workCalendarSiteId) ?? "—"}
                     </TableCell>
                     <TableCell>
                       {w.active ? (
@@ -466,6 +476,7 @@ const AdminCompanyWorkers = () => {
         mode={dialogMode}
         initial={editing}
         providerOptions={providerOptions}
+        calendarSites={calendarSites}
         onSubmit={handleFormSubmit}
       />
 

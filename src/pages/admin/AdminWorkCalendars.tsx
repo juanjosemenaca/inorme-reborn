@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
   Loader2,
@@ -59,6 +59,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useWorkCalendarHolidays } from "@/hooks/useWorkCalendarHolidays";
 import { useWorkCalendarSummerDays } from "@/hooks/useWorkCalendarSummerDays";
+import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
 import {
   bulkImportWorkCalendarHolidays,
   bulkImportWorkCalendarSummerRanges,
@@ -71,14 +72,19 @@ import {
   updateWorkCalendarHoliday,
   updateWorkCalendarSummerRange,
 } from "@/api/workCalendarsApi";
+import {
+  createWorkCalendarSiteFromBarcelona,
+  deleteWorkCalendarSite,
+  updateWorkCalendarSite,
+} from "@/api/workCalendarSitesApi";
 import { queryKeys } from "@/lib/queryKeys";
 import type {
   WorkCalendarHolidayKind,
   WorkCalendarHolidayRecord,
-  WorkCalendarScope,
+  WorkCalendarSiteRecord,
   WorkCalendarSummerRangeRecord,
 } from "@/types/workCalendars";
-import { WORK_CALENDAR_HOLIDAY_KINDS, WORK_CALENDAR_SCOPES } from "@/types/workCalendars";
+import { WORK_CALENDAR_HOLIDAY_KINDS } from "@/types/workCalendars";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errorMessage";
@@ -113,35 +119,41 @@ const AdminWorkCalendars = () => {
   const { toast } = useToast();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
-  const [scope, setScope] = useState<WorkCalendarScope>("BARCELONA");
+  const [selectedSiteId, setSelectedSiteId] = useState("");
+  const { data: sites = [], isLoading: sitesLoading } = useWorkCalendarSites();
 
   const { data: holidays = [], isLoading: holidaysLoading, isError: holidaysError, error: holidaysErr } =
     useWorkCalendarHolidays(year);
   const { data: summerDays = [], isLoading: summerLoading, isError: summerError, error: summerErr } =
     useWorkCalendarSummerDays(year);
 
-  const isLoading = holidaysLoading || summerLoading;
+  useEffect(() => {
+    if (sites.length === 0) return;
+    if (!selectedSiteId || !sites.some((s) => s.id === selectedSiteId)) {
+      setSelectedSiteId(sites[0].id);
+    }
+  }, [sites, selectedSiteId]);
+
+  const isLoading = sitesLoading || holidaysLoading || summerLoading;
   const isError = holidaysError || summerError;
   const error = holidaysErr ?? summerErr;
 
-  const byScope = useMemo(() => {
-    const m = new Map<WorkCalendarScope, WorkCalendarHolidayRecord[]>();
-    for (const s of WORK_CALENDAR_SCOPES) m.set(s, []);
+  const bySite = useMemo(() => {
+    const m = new Map<string, WorkCalendarHolidayRecord[]>();
     for (const h of holidays) {
-      const list = m.get(h.scope) ?? [];
+      const list = m.get(h.siteId) ?? [];
       list.push(h);
-      m.set(h.scope, list);
+      m.set(h.siteId, list);
     }
     return m;
   }, [holidays]);
 
-  const byScopeSummer = useMemo(() => {
-    const m = new Map<WorkCalendarScope, WorkCalendarSummerRangeRecord[]>();
-    for (const s of WORK_CALENDAR_SCOPES) m.set(s, []);
+  const bySiteSummer = useMemo(() => {
+    const m = new Map<string, WorkCalendarSummerRangeRecord[]>();
     for (const d of summerDays) {
-      const list = m.get(d.scope) ?? [];
+      const list = m.get(d.siteId) ?? [];
       list.push(d);
-      m.set(d.scope, list);
+      m.set(d.siteId, list);
     }
     return m;
   }, [summerDays]);
@@ -158,6 +170,14 @@ const AdminWorkCalendars = () => {
   const [summerDeleteTarget, setSummerDeleteTarget] = useState<WorkCalendarSummerRangeRecord | null>(null);
   const [summerImportOpen, setSummerImportOpen] = useState(false);
   const [summerImportText, setSummerImportText] = useState("");
+  const [newSiteOpen, setNewSiteOpen] = useState(false);
+  const [newSiteName, setNewSiteName] = useState("");
+  const [newSiteVacation, setNewSiteVacation] = useState(22);
+  const [editSiteOpen, setEditSiteOpen] = useState(false);
+  const [editSiteTarget, setEditSiteTarget] = useState<WorkCalendarSiteRecord | null>(null);
+  const [editSiteName, setEditSiteName] = useState("");
+  const [editSiteVacation, setEditSiteVacation] = useState(22);
+  const [deleteSiteTarget, setDeleteSiteTarget] = useState<WorkCalendarSiteRecord | null>(null);
 
   const form = useForm<HolidayFormValues>({
     resolver: zodResolver(holidayFormSchema),
@@ -169,7 +189,7 @@ const AdminWorkCalendars = () => {
     defaultValues: { dateStart: "", dateEnd: "", label: "" },
   });
 
-  const scopeLabel = (s: WorkCalendarScope) => t(`admin.workCalendars.scope_${s}`);
+  const siteName = (id: string) => sites.find((s) => s.id === id)?.name ?? id;
 
   const kindLabel = (k: WorkCalendarHolidayKind) => t(`admin.workCalendars.kind_${k}`);
 
@@ -184,8 +204,8 @@ const AdminWorkCalendars = () => {
     }
   };
 
-  const openCreate = (s: WorkCalendarScope) => {
-    setScope(s);
+  const openCreate = (siteId: string) => {
+    setSelectedSiteId(siteId);
     setDialogMode("create");
     setEditing(null);
     form.reset({ holidayDate: `${year}-01-01`, holidayKind: "NACIONAL", label: "" });
@@ -193,7 +213,7 @@ const AdminWorkCalendars = () => {
   };
 
   const openEdit = (h: WorkCalendarHolidayRecord) => {
-    setScope(h.scope);
+    setSelectedSiteId(h.siteId);
     setDialogMode("edit");
     setEditing(h);
     form.reset({ holidayDate: h.holidayDate, holidayKind: h.holidayKind, label: h.label });
@@ -205,7 +225,7 @@ const AdminWorkCalendars = () => {
       if (dialogMode === "create") {
         await createWorkCalendarHoliday({
           calendarYear: year,
-          scope,
+          siteId: selectedSiteId,
           holidayDate: values.holidayDate,
           holidayKind: values.holidayKind,
           label: values.label ?? "",
@@ -259,7 +279,7 @@ const AdminWorkCalendars = () => {
       return;
     }
     try {
-      const { inserted, skipped } = await bulkImportWorkCalendarHolidays(year, scope, rows);
+      const { inserted, skipped } = await bulkImportWorkCalendarHolidays(year, selectedSiteId, rows);
       await queryClient.invalidateQueries({ queryKey: queryKeys.workCalendarHolidays(year) });
       toast({
         title: t("admin.workCalendars.import_done"),
@@ -276,8 +296,8 @@ const AdminWorkCalendars = () => {
     }
   };
 
-  const openCreateSummer = (s: WorkCalendarScope) => {
-    setScope(s);
+  const openCreateSummer = (siteId: string) => {
+    setSelectedSiteId(siteId);
     setSummerMode("create");
     setEditingSummer(null);
     summerForm.reset({ dateStart: `${year}-07-01`, dateEnd: `${year}-08-31`, label: "" });
@@ -285,7 +305,7 @@ const AdminWorkCalendars = () => {
   };
 
   const openEditSummer = (row: WorkCalendarSummerRangeRecord) => {
-    setScope(row.scope);
+    setSelectedSiteId(row.siteId);
     setSummerMode("edit");
     setEditingSummer(row);
     summerForm.reset({ dateStart: row.dateStart, dateEnd: row.dateEnd, label: row.label });
@@ -297,7 +317,7 @@ const AdminWorkCalendars = () => {
       if (summerMode === "create") {
         await createWorkCalendarSummerRange({
           calendarYear: year,
-          scope,
+          siteId: selectedSiteId,
           dateStart: values.dateStart,
           dateEnd: values.dateEnd,
           label: values.label ?? "",
@@ -349,7 +369,7 @@ const AdminWorkCalendars = () => {
       return;
     }
     try {
-      const { inserted, skipped } = await bulkImportWorkCalendarSummerRanges(year, scope, ranges);
+      const { inserted, skipped } = await bulkImportWorkCalendarSummerRanges(year, selectedSiteId, ranges);
       await queryClient.invalidateQueries({ queryKey: queryKeys.workCalendarSummerDays(year) });
       toast({
         title: t("admin.workCalendars.import_done"),
@@ -365,6 +385,71 @@ const AdminWorkCalendars = () => {
       });
     }
   };
+
+  const createSiteMutation = useMutation({
+    mutationFn: () =>
+      createWorkCalendarSiteFromBarcelona({
+        name: newSiteName,
+        vacationDaysDefault: newSiteVacation,
+      }),
+    onSuccess: async (created) => {
+      toast({ title: t("admin.workCalendars.sites_toast_created") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workCalendarSites });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workCalendarHolidays(year) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workCalendarSummerDays(year) });
+      setSelectedSiteId(created.id);
+      setNewSiteOpen(false);
+      setNewSiteName("");
+      setNewSiteVacation(22);
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: getErrorMessage(e),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateSiteMutation = useMutation({
+    mutationFn: async () => {
+      if (!editSiteTarget) throw new Error("Sede no seleccionada.");
+      return updateWorkCalendarSite(editSiteTarget.id, {
+        name: editSiteName,
+        vacationDaysDefault: editSiteVacation,
+      });
+    },
+    onSuccess: async () => {
+      toast({ title: t("admin.workCalendars.sites_toast_updated") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workCalendarSites });
+      setEditSiteOpen(false);
+      setEditSiteTarget(null);
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: getErrorMessage(e),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteSiteMutation = useMutation({
+    mutationFn: (id: string) => deleteWorkCalendarSite(id),
+    onSuccess: async () => {
+      toast({ title: t("admin.workCalendars.sites_toast_deleted") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workCalendarSites });
+      setDeleteSiteTarget(null);
+      setSelectedSiteId("");
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: getErrorMessage(e),
+        variant: "destructive",
+      });
+    },
+  });
 
   if (isLoading) {
     return (
@@ -410,18 +495,65 @@ const AdminWorkCalendars = () => {
         </div>
       </div>
 
-      <Tabs value={scope} onValueChange={(v) => setScope(v as WorkCalendarScope)} className="space-y-6">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">{t("admin.workCalendars.sites_card_title")}</CardTitle>
+          <CardDescription>{t("admin.workCalendars.sites_card_desc")}</CardDescription>
+        </CardHeader>
+        <div className="px-6 pb-4 flex flex-wrap gap-2 items-center">
+          <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={() => setNewSiteOpen(true)}>
+            <Plus className="h-4 w-4" />
+            {t("admin.workCalendars.sites_new")}
+          </Button>
+          {selectedSiteId && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const st = sites.find((x) => x.id === selectedSiteId);
+                  if (st) {
+                    setEditSiteTarget(st);
+                    setEditSiteName(st.name);
+                    setEditSiteVacation(st.vacationDaysDefault);
+                    setEditSiteOpen(true);
+                  }
+                }}
+              >
+                {t("admin.workCalendars.sites_edit")}
+              </Button>
+              {sites.find((x) => x.id === selectedSiteId) && !sites.find((x) => x.id === selectedSiteId)?.isSystem && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive"
+                  onClick={() => {
+                    const st = sites.find((x) => x.id === selectedSiteId);
+                    if (st) setDeleteSiteTarget(st);
+                  }}
+                >
+                  {t("admin.workCalendars.sites_delete")}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </Card>
+
+      <Tabs value={selectedSiteId} onValueChange={setSelectedSiteId} className="space-y-6">
         <TabsList className="flex flex-wrap h-auto gap-1 w-full sm:w-auto justify-start">
-          {WORK_CALENDAR_SCOPES.map((s) => (
-            <TabsTrigger key={s} value={s} className="text-xs sm:text-sm">
-              {scopeLabel(s)}
+          {sites.map((s) => (
+            <TabsTrigger key={s.id} value={s.id} className="text-xs sm:text-sm">
+              {s.name}
             </TabsTrigger>
           ))}
         </TabsList>
 
-        {WORK_CALENDAR_SCOPES.map((s) => {
-          const rows = byScope.get(s) ?? [];
-          const summerRows = byScopeSummer.get(s) ?? [];
+        {sites.map((s) => {
+          const rows = bySite.get(s.id) ?? [];
+          const summerRows = bySiteSummer.get(s.id) ?? [];
           const { isoSet: summerIsoSet, labelByIso: summerLabelByIso } = expandSummerRangesToWeekdayIsoSet(
             summerRows.map((r) => ({
               dateStart: r.dateStart,
@@ -430,7 +562,7 @@ const AdminWorkCalendars = () => {
             }))
           );
           return (
-            <TabsContent key={s} value={s} className="mt-0 space-y-6">
+            <TabsContent key={s.id} value={s.id} className="mt-0 space-y-6">
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{t("admin.workCalendars.card_title")}</CardTitle>
@@ -438,7 +570,7 @@ const AdminWorkCalendars = () => {
                 </CardHeader>
                 <div className="px-6 pb-6 space-y-4">
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" className="gap-1.5" onClick={() => openCreate(s)}>
+                    <Button size="sm" className="gap-1.5" onClick={() => openCreate(s.id)}>
                       <Plus className="h-4 w-4" />
                       {t("admin.workCalendars.add_day")}
                     </Button>
@@ -503,7 +635,7 @@ const AdminWorkCalendars = () => {
                 </CardHeader>
                 <div className="px-6 pb-6 space-y-4">
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" className="gap-1.5" variant="secondary" onClick={() => openCreateSummer(s)}>
+                    <Button size="sm" className="gap-1.5" variant="secondary" onClick={() => openCreateSummer(s.id)}>
                       <Plus className="h-4 w-4" />
                       {t("admin.workCalendars.summer_add")}
                     </Button>
@@ -603,7 +735,7 @@ const AdminWorkCalendars = () => {
               {dialogMode === "create" ? t("admin.workCalendars.dialog_create") : t("admin.workCalendars.dialog_edit")}
             </DialogTitle>
             <DialogDescription>
-              {scopeLabel(scope)} · {year}
+              {siteName(selectedSiteId)} · {year}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -707,7 +839,7 @@ const AdminWorkCalendars = () => {
                 : t("admin.workCalendars.summer_dialog_edit")}
             </DialogTitle>
             <DialogDescription>
-              {scopeLabel(scope)} · {year}
+              {siteName(selectedSiteId)} · {year}
             </DialogDescription>
           </DialogHeader>
           <Form {...summerForm}>
@@ -795,6 +927,103 @@ const AdminWorkCalendars = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={newSiteOpen} onOpenChange={setNewSiteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("admin.workCalendars.sites_new_title")}</DialogTitle>
+            <DialogDescription>{t("admin.workCalendars.sites_new_desc")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">{t("admin.workCalendars.sites_new_name")}</label>
+              <Input value={newSiteName} onChange={(e) => setNewSiteName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">{t("admin.workCalendars.sites_new_vacation")}</label>
+              <Input
+                type="number"
+                min={0}
+                max={365}
+                value={newSiteVacation}
+                onChange={(e) => setNewSiteVacation(Number(e.target.value))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setNewSiteOpen(false)}>
+              {t("admin.common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={!newSiteName.trim() || createSiteMutation.isPending}
+              onClick={() => createSiteMutation.mutate()}
+            >
+              {createSiteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t("admin.workCalendars.sites_new_submit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editSiteOpen} onOpenChange={setEditSiteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("admin.workCalendars.sites_edit_title")}</DialogTitle>
+            <DialogDescription>{t("admin.workCalendars.sites_edit_desc")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">{t("admin.workCalendars.sites_new_name")}</label>
+              <Input value={editSiteName} onChange={(e) => setEditSiteName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">{t("admin.workCalendars.sites_edit_vacation_default")}</label>
+              <Input
+                type="number"
+                min={0}
+                max={365}
+                value={editSiteVacation}
+                onChange={(e) => setEditSiteVacation(Number(e.target.value))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditSiteOpen(false)}>
+              {t("admin.common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={!editSiteName.trim() || updateSiteMutation.isPending}
+              onClick={() => {
+                if (!editSiteTarget) return;
+                updateSiteMutation.mutate();
+              }}
+            >
+              {updateSiteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t("admin.common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteSiteTarget} onOpenChange={() => setDeleteSiteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.workCalendars.sites_delete_title")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("admin.workCalendars.sites_delete_desc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteSiteTarget && deleteSiteMutation.mutate(deleteSiteTarget.id)}
+            >
+              {t("admin.common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>

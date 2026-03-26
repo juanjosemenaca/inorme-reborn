@@ -20,8 +20,12 @@ import AdminProjects from "./pages/admin/AdminProjects";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminCompanyWorkers from "./pages/admin/AdminCompanyWorkers";
 import AdminWorkCalendars from "./pages/admin/AdminWorkCalendars";
+import AdminVacations from "./pages/admin/AdminVacations";
+import AdminVacationRequests from "./pages/admin/AdminVacationRequests";
 import AdminChangePassword from "./pages/admin/AdminChangePassword";
 import WorkerMyProfile from "./pages/admin/WorkerMyProfile";
+import WorkerMyCalendar from "./pages/admin/WorkerMyCalendar";
+import WorkerMessages from "./pages/admin/WorkerMessages";
 import AdminWorkerProfileRequests from "./pages/admin/AdminWorkerProfileRequests";
 
 const queryClient = new QueryClient();
@@ -53,6 +57,22 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["WORKER"]}>
                       <WorkerMyProfile />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="mi-calendario"
+                  element={
+                    <RoleRoute allowedRoles={["WORKER"]}>
+                      <WorkerMyCalendar />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="mensajes"
+                  element={
+                    <RoleRoute allowedRoles={["WORKER"]}>
+                      <WorkerMessages />
                     </RoleRoute>
                   }
                 />
@@ -118,6 +138,22 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
                       <AdminWorkCalendars />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="vacaciones"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminVacations />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="solicitudes-vacaciones"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminVacationRequests />
                     </RoleRoute>
                   }
                 />

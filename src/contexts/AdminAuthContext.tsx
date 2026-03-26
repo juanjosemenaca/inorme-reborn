@@ -37,6 +37,13 @@ type AdminAuthContextValue = {
 
 const AdminAuthContext = createContext<AdminAuthContextValue | null>(null);
 
+function normalizeUserRole(value: unknown): UserRole | null {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (raw === "ADMIN") return "ADMIN";
+  if (raw === "WORKER") return "WORKER";
+  return null;
+}
+
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const { t } = useLanguage();
   const [user, setUser] = useState<BackofficeSession | null>(null);
@@ -209,7 +216,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, [loadSessionFromAuth]);
 
   const value = useMemo<AdminAuthContextValue>(() => {
-    const role = user?.role ?? null;
+    const role = normalizeUserRole(user?.role);
     return {
       user,
       isAuthenticated: user !== null,

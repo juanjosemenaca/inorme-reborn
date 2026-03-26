@@ -43,8 +43,8 @@ export interface CompanyWorkerRow {
   employment_type: DbEmploymentType;
   provider_id: string | null;
   autonomo_via: DbAutonomoVia | null;
-  /** Calendario laboral por sede; opcional en clientes antiguos hasta aplicar migración. */
-  work_calendar_scope?: "BARCELONA" | "MADRID" | "ARRASATE_MONDRAGON";
+  work_calendar_site_id: string;
+  vacation_days: number;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -126,6 +126,7 @@ export interface ProjectMemberRow {
 }
 
 export type DbWorkerProfileChangeStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type DbWorkerVacationChangeStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 export interface WorkerProfileChangeRequestRow {
   id: string;
@@ -135,6 +136,22 @@ export interface WorkerProfileChangeRequestRow {
   worker_message: string;
   suggested: Record<string, unknown>;
   previous_snapshot: Record<string, unknown> | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkerVacationChangeRequestRow {
+  id: string;
+  company_worker_id: string;
+  backoffice_user_id: string;
+  calendar_year: number;
+  status: DbWorkerVacationChangeStatus;
+  worker_message: string;
+  proposed_dates: unknown;
+  previous_approved_dates: unknown;
   reviewed_by: string | null;
   reviewed_at: string | null;
   rejection_reason: string | null;
@@ -162,6 +179,17 @@ export interface BackofficeUserRow {
   password_changed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface BackofficeMessageRow {
+  id: string;
+  recipient_backoffice_user_id: string;
+  category: string;
+  title: string;
+  body: string;
+  payload: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
 }
 
 /** Payload para insertar proveedor (sin timestamps si los pone el servidor). */
@@ -199,14 +227,22 @@ export type ProjectMemberInsert = Omit<ProjectMemberRow, "id" | "created_at"> & 
   id?: string;
 };
 
-export type DbWorkCalendarScope = "BARCELONA" | "MADRID" | "ARRASATE_MONDRAGON";
-
 export type DbWorkCalendarHolidayKind = "NACIONAL" | "AUTONOMICO" | "LOCAL";
+
+export interface WorkCalendarSiteRow {
+  id: string;
+  slug: string;
+  name: string;
+  vacation_days_default: number;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface WorkCalendarHolidayRow {
   id: string;
   calendar_year: number;
-  scope: DbWorkCalendarScope;
+  site_id: string;
   holiday_date: string;
   holiday_kind: DbWorkCalendarHolidayKind;
   label: string;
@@ -217,12 +253,28 @@ export interface WorkCalendarHolidayRow {
 export interface WorkCalendarSummerRangeRow {
   id: string;
   calendar_year: number;
-  scope: DbWorkCalendarScope;
+  site_id: string;
   date_start: string;
   date_end: string;
   label: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface CompanyWorkerVacationDayRow {
+  id: string;
+  company_worker_id: string;
+  vacation_date: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyWorkerVacationDayNotificationRow {
+  id: string;
+  company_worker_id: string;
+  calendar_year: number;
+  vacation_date_added: string;
+  created_at: string;
 }
 
 /** Perfil backoffice (sin contraseña; Auth en `auth.users`). */

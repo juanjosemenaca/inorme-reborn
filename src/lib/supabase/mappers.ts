@@ -14,6 +14,7 @@ import type {
   ProjectMemberRow,
   ProjectRow,
   WorkCalendarHolidayRow,
+  WorkCalendarSiteRow,
   WorkCalendarSummerRangeRow,
   ProviderContactPersonInsert,
   ProviderContactPersonRow,
@@ -33,7 +34,7 @@ import type {
 import type {
   WorkCalendarHolidayKind,
   WorkCalendarHolidayRecord,
-  WorkCalendarScope,
+  WorkCalendarSiteRecord,
   WorkCalendarSummerRangeRecord,
 } from "@/types/workCalendars";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
@@ -78,11 +79,23 @@ export function projectMemberRowToDomain(row: ProjectMemberRow): ProjectMemberRe
   };
 }
 
+export function workCalendarSiteRowToDomain(row: WorkCalendarSiteRow): WorkCalendarSiteRecord {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    vacationDaysDefault: row.vacation_days_default,
+    isSystem: row.is_system,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export function workCalendarHolidayRowToDomain(row: WorkCalendarHolidayRow): WorkCalendarHolidayRecord {
   return {
     id: row.id,
     calendarYear: row.calendar_year,
-    scope: row.scope as WorkCalendarScope,
+    siteId: row.site_id,
     holidayDate: isoDateOnlyFromDb(row.holiday_date),
     holidayKind: (row.holiday_kind ?? "NACIONAL") as WorkCalendarHolidayKind,
     label: row.label,
@@ -95,7 +108,7 @@ export function workCalendarSummerRangeRowToDomain(row: WorkCalendarSummerRangeR
   return {
     id: row.id,
     calendarYear: row.calendar_year,
-    scope: row.scope as WorkCalendarScope,
+    siteId: row.site_id,
     dateStart: isoDateOnlyFromDb(row.date_start),
     dateEnd: isoDateOnlyFromDb(row.date_end),
     label: row.label,
@@ -275,7 +288,8 @@ export function companyWorkerRowToDomain(row: CompanyWorkerRow): CompanyWorkerRe
     employmentType: row.employment_type as CompanyWorkerEmploymentType,
     providerId: row.provider_id,
     autonomoVia: row.autonomo_via as AutonomoVia | null,
-    workCalendarScope: (row.work_calendar_scope ?? "BARCELONA") as WorkCalendarScope,
+    workCalendarSiteId: row.work_calendar_site_id,
+    vacationDays: row.vacation_days,
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -297,7 +311,8 @@ export function companyWorkerRecordToRowInsert(
     employment_type: record.employmentType,
     provider_id: record.providerId,
     autonomo_via: record.autonomoVia,
-    work_calendar_scope: record.workCalendarScope,
+    work_calendar_site_id: record.workCalendarSiteId,
+    vacation_days: record.vacationDays,
     active: record.active,
   };
 }
@@ -309,6 +324,11 @@ export function companyWorkerRecordToRowInsert(
 /** Valor de `password` en dominio cuando el usuario viene solo de Supabase (Auth gestiona credenciales). */
 export const BACKOFFICE_PASSWORD_FROM_DB = "" as const;
 
+function normalizeUserRole(value: unknown): UserRole {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return raw === "ADMIN" ? "ADMIN" : "WORKER";
+}
+
 export function backofficeUserRowToDomain(
   row: BackofficeUserRow,
   options?: { password?: string }
@@ -317,7 +337,7 @@ export function backofficeUserRowToDomain(
     id: row.id,
     email: row.email,
     password: options?.password ?? BACKOFFICE_PASSWORD_FROM_DB,
-    role: row.role as UserRole,
+    role: normalizeUserRole(row.role),
     companyWorkerId: row.company_worker_id,
     firstName: row.first_name,
     lastName: row.last_name,

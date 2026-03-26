@@ -24,7 +24,7 @@ import {
   useHasPendingWorkerRequest,
   useWorkerProfileChangeHistory,
 } from "@/hooks/useWorkerProfileChangeRequests";
-import { updateMyWorkCalendarScope } from "@/api/companyWorkersApi";
+import { updateMyWorkCalendarSite } from "@/api/companyWorkersApi";
 import { submitWorkerProfileChangeRequest } from "@/api/workerProfileChangeRequestsApi";
 import {
   Select,
@@ -36,8 +36,7 @@ import {
 import { queryKeys } from "@/lib/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import type { WorkerPersonalDataSuggestion } from "@/types/workerProfileChangeRequests";
-import { WORK_CALENDAR_SCOPES } from "@/types/workCalendars";
-import type { WorkCalendarScope } from "@/types/workCalendars";
+import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
 
 type FormValues = {
   firstName: string;
@@ -56,6 +55,7 @@ const WorkerMyProfile = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: workers = [], isLoading: loadingWorkers } = useCompanyWorkers();
+  const { data: calendarSites = [] } = useWorkCalendarSites();
   const workerId = user?.companyWorkerId ?? null;
   const worker = useMemo(
     () => (workerId ? workers.find((w) => w.id === workerId) : undefined),
@@ -64,13 +64,13 @@ const WorkerMyProfile = () => {
   const { data: hasPending } = useHasPendingWorkerRequest(workerId);
   const { data: history = [] } = useWorkerProfileChangeHistory(workerId);
 
-  const [calendarScope, setCalendarScope] = useState<WorkCalendarScope>("BARCELONA");
+  const [calendarSiteId, setCalendarSiteId] = useState("");
   useEffect(() => {
-    if (worker) setCalendarScope(worker.workCalendarScope);
-  }, [worker?.id, worker?.workCalendarScope]);
+    if (worker) setCalendarSiteId(worker.workCalendarSiteId);
+  }, [worker]);
 
   const calendarMutation = useMutation({
-    mutationFn: (scope: WorkCalendarScope) => updateMyWorkCalendarScope(workerId!, scope),
+    mutationFn: (siteId: string) => updateMyWorkCalendarSite(workerId!, siteId),
     onSuccess: async () => {
       toast({ title: t("admin.workerProfile.calendar_toast_saved") });
       await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
@@ -219,34 +219,41 @@ const WorkerMyProfile = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2 max-w-md">
-            <label className="text-sm font-medium leading-none" htmlFor="worker-calendar-scope">
+            <label className="text-sm font-medium leading-none" htmlFor="worker-calendar-site">
               {t("admin.workers.field_calendar")}
             </label>
             <Select
-              value={calendarScope}
-              onValueChange={(v) => setCalendarScope(v as WorkCalendarScope)}
-              disabled={calendarMutation.isPending}
+              value={calendarSiteId}
+              onValueChange={setCalendarSiteId}
+              disabled={calendarMutation.isPending || calendarSites.length === 0}
             >
-              <SelectTrigger id="worker-calendar-scope" className="w-full">
+              <SelectTrigger id="worker-calendar-site" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {WORK_CALENDAR_SCOPES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {t(`admin.workCalendars.scope_${s}`)}
+                {calendarSites.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1 max-w-md">
+            <p className="text-sm font-medium">{t("admin.workerProfile.vacation_days_readonly")}</p>
+            <p className="text-sm text-muted-foreground">
+              {worker ? worker.vacationDays : "—"}{" "}
+              <span className="text-xs">{t("admin.workerProfile.vacation_days_hint")}</span>
+            </p>
           </div>
           <Button
             type="button"
             variant="secondary"
             className="gap-2"
             disabled={
-              calendarMutation.isPending || !worker || calendarScope === worker.workCalendarScope
+              calendarMutation.isPending || !worker || calendarSiteId === worker.workCalendarSiteId
             }
-            onClick={() => calendarMutation.mutate(calendarScope)}
+            onClick={() => calendarMutation.mutate(calendarSiteId)}
           >
             {calendarMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
