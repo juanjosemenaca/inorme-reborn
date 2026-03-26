@@ -1,5 +1,6 @@
 import { requireSupabase } from "@/api/supabaseRequire";
 import { getErrorMessage } from "@/lib/errorMessage";
+import { parseIsoDateYmdCalendar } from "@/lib/isoDate";
 import { workCalendarHolidayRowToDomain, workCalendarSummerRangeRowToDomain } from "@/lib/supabase/mappers";
 import type { WorkCalendarHolidayRow, WorkCalendarSummerRangeRow } from "@/types/database";
 import type {
@@ -28,8 +29,8 @@ export async function createWorkCalendarHoliday(
   holiday: Omit<WorkCalendarHolidayRecord, "id" | "createdAt" | "updatedAt"> & { id?: string }
 ): Promise<WorkCalendarHolidayRecord> {
   const sb = requireSupabase();
-  const y = Number(holiday.holidayDate.slice(0, 4));
-  if (y !== holiday.calendarYear) {
+  const { iso: holidayDateIso, year: yFromDate } = parseIsoDateYmdCalendar(holiday.holidayDate);
+  if (yFromDate !== holiday.calendarYear) {
     throw new Error("La fecha debe pertenecer al año seleccionado.");
   }
   const { data: row, error } = await sb
@@ -37,7 +38,7 @@ export async function createWorkCalendarHoliday(
     .insert({
       calendar_year: holiday.calendarYear,
       scope: holiday.scope,
-      holiday_date: holiday.holidayDate,
+      holiday_date: holidayDateIso,
       holiday_kind: holiday.holidayKind,
       label: holiday.label.trim(),
     })
@@ -54,8 +55,9 @@ export async function updateWorkCalendarHoliday(
   const sb = requireSupabase();
   const update: Record<string, string | number> = {};
   if (patch.holidayDate !== undefined) {
-    update.holiday_date = patch.holidayDate;
-    update.calendar_year = parseInt(patch.holidayDate.slice(0, 4), 10);
+    const { iso, year } = parseIsoDateYmdCalendar(patch.holidayDate);
+    update.holiday_date = iso;
+    update.calendar_year = year;
   }
   if (patch.label !== undefined) update.label = patch.label.trim();
   if (patch.holidayKind !== undefined) update.holiday_kind = patch.holidayKind;

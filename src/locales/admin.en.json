@@ -64,6 +64,8 @@
     "nav_users_bulk": "Bulk user signup",
     "nav_my_profile": "My profile",
     "nav_profile_requests": "Profile requests",
+    "nav_pending_profile_requests_aria": "Profile requests: {{count}} pending, needs attention",
+    "nav_my_profile_pending_aria": "Your profile change request is awaiting review",
     "badge_admin": "Administrator",
     "badge_worker": "Worker"
   },
@@ -279,6 +281,7 @@
     "toast_created": "Holiday added",
     "toast_updated": "Holiday updated",
     "toast_deleted": "Holiday removed",
+    "error_duplicate_holiday": "A holiday already exists on that date for this site. Pick another date or remove the duplicate.",
     "delete_title": "Remove this day?",
     "delete_desc": "It will be removed from this site's work calendar.",
     "load_error": "Could not load calendars.",
@@ -495,7 +498,12 @@
     "status_pending": "Pending",
     "status_approved": "Approved",
     "status_rejected": "Rejected",
-    "reject_reason": "Reason"
+    "reject_reason": "Reason",
+    "calendar_title": "Work calendar",
+    "calendar_desc": "Assigned office (public holidays and summer hours). You can change it here when appropriate; the update is saved immediately.",
+    "calendar_save": "Save calendar",
+    "calendar_saving": "Saving…",
+    "calendar_toast_saved": "Work calendar updated."
   },
   "workerProfileRequests": {
     "title": "Staff profile change requests",

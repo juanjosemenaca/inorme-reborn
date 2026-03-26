@@ -86,7 +86,11 @@ import { WorkCalendarYearGrid } from "@/components/admin/WorkCalendarYearGrid";
 import { expandSummerRangesToWeekdayIsoSet } from "@/lib/workCalendarSummerRange";
 
 const holidayFormSchema = z.object({
-  holidayDate: z.string().min(1, "Fecha obligatoria"),
+  holidayDate: z
+    .string()
+    .trim()
+    .min(1, "Fecha obligatoria")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha no válido"),
   holidayKind: z.enum(["NACIONAL", "AUTONOMICO", "LOCAL"]),
   label: z.string().optional(),
 });
@@ -218,9 +222,11 @@ const AdminWorkCalendars = () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.workCalendarHolidays(year) });
       setDialogOpen(false);
     } catch (e) {
+      const raw = getErrorMessage(e);
+      const dup = /duplicate|unique|23505/i.test(raw);
       toast({
         title: t("admin.common.error"),
-        description: getErrorMessage(e),
+        description: dup ? t("admin.workCalendars.error_duplicate_holiday") : raw,
         variant: "destructive",
       });
     }

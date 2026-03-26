@@ -1,9 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Send } from "lucide-react";
+import { CalendarDays, Loader2, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,10 +24,20 @@ import {
   useHasPendingWorkerRequest,
   useWorkerProfileChangeHistory,
 } from "@/hooks/useWorkerProfileChangeRequests";
+import { updateMyWorkCalendarScope } from "@/api/companyWorkersApi";
 import { submitWorkerProfileChangeRequest } from "@/api/workerProfileChangeRequestsApi";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { queryKeys } from "@/lib/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import type { WorkerPersonalDataSuggestion } from "@/types/workerProfileChangeRequests";
+import { WORK_CALENDAR_SCOPES } from "@/types/workCalendars";
+import type { WorkCalendarScope } from "@/types/workCalendars";
 
 type FormValues = {
   firstName: string;
@@ -53,6 +63,26 @@ const WorkerMyProfile = () => {
   );
   const { data: hasPending } = useHasPendingWorkerRequest(workerId);
   const { data: history = [] } = useWorkerProfileChangeHistory(workerId);
+
+  const [calendarScope, setCalendarScope] = useState<WorkCalendarScope>("BARCELONA");
+  useEffect(() => {
+    if (worker) setCalendarScope(worker.workCalendarScope);
+  }, [worker?.id, worker?.workCalendarScope]);
+
+  const calendarMutation = useMutation({
+    mutationFn: (scope: WorkCalendarScope) => updateMyWorkCalendarScope(workerId!, scope),
+    onSuccess: async () => {
+      toast({ title: t("admin.workerProfile.calendar_toast_saved") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
 
   const schema = useMemo(
     () =>
@@ -178,6 +208,55 @@ const WorkerMyProfile = () => {
           </CardHeader>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 shrink-0" aria-hidden />
+            {t("admin.workerProfile.calendar_title")}
+          </CardTitle>
+          <CardDescription>{t("admin.workerProfile.calendar_desc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2 max-w-md">
+            <label className="text-sm font-medium leading-none" htmlFor="worker-calendar-scope">
+              {t("admin.workers.field_calendar")}
+            </label>
+            <Select
+              value={calendarScope}
+              onValueChange={(v) => setCalendarScope(v as WorkCalendarScope)}
+              disabled={calendarMutation.isPending}
+            >
+              <SelectTrigger id="worker-calendar-scope" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WORK_CALENDAR_SCOPES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {t(`admin.workCalendars.scope_${s}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="gap-2"
+            disabled={
+              calendarMutation.isPending || !worker || calendarScope === worker.workCalendarScope
+            }
+            onClick={() => calendarMutation.mutate(calendarScope)}
+          >
+            {calendarMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            {calendarMutation.isPending
+              ? t("admin.workerProfile.calendar_saving")
+              : t("admin.workerProfile.calendar_save")}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">

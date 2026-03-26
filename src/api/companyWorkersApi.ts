@@ -1,4 +1,5 @@
 import { requireSupabase } from "@/api/supabaseRequire";
+import { getProfileByAuthUserId } from "@/api/backofficeUsersApi";
 import { getProviderById } from "@/api/providersApi";
 import { companyWorkerRecordToRowInsert, companyWorkerRowToDomain } from "@/lib/supabase/mappers";
 import type { CompanyWorkerRow } from "@/types/database";
@@ -166,6 +167,26 @@ export async function updateCompanyWorker(
     .single();
   if (error) throw error;
   return companyWorkerRowToDomain(updated as CompanyWorkerRow);
+}
+
+/**
+ * Actualiza solo la sede / calendario laboral de la ficha vinculada al usuario autenticado.
+ * Rechaza si el `companyWorkerId` no coincide con el del perfil (no permite editar otras fichas).
+ */
+export async function updateMyWorkCalendarScope(
+  companyWorkerId: string,
+  workCalendarScope: WorkCalendarScope
+): Promise<CompanyWorkerRecord> {
+  const sb = requireSupabase();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) throw new Error("Sesión no válida.");
+  const profile = await getProfileByAuthUserId(user.id);
+  if (!profile?.companyWorkerId || profile.companyWorkerId !== companyWorkerId) {
+    throw new Error("No puedes modificar la ficha de otro trabajador.");
+  }
+  return updateCompanyWorker(companyWorkerId, { workCalendarScope });
 }
 
 export async function deleteCompanyWorker(id: string): Promise<void> {

@@ -64,6 +64,8 @@
     "nav_users_bulk": "Alta massiva usuaris",
     "nav_my_profile": "La meva fitxa",
     "nav_profile_requests": "Sol·licituds de fitxa",
+    "nav_pending_profile_requests_aria": "Sol·licituds de fitxa: {{count}} pendent(s), cal revisió",
+    "nav_my_profile_pending_aria": "La teva sol·licitud de canvi de fitxa està pendent de revisió",
     "badge_admin": "Administrador",
     "badge_worker": "Treballador"
   },
@@ -275,6 +277,7 @@
     "toast_created": "Festiu afegit",
     "toast_updated": "Festiu actualitzat",
     "toast_deleted": "Festiu eliminat",
+    "error_duplicate_holiday": "Ja hi ha un festiu en aquesta data per a aquesta seu. Tria una altra data o elimina el duplicat.",
     "delete_title": "Eliminar aquest dia?",
     "delete_desc": "S'eliminarà del calendari laboral d'aquesta seu.",
     "load_error": "No s'han pogut carregar els calendaris.",
@@ -491,7 +494,12 @@
     "status_pending": "Pendent",
     "status_approved": "Aprovada",
     "status_rejected": "Rebutjada",
-    "reject_reason": "Motiu"
+    "reject_reason": "Motiu",
+    "calendar_title": "Calendari laboral",
+    "calendar_desc": "Seu assignada (festius i horari d'estiu). Pots canviar-la aquí si escau; el canvi es desa a l'instant.",
+    "calendar_save": "Desar calendari",
+    "calendar_saving": "Desant…",
+    "calendar_toast_saved": "Calendari laboral actualitzat."
   },
   "workerProfileRequests": {
     "title": "Sol·licituds de modificació de fitxa",

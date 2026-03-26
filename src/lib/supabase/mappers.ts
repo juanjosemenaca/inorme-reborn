@@ -36,6 +36,7 @@ import type {
   WorkCalendarScope,
   WorkCalendarSummerRangeRecord,
 } from "@/types/workCalendars";
+import { isoDateOnlyFromDb } from "@/lib/isoDate";
 
 // ---------------------------------------------------------------------------
 // Proyectos
@@ -82,7 +83,7 @@ export function workCalendarHolidayRowToDomain(row: WorkCalendarHolidayRow): Wor
     id: row.id,
     calendarYear: row.calendar_year,
     scope: row.scope as WorkCalendarScope,
-    holidayDate: row.holiday_date,
+    holidayDate: isoDateOnlyFromDb(row.holiday_date),
     holidayKind: (row.holiday_kind ?? "NACIONAL") as WorkCalendarHolidayKind,
     label: row.label,
     createdAt: row.created_at,
@@ -95,8 +96,8 @@ export function workCalendarSummerRangeRowToDomain(row: WorkCalendarSummerRangeR
     id: row.id,
     calendarYear: row.calendar_year,
     scope: row.scope as WorkCalendarScope,
-    dateStart: row.date_start,
-    dateEnd: row.date_end,
+    dateStart: isoDateOnlyFromDb(row.date_start),
+    dateEnd: isoDateOnlyFromDb(row.date_end),
     label: row.label,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

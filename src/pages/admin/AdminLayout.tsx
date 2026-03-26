@@ -21,6 +21,11 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import {
+  useHasPendingWorkerRequest,
+  usePendingWorkerProfileChangeRequests,
+} from "@/hooks/useWorkerProfileChangeRequests";
 
 const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
@@ -51,7 +56,22 @@ const AdminLayout = () => {
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  const supabaseOk = isSupabaseConfigured();
+  const { data: pendingProfileRequests = [] } = usePendingWorkerProfileChangeRequests(
+    isAdmin && supabaseOk && !!user
+  );
+  const pendingAdminProfileCount = pendingProfileRequests.length;
+  const { data: workerHasPendingProfileRequest = false } = useHasPendingWorkerRequest(
+    user?.role === "WORKER" ? user.companyWorkerId : null
+  );
+
   const navItems = NAV_KEYS.filter((item) => user && item.roles.includes(user.role));
+
+  const navNeedsAttention = (to: string) => {
+    if (to === "/admin/solicitudes-ficha" && user?.role === "ADMIN") return pendingAdminProfileCount > 0;
+    if (to === "/admin/mi-ficha" && user?.role === "WORKER") return workerHasPendingProfileRequest;
+    return false;
+  };
 
   /** Pantalla obligatoria de nueva contraseña: sin menú lateral para evitar eludir la política. */
   if (user && location.pathname === "/admin/cambiar-contrasena") {
@@ -84,23 +104,50 @@ const AdminLayout = () => {
     <>
       {navItems.map((item) => {
         const active = isNavActive(item.to);
+        const attention = navNeedsAttention(item.to);
+        const pendingLabel =
+          item.to === "/admin/solicitudes-ficha" && pendingAdminProfileCount > 0
+            ? t("admin.layout.nav_pending_profile_requests_aria").replace(
+                "{{count}}",
+                String(pendingAdminProfileCount)
+              )
+            : attention && item.to === "/admin/mi-ficha"
+              ? t("admin.layout.nav_my_profile_pending_aria")
+              : undefined;
         return (
           <Link
             key={item.to}
             to={item.to}
             onClick={() => mobile && setMobileNavOpen(false)}
+            aria-label={pendingLabel}
+            title={pendingLabel}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+              attention ? "font-bold" : "font-medium",
               isAdmin
                 ? active
-                  ? "bg-primary/20 text-primary border-l-2 border-primary -ml-px pl-[11px]"
-                  : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
+                  ? attention
+                    ? "bg-red-950/50 text-red-400 border-l-2 border-red-500 -ml-px pl-[11px]"
+                    : "bg-primary/20 text-primary border-l-2 border-primary -ml-px pl-[11px]"
+                  : attention
+                    ? "text-red-400 border-l-2 border-transparent hover:bg-slate-800 hover:text-red-300"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
                 : active
-                  ? "bg-secondary text-secondary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? attention
+                    ? "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 font-bold"
+                    : "bg-secondary text-secondary-foreground"
+                  : attention
+                    ? "text-red-600 dark:text-red-400 font-bold hover:bg-muted hover:text-red-700 dark:hover:text-red-300"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            <item.icon className="h-4 w-4 shrink-0 opacity-90" />
+            <item.icon
+              className={cn(
+                "h-4 w-4 shrink-0 opacity-90",
+                attention && isAdmin && "text-red-400 opacity-100",
+                attention && !isAdmin && "text-red-600 dark:text-red-400 opacity-100"
+              )}
+            />
             {t(item.labelKey)}
           </Link>
         );
@@ -245,39 +292,57 @@ const AdminLayout = () => {
       <div className="flex flex-1 max-w-7xl mx-auto w-full">
         <aside className="hidden md:flex w-56 shrink-0 border-r bg-muted/30 flex-col py-4">
           <nav className="px-2 space-y-1">
-            {navItems.map((item) => (
-              <Button
-                key={item.to}
-                variant={isNavActive(item.to) ? "secondary" : "ghost"}
-                className="w-full justify-start gap-2"
-                asChild
-              >
-                <Link to={item.to}>
-                  <item.icon className="h-4 w-4" />
-                  {t(item.labelKey)}
-                </Link>
-              </Button>
-            ))}
+            {navItems.map((item) => {
+              const active = isNavActive(item.to);
+              const attention = navNeedsAttention(item.to);
+              const aria =
+                attention && item.to === "/admin/mi-ficha" ? t("admin.layout.nav_my_profile_pending_aria") : undefined;
+              return (
+                <Button
+                  key={item.to}
+                  variant={active ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full justify-start gap-2",
+                    attention && "font-bold text-red-600 dark:text-red-400",
+                    attention && active && "bg-red-100 dark:bg-red-950/40"
+                  )}
+                  asChild
+                >
+                  <Link to={item.to} aria-label={aria} title={aria}>
+                    <item.icon className={cn("h-4 w-4", attention && "text-red-600 dark:text-red-400")} />
+                    {t(item.labelKey)}
+                  </Link>
+                </Button>
+              );
+            })}
           </nav>
         </aside>
 
         {mobileNavOpen && (
           <div className="md:hidden fixed inset-0 z-20 bg-background/80 backdrop-blur-sm top-14">
             <nav className="p-4 flex flex-col gap-1 border-b bg-card">
-              {navItems.map((item) => (
-                <Button
-                  key={item.to}
-                  variant="ghost"
-                  className="justify-start gap-2"
-                  asChild
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  <Link to={item.to}>
-                    <item.icon className="h-4 w-4" />
-                    {t(item.labelKey)}
-                  </Link>
-                </Button>
-              ))}
+              {navItems.map((item) => {
+                const attention = navNeedsAttention(item.to);
+                const aria =
+                  attention && item.to === "/admin/mi-ficha" ? t("admin.layout.nav_my_profile_pending_aria") : undefined;
+                return (
+                  <Button
+                    key={item.to}
+                    variant="ghost"
+                    className={cn(
+                      "justify-start gap-2",
+                      attention && "font-bold text-red-600 dark:text-red-400"
+                    )}
+                    asChild
+                    onClick={() => setMobileNavOpen(false)}
+                  >
+                    <Link to={item.to} aria-label={aria} title={aria}>
+                      <item.icon className={cn("h-4 w-4", attention && "text-red-600 dark:text-red-400")} />
+                      {t(item.labelKey)}
+                    </Link>
+                  </Button>
+                );
+              })}
             </nav>
           </div>
         )}

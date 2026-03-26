@@ -64,6 +64,8 @@
     "nav_users_bulk": "Alta masiva usuarios",
     "nav_my_profile": "Mi ficha",
     "nav_profile_requests": "Solicitudes de ficha",
+    "nav_pending_profile_requests_aria": "Solicitudes de ficha: {{count}} pendiente(s), requiere atención",
+    "nav_my_profile_pending_aria": "Tu solicitud de cambio de ficha está pendiente de revisión",
     "badge_admin": "Administrador",
     "badge_worker": "Trabajador"
   },
@@ -279,6 +281,7 @@
     "toast_created": "Festivo añadido",
     "toast_updated": "Festivo actualizado",
     "toast_deleted": "Festivo eliminado",
+    "error_duplicate_holiday": "Ya hay un festivo en esa fecha para esta sede. Elige otra fecha o elimina el duplicado.",
     "delete_title": "¿Eliminar este día?",
     "delete_desc": "Se quitará del calendario laboral de esta sede.",
     "load_error": "No se pudieron cargar los calendarios.",
@@ -495,7 +498,12 @@
     "status_pending": "Pendiente",
     "status_approved": "Aprobada",
     "status_rejected": "Rechazada",
-    "reject_reason": "Motivo"
+    "reject_reason": "Motivo",
+    "calendar_title": "Calendario laboral",
+    "calendar_desc": "Sede asignada (festivos y horario de verano). Puedes cambiarla aquí si procede; el cambio se guarda al instante.",
+    "calendar_save": "Guardar calendario",
+    "calendar_saving": "Guardando…",
+    "calendar_toast_saved": "Calendario laboral actualizado."
   },
   "workerProfileRequests": {
     "title": "Solicitudes de modificación de ficha",
