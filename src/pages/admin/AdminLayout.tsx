@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import {
@@ -60,13 +60,13 @@ const NAV_KEYS = [
     icon: Inbox,
     roles: ["ADMIN"] as const,
   },
+  { to: "/admin/usuarios", labelKey: "admin.layout.nav_users_list", icon: Users, roles: ["ADMIN"] as const },
   {
     to: "/admin/usuarios/alta-masiva",
     labelKey: "admin.layout.nav_users_bulk",
     icon: UserPlus,
     roles: ["ADMIN"] as const,
   },
-  { to: "/admin/usuarios", labelKey: "admin.layout.nav_users", icon: Users, roles: ["ADMIN"] as const },
   { to: "/admin/trabajadores", labelKey: "admin.layout.nav_workers", icon: Contact2, roles: ["ADMIN"] as const },
   { to: "/admin/proveedores", labelKey: "admin.layout.nav_providers", icon: Truck, roles: ["ADMIN"] as const },
   { to: "/admin/clientes", labelKey: "admin.layout.nav_clients", icon: Building2, roles: ["ADMIN"] as const },
@@ -75,6 +75,8 @@ const NAV_KEYS = [
 ] as const;
 
 const ADMIN_MESSAGE_CHILD_ROUTES = ["/admin/solicitudes-vacaciones", "/admin/solicitudes-ficha"] as const;
+
+const USERS_SECTION_ROUTES = ["/admin/usuarios", "/admin/usuarios/alta-masiva"] as const;
 
 function normalizeRole(value: unknown): "ADMIN" | "WORKER" | null {
   const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
@@ -111,8 +113,13 @@ const AdminLayout = () => {
   const adminMessageItems = navItems.filter((item) =>
     ADMIN_MESSAGE_CHILD_ROUTES.includes(item.to as (typeof ADMIN_MESSAGE_CHILD_ROUTES)[number])
   );
+  const usersNavItems = navItems.filter((item) =>
+    USERS_SECTION_ROUTES.includes(item.to as (typeof USERS_SECTION_ROUTES)[number])
+  );
   const navItemsWithoutAdminMessages = navItems.filter(
-    (item) => !ADMIN_MESSAGE_CHILD_ROUTES.includes(item.to as (typeof ADMIN_MESSAGE_CHILD_ROUTES)[number])
+    (item) =>
+      !ADMIN_MESSAGE_CHILD_ROUTES.includes(item.to as (typeof ADMIN_MESSAGE_CHILD_ROUTES)[number]) &&
+      !USERS_SECTION_ROUTES.includes(item.to as (typeof USERS_SECTION_ROUTES)[number])
   );
   const isAdminMessagesSectionActive = ADMIN_MESSAGE_CHILD_ROUTES.some(
     (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
@@ -122,6 +129,13 @@ const AdminLayout = () => {
   useEffect(() => {
     if (isAdminMessagesSectionActive) setAdminMessagesOpen(true);
   }, [isAdminMessagesSectionActive]);
+
+  const isUsersSectionActive = location.pathname.startsWith("/admin/usuarios");
+  const [usersSectionOpen, setUsersSectionOpen] = useState(isUsersSectionActive);
+
+  useEffect(() => {
+    if (isUsersSectionActive) setUsersSectionOpen(true);
+  }, [isUsersSectionActive]);
 
   const navNeedsAttention = (to: string) => {
     if (to === "/admin/solicitudes-ficha" && userRole === "ADMIN") return pendingAdminProfileCount > 0;
@@ -184,51 +198,92 @@ const AdminLayout = () => {
                 ? t("admin.layout.nav_vacation_requests_pending_aria").replace("{{count}}", String(vacCount))
                 : undefined;
         return (
-          <Link
-            key={item.to}
-            to={item.to}
-            onClick={() => mobile && setMobileNavOpen(false)}
-            aria-label={pendingLabel}
-            title={pendingLabel}
-            className={cn(
-              "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full",
-              attention ? "font-bold" : "font-medium",
-              isAdmin
-                ? active
-                  ? attention
-                    ? "bg-red-950/50 text-red-400 border-l-2 border-red-500 -ml-px pl-[11px]"
-                    : "bg-primary/20 text-primary border-l-2 border-primary -ml-px pl-[11px]"
-                  : attention
-                    ? "text-red-400 border-l-2 border-transparent hover:bg-slate-800 hover:text-red-300"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
-                : active
-                  ? attention
-                    ? "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 font-bold"
-                    : "bg-secondary text-secondary-foreground"
-                  : attention
-                    ? "text-red-600 dark:text-red-400 font-bold hover:bg-muted hover:text-red-700 dark:hover:text-red-300"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <span className="flex items-center gap-3 min-w-0">
-              <item.icon
-                className={cn(
-                  "h-4 w-4 shrink-0 opacity-90",
-                  attention && isAdmin && "text-red-400 opacity-100",
-                  attention && !isAdmin && "text-red-600 dark:text-red-400 opacity-100"
-                )}
-              />
-              <span className="truncate">{t(item.labelKey)}</span>
-            </span>
-            {item.to === "/admin/solicitudes-vacaciones" && vacCount > 0 ? (
-              <Badge
-                variant="secondary"
-                className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
-              >
-                {vacCount > 99 ? "99+" : vacCount}
-              </Badge>
+          <Fragment key={item.to}>
+            <Link
+              to={item.to}
+              onClick={() => mobile && setMobileNavOpen(false)}
+              aria-label={pendingLabel}
+              title={pendingLabel}
+              className={cn(
+                "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full",
+                attention ? "font-bold" : "font-medium",
+                isAdmin
+                  ? active
+                    ? attention
+                      ? "bg-red-950/50 text-red-400 border-l-2 border-red-500 -ml-px pl-[11px]"
+                      : "bg-primary/20 text-primary border-l-2 border-primary -ml-px pl-[11px]"
+                    : attention
+                      ? "text-red-400 border-l-2 border-transparent hover:bg-slate-800 hover:text-red-300"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
+                  : active
+                    ? attention
+                      ? "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 font-bold"
+                      : "bg-secondary text-secondary-foreground"
+                    : attention
+                      ? "text-red-600 dark:text-red-400 font-bold hover:bg-muted hover:text-red-700 dark:hover:text-red-300"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <span className="flex items-center gap-3 min-w-0">
+                <item.icon
+                  className={cn(
+                    "h-4 w-4 shrink-0 opacity-90",
+                    attention && isAdmin && "text-red-400 opacity-100",
+                    attention && !isAdmin && "text-red-600 dark:text-red-400 opacity-100"
+                  )}
+                />
+                <span className="truncate">{t(item.labelKey)}</span>
+              </span>
+              {item.to === "/admin/solicitudes-vacaciones" && vacCount > 0 ? (
+                <Badge
+                  variant="secondary"
+                  className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
+                >
+                  {vacCount > 99 ? "99+" : vacCount}
+                </Badge>
+              ) : null}
+            </Link>
+            {item.to === "/admin/vacaciones" && isAdmin && usersNavItems.length > 0 ? (
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setUsersSectionOpen((v) => !v)}
+                  aria-expanded={usersSectionOpen}
+                  className="flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full font-medium text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
+                >
+                  <span className="flex items-center gap-3 min-w-0">
+                    <Users className="h-4 w-4 shrink-0 opacity-90" />
+                    <span className="truncate">{t("admin.layout.nav_users")}</span>
+                  </span>
+                  <ChevronDown
+                    className={cn("h-4 w-4 shrink-0 transition-transform", usersSectionOpen && "rotate-180")}
+                  />
+                </button>
+                {usersSectionOpen ? (
+                  <div className="space-y-1 pl-8">
+                    {usersNavItems.map((sub) => {
+                      const subActive = isNavActive(sub.to);
+                      return (
+                        <Link
+                          key={sub.to}
+                          to={sub.to}
+                          onClick={() => mobile && setMobileNavOpen(false)}
+                          className={cn(
+                            "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors w-full",
+                            subActive
+                              ? "bg-primary/20 text-primary"
+                              : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                          )}
+                        >
+                          <span className="truncate">{t(sub.labelKey)}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
-          </Link>
+          </Fragment>
         );
       })}
       {isAdmin && adminMessageItems.length > 0 ? (

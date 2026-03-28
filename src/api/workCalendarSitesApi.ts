@@ -127,15 +127,16 @@ export async function updateWorkCalendarSite(
   patch: Partial<Pick<WorkCalendarSiteRecord, "name" | "vacationDaysDefault">>
 ): Promise<WorkCalendarSiteRecord> {
   const sb = requireSupabase();
+  const before = await getWorkCalendarSiteById(id);
+  if (!before) throw new Error("Sede no encontrada.");
+
   const update: Record<string, string | number | boolean> = {};
   if (patch.name !== undefined) update.name = patch.name.trim();
   if (patch.vacationDaysDefault !== undefined) {
     update.vacation_days_default = Math.min(365, Math.max(0, Math.floor(patch.vacationDaysDefault)));
   }
   if (Object.keys(update).length === 0) {
-    const s = await getWorkCalendarSiteById(id);
-    if (!s) throw new Error("Sede no encontrada.");
-    return s;
+    return before;
   }
   const { data: row, error } = await sb
     .from("work_calendar_sites")
@@ -144,6 +145,7 @@ export async function updateWorkCalendarSite(
     .select("*")
     .single();
   if (error) throwErr(error);
+
   return workCalendarSiteRowToDomain(row as WorkCalendarSiteRow);
 }
 

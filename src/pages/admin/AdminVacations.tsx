@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Palmtree, Search } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,7 +41,19 @@ const AdminVacations = () => {
   const [sort, setSort] = useState<ColumnSort | null>({ key: "workerName", dir: "asc" });
   const [allowanceDraftByWorker, setAllowanceDraftByWorker] = useState<Record<string, string>>({});
 
-  const { data: rows = [], isLoading, isError, error, refetch, isFetching } = useAdminVacationSummaries(year);
+  const {
+    data: rows = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+    dataUpdatedAt,
+  } = useAdminVacationSummaries(year);
+
+  useEffect(() => {
+    setAllowanceDraftByWorker({});
+  }, [dataUpdatedAt]);
   const {
     data: notifications = [],
     isLoading: notifLoading,

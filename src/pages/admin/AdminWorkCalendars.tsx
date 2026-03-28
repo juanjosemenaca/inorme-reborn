@@ -422,6 +422,9 @@ const AdminWorkCalendars = () => {
     onSuccess: async () => {
       toast({ title: t("admin.workCalendars.sites_toast_updated") });
       await queryClient.invalidateQueries({ queryKey: queryKeys.workCalendarSites });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
+      await queryClient.invalidateQueries({ queryKey: ["adminVacationSummaries"] });
+      await queryClient.refetchQueries({ queryKey: ["adminVacationSummaries"] });
       setEditSiteOpen(false);
       setEditSiteTarget(null);
     },
@@ -986,6 +989,7 @@ const AdminWorkCalendars = () => {
                 value={editSiteVacation}
                 onChange={(e) => setEditSiteVacation(Number(e.target.value))}
               />
+              <p className="text-xs text-muted-foreground">{t("admin.workCalendars.sites_edit_vacation_sync_hint")}</p>
             </div>
           </div>
           <DialogFooter>
