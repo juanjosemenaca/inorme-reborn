@@ -26,6 +26,7 @@ import AdminChangePassword from "./pages/admin/AdminChangePassword";
 import WorkerMyProfile from "./pages/admin/WorkerMyProfile";
 import WorkerMyCalendar from "./pages/admin/WorkerMyCalendar";
 import WorkerMessages from "./pages/admin/WorkerMessages";
+import AdminWorkerMessages from "./pages/admin/AdminWorkerMessages";
 import AdminWorkerProfileRequests from "./pages/admin/AdminWorkerProfileRequests";
 
 const queryClient = new QueryClient();
@@ -65,6 +66,14 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["WORKER"]}>
                       <WorkerMyCalendar />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="mensajes-trabajadores"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminWorkerMessages />
                     </RoleRoute>
                   }
                 />

@@ -11,7 +11,10 @@ function throwErr(error: unknown): never {
 function rowToDomain(row: BackofficeMessageRow): BackofficeMessageRecord {
   return {
     id: row.id,
+    senderBackofficeUserId: row.sender_backoffice_user_id,
     recipientBackofficeUserId: row.recipient_backoffice_user_id,
+    threadId: row.thread_id,
+    threadTitle: row.thread_title,
     category: row.category,
     title: row.title,
     body: row.body,
@@ -26,6 +29,8 @@ export type CreateBackofficeMessageInput = {
   title: string;
   body: string;
   payload?: Record<string, unknown>;
+  threadId?: string;
+  threadTitle?: string;
 };
 
 export async function createBackofficeMessage(
@@ -33,12 +38,17 @@ export async function createBackofficeMessage(
   input: CreateBackofficeMessageInput
 ): Promise<void> {
   const sb = requireSupabase();
+  const senderId = await requireCurrentBackofficeProfileId();
+  const normalizedThreadTitle = (input.threadTitle ?? input.title).trim() || "Mensaje";
   const { error } = await sb.from("backoffice_messages").insert({
+    sender_backoffice_user_id: senderId,
     recipient_backoffice_user_id: recipientBackofficeUserId,
+    thread_id: input.threadId ?? crypto.randomUUID(),
+    thread_title: normalizedThreadTitle,
     category: (input.category ?? "GENERAL").trim() || "GENERAL",
     title: input.title.trim(),
     body: input.body.trim(),
-    payload: input.payload ?? {},
+    payload: { ...(input.payload ?? {}), threadTitle: normalizedThreadTitle },
   });
   if (error) throwErr(error);
 }
@@ -60,8 +70,8 @@ export async function fetchMyBackofficeMessages(limit = 200): Promise<Backoffice
   const { data, error } = await sb
     .from("backoffice_messages")
     .select("*")
-    .eq("recipient_backoffice_user_id", profileId)
-    .order("created_at", { ascending: false })
+    .or(`recipient_backoffice_user_id.eq.${profileId},sender_backoffice_user_id.eq.${profileId}`)
+    .order("created_at", { ascending: true })
     .limit(Math.min(500, Math.max(1, limit)));
   if (error) throwErr(error);
   return (data ?? []).map((r) => rowToDomain(r as BackofficeMessageRow));
@@ -87,5 +97,17 @@ export async function markBackofficeMessageAsRead(messageId: string): Promise<vo
     .update({ read_at: new Date().toISOString() })
     .eq("id", messageId)
     .eq("recipient_backoffice_user_id", profileId);
+  if (error) throwErr(error);
+}
+
+export async function markBackofficeThreadAsRead(threadId: string): Promise<void> {
+  const sb = requireSupabase();
+  const profileId = await requireCurrentBackofficeProfileId();
+  const { error } = await sb
+    .from("backoffice_messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("thread_id", threadId)
+    .eq("recipient_backoffice_user_id", profileId)
+    .is("read_at", null);
   if (error) throwErr(error);
 }

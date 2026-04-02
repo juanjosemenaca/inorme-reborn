@@ -183,7 +183,10 @@ export interface BackofficeUserRow {
 
 export interface BackofficeMessageRow {
   id: string;
+  sender_backoffice_user_id: string | null;
   recipient_backoffice_user_id: string;
+  thread_id: string;
+  thread_title: string | null;
   category: string;
   title: string;
   body: string;

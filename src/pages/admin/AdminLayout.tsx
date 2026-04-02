@@ -14,6 +14,7 @@ import {
   Menu,
   IdCard,
   Inbox,
+  MessageSquare,
   UserPlus,
   ChevronDown,
 } from "lucide-react";
@@ -55,6 +56,12 @@ const NAV_KEYS = [
     roles: ["WORKER"] as const,
   },
   {
+    to: "/admin/mensajes-trabajadores",
+    labelKey: "admin.layout.nav_worker_messages_admin",
+    icon: MessageSquare,
+    roles: ["ADMIN"] as const,
+  },
+  {
     to: "/admin/solicitudes-ficha",
     labelKey: "admin.layout.nav_profile_requests",
     icon: Inbox,
@@ -74,7 +81,11 @@ const NAV_KEYS = [
   { to: "/admin/calendarios-laborales", labelKey: "admin.layout.nav_calendars", icon: CalendarDays, roles: ["ADMIN"] as const },
 ] as const;
 
-const ADMIN_MESSAGE_CHILD_ROUTES = ["/admin/solicitudes-vacaciones", "/admin/solicitudes-ficha"] as const;
+const ADMIN_MESSAGE_CHILD_ROUTES = [
+  "/admin/solicitudes-vacaciones",
+  "/admin/solicitudes-ficha",
+  "/admin/mensajes-trabajadores",
+] as const;
 
 const USERS_SECTION_ROUTES = ["/admin/usuarios", "/admin/usuarios/alta-masiva"] as const;
 
