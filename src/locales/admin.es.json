@@ -649,7 +649,9 @@
     "system_thread_no_reply": "Este hilo de sistema no admite respuesta.",
     "user_unknown": "Usuario",
     "admin_search_worker_placeholder": "Buscar por nombre, apellidos o email…",
-    "admin_search_worker_empty": "No hay trabajadores que coincidan."
+    "admin_search_worker_empty": "No hay trabajadores que coincidan.",
+    "admin_search_threads_placeholder": "Buscar por destinatario, asunto o contenido…",
+    "admin_threads_no_match": "No hay conversaciones que coincidan con la búsqueda."
   },
   "workerProfileRequests": {
     "title": "Solicitudes de modificación de ficha",

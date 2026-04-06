@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Loader2, MailPlus, Send } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, MailPlus, Search, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,7 @@ const AdminWorkerMessages = () => {
   const [workerComboOpen, setWorkerComboOpen] = useState(false);
   const [newSubject, setNewSubject] = useState("");
   const [newBody, setNewBody] = useState("");
+  const [threadQuery, setThreadQuery] = useState("");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
 
@@ -65,7 +66,7 @@ const AdminWorkerMessages = () => {
       if (!byId.has(key)) byId.set(key, []);
       byId.get(key)!.push(m);
     }
-    const userNameById = new Map(users.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()] as const));
+    const userById = new Map(users.map((u) => [u.id, u] as const));
     const out = [...byId.entries()]
       .map(([threadId, rows]) => {
         const sorted = [...rows].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -84,8 +85,10 @@ const AdminWorkerMessages = () => {
           messages: sorted,
           counterpartId,
           counterpartName: counterpartId
-            ? userNameById.get(counterpartId) ?? t("admin.messages.user_unknown")
+            ? `${userById.get(counterpartId)?.firstName ?? ""} ${userById.get(counterpartId)?.lastName ?? ""}`.trim() ||
+              t("admin.messages.user_unknown")
             : t("admin.messages.system"),
+          counterpartEmail: counterpartId ? userById.get(counterpartId)?.email ?? "" : "",
           unreadCount: unread,
         };
       })
@@ -98,15 +101,33 @@ const AdminWorkerMessages = () => {
     return out;
   }, [messages, myUserId, t, users]);
 
+  const filteredThreads = useMemo(() => {
+    const q = threadQuery.trim().toLowerCase();
+    if (!q) return threads;
+    return threads.filter((th) => {
+      const searchable = [
+        th.title,
+        th.counterpartName,
+        th.counterpartEmail,
+        ...th.messages.map((m) => m.body),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return searchable.includes(q);
+    });
+  }, [threadQuery, threads]);
+
   useEffect(() => {
-    if (threads.length === 0) {
+    if (filteredThreads.length === 0) {
       setActiveThreadId(null);
       return;
     }
-    setActiveThreadId((prev) => (prev && threads.some((t) => t.threadId === prev) ? prev : threads[0]!.threadId));
-  }, [threads]);
+    setActiveThreadId((prev) =>
+      prev && filteredThreads.some((t) => t.threadId === prev) ? prev : filteredThreads[0]!.threadId
+    );
+  }, [filteredThreads]);
 
-  const activeThread = threads.find((x) => x.threadId === activeThreadId) ?? null;
+  const activeThread = filteredThreads.find((x) => x.threadId === activeThreadId) ?? null;
 
   const openThreadMutation = useMutation({
     mutationFn: (threadId: string) => markBackofficeThreadAsRead(threadId),
@@ -265,16 +286,29 @@ const AdminWorkerMessages = () => {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">{t("admin.messages.admin_threads_title")}</CardTitle>
           <CardDescription>
-            {t("admin.common.showing")} {threads.length}
+            {t("admin.common.showing")} {filteredThreads.length}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {threads.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">{t("admin.messages.admin_threads_empty")}</p>
+          <div className="relative mb-3 max-w-lg">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={threadQuery}
+              onChange={(e) => setThreadQuery(e.target.value)}
+              className="pl-9"
+              placeholder={t("admin.messages.admin_search_threads_placeholder")}
+            />
+          </div>
+          {filteredThreads.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              {threadQuery.trim()
+                ? t("admin.messages.admin_threads_no_match")
+                : t("admin.messages.admin_threads_empty")}
+            </p>
           ) : (
             <div className="grid gap-4 lg:grid-cols-[300px,1fr]">
               <div className="space-y-2 max-h-[72vh] overflow-y-auto pr-1">
-                {threads.map((th) => (
+                {filteredThreads.map((th) => (
                   <button
                     key={th.threadId}
                     type="button"

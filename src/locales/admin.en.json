@@ -649,7 +649,9 @@
     "system_thread_no_reply": "This system thread does not support replies.",
     "user_unknown": "User",
     "admin_search_worker_placeholder": "Search by first name, last name or email…",
-    "admin_search_worker_empty": "No matching workers found."
+    "admin_search_worker_empty": "No matching workers found.",
+    "admin_search_threads_placeholder": "Search by recipient, subject or content…",
+    "admin_threads_no_match": "No conversations match your search."
   },
   "workerProfileRequests": {
     "title": "Staff profile change requests",

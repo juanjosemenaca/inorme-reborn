@@ -649,7 +649,9 @@
     "system_thread_no_reply": "Aquest fil de sistema no admet resposta.",
     "user_unknown": "Usuari",
     "admin_search_worker_placeholder": "Cerca per nom, cognoms o correu…",
-    "admin_search_worker_empty": "No hi ha treballadors que coincideixin."
+    "admin_search_worker_empty": "No hi ha treballadors que coincideixin.",
+    "admin_search_threads_placeholder": "Cerca per destinatari, assumpte o contingut…",
+    "admin_threads_no_match": "No hi ha converses que coincideixin amb la cerca."
   },
   "workerProfileRequests": {
     "title": "Sol·licituds de modificació de fitxa",
