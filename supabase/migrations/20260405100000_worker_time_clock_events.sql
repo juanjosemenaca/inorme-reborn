@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.worker_time_clock_events (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+DROP TRIGGER IF EXISTS tr_worker_time_clock_events_updated_at ON public.worker_time_clock_events;
 CREATE TRIGGER tr_worker_time_clock_events_updated_at
   BEFORE UPDATE ON public.worker_time_clock_events
   FOR EACH ROW EXECUTE PROCEDURE public.set_updated_at();
@@ -30,6 +31,7 @@ COMMENT ON COLUMN public.worker_time_clock_events.absence_reason IS
   'Motivo libre cuando el evento es de ausencia.';
 
 ALTER TABLE public.worker_time_clock_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "backoffice_authenticated_all_worker_time_clock_events" ON public.worker_time_clock_events;
 CREATE POLICY "backoffice_authenticated_all_worker_time_clock_events"
   ON public.worker_time_clock_events FOR ALL TO authenticated USING (true) WITH CHECK (true);
 GRANT ALL ON public.worker_time_clock_events TO authenticated;
