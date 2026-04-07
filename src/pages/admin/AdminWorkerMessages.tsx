@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Loader2, MailPlus, Search, Send } from "lucide-react";
+import { Archive, ArchiveRestore, Check, ChevronsUpDown, Loader2, MailPlus, Search, Send, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +20,11 @@ import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useBackofficeUsers } from "@/hooks/useBackofficeUsers";
 import { useMyBackofficeMessages } from "@/hooks/useBackofficeMessages";
 import {
+  archiveBackofficeThreadForMe,
   createBackofficeMessage,
+  deleteBackofficeThreadForMe,
   markBackofficeThreadAsRead,
+  unarchiveBackofficeThreadForMe,
 } from "@/api/backofficeMessagesApi";
 import { queryKeys } from "@/lib/queryKeys";
 import type { BackofficeMessageRecord } from "@/types/backofficeMessages";
@@ -33,7 +36,8 @@ const AdminWorkerMessages = () => {
   const myUserId = user?.userId ?? "";
   const queryClient = useQueryClient();
   const { data: users = [] } = useBackofficeUsers();
-  const { data: messages = [], isLoading, isError, error } = useMyBackofficeMessages();
+  const [showArchived, setShowArchived] = useState(false);
+  const { data: messages = [], isLoading, isError, error } = useMyBackofficeMessages(true, showArchived);
 
   const [targetWorkerUserId, setTargetWorkerUserId] = useState<string>("");
   const [workerComboOpen, setWorkerComboOpen] = useState(false);
@@ -59,6 +63,11 @@ const AdminWorkerMessages = () => {
   const workerSearchValue = (u: (typeof workerUsers)[number]) =>
     `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase();
 
+  const payloadHasMe = (payload: Record<string, unknown>, key: string): boolean => {
+    const raw = payload[key];
+    return Array.isArray(raw) && raw.some((v) => v === myUserId);
+  };
+
   const threads = useMemo(() => {
     const byId = new Map<string, BackofficeMessageRecord[]>();
     for (const m of messages) {
@@ -78,6 +87,7 @@ const AdminWorkerMessages = () => {
         const unread = sorted.filter(
           (m) => m.recipientBackofficeUserId === myUserId && m.readAt === null
         ).length;
+        const archived = sorted.some((m) => payloadHasMe(m.payload, "archivedByProfileIds"));
         return {
           threadId,
           title: last.threadTitle ?? last.title,
@@ -90,6 +100,7 @@ const AdminWorkerMessages = () => {
             : t("admin.messages.system"),
           counterpartEmail: counterpartId ? userById.get(counterpartId)?.email ?? "" : "",
           unreadCount: unread,
+          archived,
         };
       })
       .filter((th) => {
@@ -171,6 +182,31 @@ const AdminWorkerMessages = () => {
       setReplyBody("");
       await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
       await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessageUnreadCount });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (threadId: string) => archiveBackofficeThreadForMe(threadId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessageUnreadCount });
+    },
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: (threadId: string) => unarchiveBackofficeThreadForMe(threadId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessageUnreadCount });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (threadId: string) => deleteBackofficeThreadForMe(threadId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessageUnreadCount });
+      setActiveThreadId(null);
     },
   });
 
@@ -290,14 +326,19 @@ const AdminWorkerMessages = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="relative mb-3 max-w-lg">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={threadQuery}
-              onChange={(e) => setThreadQuery(e.target.value)}
-              className="pl-9"
-              placeholder={t("admin.messages.admin_search_threads_placeholder")}
-            />
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="relative max-w-lg flex-1 min-w-[260px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={threadQuery}
+                onChange={(e) => setThreadQuery(e.target.value)}
+                className="pl-9"
+                placeholder={t("admin.messages.admin_search_threads_placeholder")}
+              />
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowArchived((v) => !v)}>
+              {showArchived ? t("admin.messages.filter_hide_archived") : t("admin.messages.filter_show_archived")}
+            </Button>
           </div>
           {filteredThreads.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">
@@ -324,7 +365,10 @@ const AdminWorkerMessages = () => {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium truncate">{th.title}</p>
-                      {th.unreadCount > 0 ? <Badge>{th.unreadCount}</Badge> : null}
+                      <div className="flex items-center gap-1">
+                        {th.archived ? <Badge variant="outline">{t("admin.messages.archived_badge")}</Badge> : null}
+                        {th.unreadCount > 0 ? <Badge>{th.unreadCount}</Badge> : null}
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{th.counterpartName}</p>
                     <p className="text-[11px] text-muted-foreground">{formatDt(th.lastAt)}</p>
@@ -334,9 +378,49 @@ const AdminWorkerMessages = () => {
 
               {activeThread ? (
                 <div className="rounded-lg border p-3 md:p-4 space-y-3">
-                  <div className="border-b pb-2">
-                    <p className="font-medium">{activeThread.title}</p>
-                    <p className="text-xs text-muted-foreground">{activeThread.counterpartName}</p>
+                  <div className="border-b pb-2 space-y-2">
+                    <div>
+                      <p className="font-medium">{activeThread.title}</p>
+                      <p className="text-xs text-muted-foreground">{activeThread.counterpartName}</p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {activeThread.archived ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={unarchiveMutation.isPending}
+                          onClick={() => unarchiveMutation.mutate(activeThread.threadId)}
+                          className="gap-1"
+                        >
+                          <ArchiveRestore className="h-3.5 w-3.5" />
+                          {t("admin.messages.unarchive_thread")}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={archiveMutation.isPending}
+                          onClick={() => archiveMutation.mutate(activeThread.threadId)}
+                          className="gap-1"
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                          {t("admin.messages.archive_thread")}
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1 text-destructive"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate(activeThread.threadId)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {t("admin.messages.delete_thread")}
+                      </Button>
+                    </div>
                   </div>
                   <div className="space-y-2 max-h-[48vh] overflow-y-auto pr-1">
                     {activeThread.messages.map((m) => {

@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import type { UserRole } from "@/types/backoffice";
+import type { UserRole, WorkerModuleKey } from "@/types/backoffice";
 
 function normalizeRole(value: unknown): UserRole | null {
   const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
@@ -16,13 +16,17 @@ function normalizeRole(value: unknown): UserRole | null {
 export function RoleRoute({
   children,
   allowedRoles,
+  requiredModule,
 }: {
   children: React.ReactNode;
   allowedRoles: UserRole[];
+  requiredModule?: WorkerModuleKey;
 }) {
   const { user } = useAdminAuth();
   const role = normalizeRole(user?.role);
-  const canAccess = role !== null && allowedRoles.includes(role);
+  const hasModule =
+    !requiredModule || role !== "WORKER" || user?.enabledModules?.includes(requiredModule) === true;
+  const canAccess = role !== null && allowedRoles.includes(role) && hasModule;
 
   if (!user || !canAccess) {
     return <Navigate to="/admin" replace />;

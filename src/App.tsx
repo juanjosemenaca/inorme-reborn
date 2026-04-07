@@ -28,6 +28,11 @@ import WorkerMyCalendar from "./pages/admin/WorkerMyCalendar";
 import WorkerMessages from "./pages/admin/WorkerMessages";
 import AdminWorkerMessages from "./pages/admin/AdminWorkerMessages";
 import AdminWorkerProfileRequests from "./pages/admin/AdminWorkerProfileRequests";
+import WorkerTimeClock from "./pages/admin/WorkerTimeClock";
+import AdminTimeClock from "./pages/admin/AdminTimeClock";
+import AdminTimeClockRequests from "./pages/admin/AdminTimeClockRequests";
+import AdminTimeClockReports from "./pages/admin/AdminTimeClockReports";
+import AdminUserModuleActivation from "./pages/admin/AdminUserModuleActivation";
 
 const queryClient = new QueryClient();
 
@@ -64,7 +69,7 @@ const App = () => (
                 <Route
                   path="mi-calendario"
                   element={
-                    <RoleRoute allowedRoles={["WORKER"]}>
+                    <RoleRoute allowedRoles={["WORKER"]} requiredModule="VACATIONS">
                       <WorkerMyCalendar />
                     </RoleRoute>
                   }
@@ -80,8 +85,40 @@ const App = () => (
                 <Route
                   path="mensajes"
                   element={
-                    <RoleRoute allowedRoles={["WORKER"]}>
+                    <RoleRoute allowedRoles={["WORKER"]} requiredModule="MESSAGES">
                       <WorkerMessages />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="fichajes"
+                  element={
+                    <RoleRoute allowedRoles={["WORKER"]} requiredModule="TIME_CLOCK">
+                      <WorkerTimeClock />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="control-fichajes"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminTimeClock />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="control-fichajes/informes"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminTimeClockReports />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="solicitudes-fichajes"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminTimeClockRequests />
                     </RoleRoute>
                   }
                 />
@@ -107,6 +144,14 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
                       <AdminUsers />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="usuarios/activacion-modulos"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminUserModuleActivation />
                     </RoleRoute>
                   }
                 />

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  fetchAllWorkerVacationChangeRequests,
   fetchPendingWorkerVacationChangeRequests,
   fetchWorkerVacationChangeRequestsForWorker,
   hasPendingWorkerVacationRequest,
@@ -11,6 +12,14 @@ export function usePendingWorkerVacationChangeRequests(enabled = true) {
   return useQuery({
     queryKey: queryKeys.workerVacationChangeRequests,
     queryFn: fetchPendingWorkerVacationChangeRequests,
+    enabled: isSupabaseConfigured() && enabled,
+  });
+}
+
+export function useAllWorkerVacationChangeRequests(enabled = true) {
+  return useQuery({
+    queryKey: [...queryKeys.workerVacationChangeRequests, "all"] as const,
+    queryFn: fetchAllWorkerVacationChangeRequests,
     enabled: isSupabaseConfigured() && enabled,
   });
 }

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  fetchAllWorkerProfileChangeRequests,
   fetchPendingWorkerProfileChangeRequests,
   fetchWorkerProfileChangeRequestsForWorker,
   hasPendingWorkerProfileRequest,
@@ -11,6 +12,14 @@ export function usePendingWorkerProfileChangeRequests(enabled = true) {
     queryKey: queryKeys.workerProfileChangeRequests,
     queryFn: fetchPendingWorkerProfileChangeRequests,
     enabled,
+  });
+}
+
+export function useAllWorkerProfileChangeRequests(enabled = true) {
+  return useQuery({
+    queryKey: [...queryKeys.workerProfileChangeRequests, "all"] as const,
+    queryFn: fetchAllWorkerProfileChangeRequests,
+    enabled: isSupabaseConfigured() && enabled,
   });
 }
 

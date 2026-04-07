@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   countMyUnreadBackofficeMessages,
-  fetchMyBackofficeMessages,
+  fetchMyBackofficeMessagesFiltered,
 } from "@/api/backofficeMessagesApi";
 import { queryKeys } from "@/lib/queryKeys";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
-export function useMyBackofficeMessages(enabled = true) {
+export function useMyBackofficeMessages(enabled = true, includeArchived = false) {
   return useQuery({
-    queryKey: queryKeys.backofficeMessages,
-    queryFn: () => fetchMyBackofficeMessages(200),
+    queryKey: [...queryKeys.backofficeMessages, includeArchived ? "withArchived" : "active"] as const,
+    queryFn: () => fetchMyBackofficeMessagesFiltered(200, { includeArchived }),
     enabled: isSupabaseConfigured() && enabled,
   });
 }

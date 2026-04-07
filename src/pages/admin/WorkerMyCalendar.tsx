@@ -32,6 +32,10 @@ const WorkerMyCalendar = () => {
   const [year, setYear] = useState(currentYear);
   const [workerMessage, setWorkerMessage] = useState("");
   const [draftDates, setDraftDates] = useState<string[]>([]);
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
+    today.getDate()
+  ).padStart(2, "0")}`;
 
   const { data: workers = [], isLoading: loadingWorkers } = useCompanyWorkers();
   const { data: sites = [] } = useWorkCalendarSites();
@@ -113,6 +117,10 @@ const WorkerMyCalendar = () => {
 
   const vacationIsoSet = useMemo(() => new Set(draftDates), [draftDates]);
   const approvedIsoSet = useMemo(() => new Set(vacationDates), [vacationDates]);
+  const approvedPastIsoSet = useMemo(
+    () => new Set(vacationDates.filter((d) => d < todayIso)),
+    [vacationDates, todayIso]
+  );
   const usedCount = vacationIsoSet.size;
   const maxDays = worker?.vacationDays ?? 0;
   const remaining = Math.max(0, maxDays - usedCount);
@@ -121,6 +129,7 @@ const WorkerMyCalendar = () => {
     draftDates.some((d, idx) => d !== vacationDates[idx]);
 
   const canVacationClick = (iso: string) => {
+    if (iso < todayIso) return false;
     if (vacationIsoSet.has(iso)) return true;
     if (usedCount >= maxDays) return false;
     if (isWeekendIso(iso)) return false;
@@ -261,6 +270,12 @@ const WorkerMyCalendar = () => {
             <span className="font-semibold tabular-nums">{approvedIsoSet.size}</span>
           </p>
           <p>
+            <span className="text-muted-foreground">{t("admin.workerMyCalendar.vacation_requested")}</span>{" "}
+            <span className="font-semibold tabular-nums">
+              {pendingRequestForYear ? pendingRequestForYear.proposedDates.length : 0}
+            </span>
+          </p>
+          <p>
             <span className="text-muted-foreground">{t("admin.workerMyCalendar.vacation_remaining")}</span>{" "}
             <span className="font-semibold tabular-nums text-primary">{remaining}</span>
           </p>
@@ -279,7 +294,11 @@ const WorkerMyCalendar = () => {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">{t("admin.workerMyCalendar.grid_title")}</CardTitle>
-          <CardDescription>{t("admin.workerMyCalendar.grid_desc")}</CardDescription>
+          <CardDescription>
+            {t("admin.workerMyCalendar.grid_desc")}
+            {" "}
+            {t("admin.workerMyCalendar.grid_past_locked")}
+          </CardDescription>
         </CardHeader>
         <CardContent className="pb-6">
           {calendarLoading ? (
@@ -308,6 +327,7 @@ const WorkerMyCalendar = () => {
               tooltipFriday7h={t("admin.workCalendars.tooltip_friday_7h")}
               tooltipSummer7h={t("admin.workCalendars.tooltip_summer_7h")}
               vacationIsoSet={vacationIsoSet}
+              vacationPastIsoSet={approvedPastIsoSet}
               onVacationDayClick={toggleDraftDate}
               vacationDayCanClick={vacationDayCanClick}
               vacationLegendLabel={t("admin.workerMyCalendar.legend_vacation")}

@@ -21,4 +21,10 @@ export const queryKeys = {
   adminVacationNotifications: ["adminVacationNotifications"] as const,
   adminVacationNotificationCount: (sinceDays: number) =>
     ["adminVacationNotificationCount", sinceDays] as const,
+  myTimeClockEvents: (fromIsoDate: string, toIsoDate: string) =>
+    ["myTimeClockEvents", fromIsoDate, toIsoDate] as const,
+  workerTimeClockEvents: (workerId: string, fromIsoDate: string, toIsoDate: string) =>
+    ["workerTimeClockEvents", workerId, fromIsoDate, toIsoDate] as const,
+  workersTimeClockEvents: (workerIdsKey: string, fromIsoDate: string, toIsoDate: string) =>
+    ["workersTimeClockEvents", workerIdsKey, fromIsoDate, toIsoDate] as const,
 };

@@ -21,7 +21,13 @@ import type {
   ProviderInsert,
   ProviderRow,
 } from "@/types/database";
-import type { BackofficeUserRecord, EmploymentType, UserRole } from "@/types/backoffice";
+import {
+  ALL_WORKER_MODULES,
+  type BackofficeUserRecord,
+  type EmploymentType,
+  type UserRole,
+  type WorkerModuleKey,
+} from "@/types/backoffice";
 import type { ClientContactPerson, ClientKind, ClientRecord } from "@/types/clients";
 import type { AutonomoVia, CompanyWorkerEmploymentType, CompanyWorkerRecord } from "@/types/companyWorkers";
 import type { ProviderRecord } from "@/types/providers";
@@ -329,6 +335,18 @@ function normalizeUserRole(value: unknown): UserRole {
   return raw === "ADMIN" ? "ADMIN" : "WORKER";
 }
 
+function normalizeModules(value: unknown): WorkerModuleKey[] {
+  const arr = Array.isArray(value) ? value : [];
+  const set = new Set<WorkerModuleKey>();
+  for (const v of arr) {
+    const raw = typeof v === "string" ? v.trim().toUpperCase() : "";
+    if (raw === "VACATIONS" || raw === "MESSAGES" || raw === "TIME_CLOCK") {
+      set.add(raw);
+    }
+  }
+  return set.size > 0 ? [...set] : [...ALL_WORKER_MODULES];
+}
+
 export function backofficeUserRowToDomain(
   row: BackofficeUserRow,
   options?: { password?: string }
@@ -347,6 +365,7 @@ export function backofficeUserRowToDomain(
     city: row.city,
     employmentType: row.employment_type as EmploymentType,
     active: row.active,
+    enabledModules: normalizeModules(row.enabled_modules),
     mustChangePassword: row.must_change_password === true,
     passwordChangedAt: row.password_changed_at ?? null,
     createdAt: row.created_at,
@@ -374,6 +393,7 @@ export function backofficeUserRecordToRowInsert(
     city: record.city,
     employment_type: record.employmentType,
     active: record.active,
+    enabled_modules: record.enabledModules,
     must_change_password: record.mustChangePassword,
     password_changed_at: record.passwordChangedAt,
   };

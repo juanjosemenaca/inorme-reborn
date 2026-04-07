@@ -84,6 +84,8 @@ type Props = {
   tooltipSummer7h: string;
   /** Días marcados como vacaciones (vista trabajador). */
   vacationIsoSet?: ReadonlySet<string>;
+  /** Subconjunto de vacaciones ya disfrutadas (pasadas) para marcar visualmente. */
+  vacationPastIsoSet?: ReadonlySet<string>;
   onVacationDayClick?: (iso: string) => void;
   vacationDayCanClick?: (iso: string) => boolean;
   vacationLegendLabel?: string;
@@ -108,11 +110,20 @@ export function WorkCalendarYearGrid({
   tooltipFriday7h,
   tooltipSummer7h,
   vacationIsoSet,
+  vacationPastIsoSet,
   onVacationDayClick,
   vacationDayCanClick,
   vacationLegendLabel,
   vacationTooltipLine,
 }: Props) {
+  const todayIso = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
+
   const byDate = useMemo(() => {
     const m = new Map<string, WorkCalendarHolidayRecord>();
     for (const h of holidays) {
@@ -138,6 +149,9 @@ export function WorkCalendarYearGrid({
     "bg-emerald-50 text-emerald-950/90 border-emerald-300/80 dark:bg-emerald-950/30 dark:text-emerald-100 dark:border-emerald-800/50";
   const vacationRingClass =
     "ring-2 ring-sky-600/85 ring-inset shadow-[inset_0_0_0_1px_rgba(2,132,199,0.35)] bg-sky-50/90 dark:bg-sky-950/35 dark:ring-sky-500/80";
+  const vacationPastClass = "line-through decoration-1 opacity-85";
+  const pastDayClass = "line-through decoration-1 opacity-80";
+  const todayClass = "font-bold";
 
   return (
     <div className="space-y-4">
@@ -210,6 +224,9 @@ export function WorkCalendarYearGrid({
                       const h = byDate.get(cell.iso);
                       const cls = cellClass(cell.iso, h, weekendClass, monThuClass, sevenHourClass, summerIsoSet);
                       const isVac = vacationIsoSet?.has(cell.iso) ?? false;
+                      const isVacPast = vacationPastIsoSet?.has(cell.iso) ?? false;
+                      const isPast = cell.iso < todayIso;
+                      const isToday = cell.iso === todayIso;
                       const canVac =
                         !!onVacationDayClick && (vacationDayCanClick ? vacationDayCanClick(cell.iso) : true);
                       const prettyDate = new Date(cell.iso + "T12:00:00").toLocaleDateString(locale, {
@@ -257,6 +274,9 @@ export function WorkCalendarYearGrid({
                         "min-h-[1.75rem] sm:min-h-[2rem] w-full flex items-center justify-center rounded-sm tabular-nums border",
                         cls,
                         isVac && vacationRingClass,
+                        isPast && pastDayClass,
+                        isToday && todayClass,
+                        isVac && isVacPast && vacationPastClass,
                         cellInteractiveCls
                       );
 

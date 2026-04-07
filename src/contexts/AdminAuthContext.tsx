@@ -90,6 +90,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       name: getResolvedDisplayName(profile, workers),
       role: profile.role,
       companyWorkerId: profile.companyWorkerId,
+      enabledModules: profile.enabledModules,
     });
   }, []);
 
@@ -205,6 +206,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         name: getResolvedDisplayName(profile, workers),
         role: profile.role,
         companyWorkerId: profile.companyWorkerId,
+        enabledModules: profile.enabledModules,
       });
       return { ok: true, needsPasswordChange: needsPwd };
     },

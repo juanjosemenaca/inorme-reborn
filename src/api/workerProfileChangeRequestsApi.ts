@@ -63,6 +63,18 @@ export async function fetchPendingWorkerProfileChangeRequests(): Promise<
   return (rows ?? []).map((r) => rowToDomain(r as WorkerProfileChangeRequestRow));
 }
 
+export async function fetchAllWorkerProfileChangeRequests(): Promise<
+  WorkerProfileChangeRequestRecord[]
+> {
+  const sb = requireSupabase();
+  const { data: rows, error } = await sb
+    .from("worker_profile_change_requests")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (rows ?? []).map((r) => rowToDomain(r as WorkerProfileChangeRequestRow));
+}
+
 export async function fetchWorkerProfileChangeRequestsForWorker(
   companyWorkerId: string
 ): Promise<WorkerProfileChangeRequestRecord[]> {
@@ -218,5 +230,19 @@ export async function rejectWorkerProfileChangeRequest(
       rejection_reason: reason,
     })
     .eq("id", requestId);
+  if (error) throw error;
+}
+
+export async function deleteWorkerProfileChangeRequest(requestId: string): Promise<void> {
+  const sb = requireSupabase();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) throw new Error("Sesión no válida.");
+  const adminProfile = await getProfileByAuthUserId(user.id);
+  if (!adminProfile || adminProfile.role !== "ADMIN") {
+    throw new Error("Solo un administrador puede eliminar solicitudes.");
+  }
+  const { error } = await sb.from("worker_profile_change_requests").delete().eq("id", requestId);
   if (error) throw error;
 }

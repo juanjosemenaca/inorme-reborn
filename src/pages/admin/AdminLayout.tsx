@@ -17,6 +17,9 @@ import {
   MessageSquare,
   UserPlus,
   ChevronDown,
+  Clock3,
+  FileText,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,17 +51,44 @@ const NAV_KEYS = [
     labelKey: "admin.layout.nav_my_calendar",
     icon: CalendarRange,
     roles: ["WORKER"] as const,
+    requiredModule: "VACATIONS" as const,
   },
   {
     to: "/admin/mensajes",
     labelKey: "admin.layout.nav_messages",
     icon: Inbox,
     roles: ["WORKER"] as const,
+    requiredModule: "MESSAGES" as const,
+  },
+  {
+    to: "/admin/fichajes",
+    labelKey: "admin.layout.nav_time_clock_worker",
+    icon: Clock3,
+    roles: ["WORKER"] as const,
+    requiredModule: "TIME_CLOCK" as const,
   },
   {
     to: "/admin/mensajes-trabajadores",
     labelKey: "admin.layout.nav_worker_messages_admin",
     icon: MessageSquare,
+    roles: ["ADMIN"] as const,
+  },
+  {
+    to: "/admin/control-fichajes",
+    labelKey: "admin.layout.nav_time_clock_admin",
+    icon: Clock3,
+    roles: ["ADMIN"] as const,
+  },
+  {
+    to: "/admin/control-fichajes/informes",
+    labelKey: "admin.layout.nav_time_clock_reports",
+    icon: FileText,
+    roles: ["ADMIN"] as const,
+  },
+  {
+    to: "/admin/solicitudes-fichajes",
+    labelKey: "admin.layout.nav_time_clock_requests",
+    icon: Inbox,
     roles: ["ADMIN"] as const,
   },
   {
@@ -74,6 +104,12 @@ const NAV_KEYS = [
     icon: UserPlus,
     roles: ["ADMIN"] as const,
   },
+  {
+    to: "/admin/usuarios/activacion-modulos",
+    labelKey: "admin.layout.nav_users_module_activation",
+    icon: Layers,
+    roles: ["ADMIN"] as const,
+  },
   { to: "/admin/trabajadores", labelKey: "admin.layout.nav_workers", icon: Contact2, roles: ["ADMIN"] as const },
   { to: "/admin/proveedores", labelKey: "admin.layout.nav_providers", icon: Truck, roles: ["ADMIN"] as const },
   { to: "/admin/clientes", labelKey: "admin.layout.nav_clients", icon: Building2, roles: ["ADMIN"] as const },
@@ -85,9 +121,15 @@ const ADMIN_MESSAGE_CHILD_ROUTES = [
   "/admin/solicitudes-vacaciones",
   "/admin/solicitudes-ficha",
   "/admin/mensajes-trabajadores",
+  "/admin/solicitudes-fichajes",
 ] as const;
 
-const USERS_SECTION_ROUTES = ["/admin/usuarios", "/admin/usuarios/alta-masiva"] as const;
+const USERS_SECTION_ROUTES = [
+  "/admin/usuarios",
+  "/admin/usuarios/alta-masiva",
+  "/admin/usuarios/activacion-modulos",
+] as const;
+const TIME_CLOCK_SECTION_ROUTES = ["/admin/control-fichajes", "/admin/control-fichajes/informes"] as const;
 
 function normalizeRole(value: unknown): "ADMIN" | "WORKER" | null {
   const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
@@ -108,11 +150,12 @@ const AdminLayout = () => {
   );
   const pendingAdminProfileCount = pendingProfileRequests.length;
   const userRole = normalizeRole(user?.role);
+  const workerEnabledModules = userRole === "WORKER" ? user?.enabledModules ?? [] : [];
   const { data: workerHasPendingProfileRequest = false } = useHasPendingWorkerRequest(
     userRole === "WORKER" ? user?.companyWorkerId ?? null : null
   );
   const { data: unreadMessageCount = 0 } = useMyUnreadBackofficeMessageCount(
-    !isAdmin && supabaseOk && !!user
+    !isAdmin && supabaseOk && !!user && workerEnabledModules.includes("MESSAGES")
   );
   const { data: pendingVacationRequests = [] } = usePendingWorkerVacationChangeRequests(
     isAdmin && supabaseOk && !!user
@@ -120,17 +163,28 @@ const AdminLayout = () => {
   const pendingVacationRequestCount = pendingVacationRequests.length;
   const pendingAdminMessagesCount = pendingAdminProfileCount + pendingVacationRequestCount;
 
-  const navItems = NAV_KEYS.filter((item) => userRole !== null && item.roles.includes(userRole));
+  const enabledModules = user?.enabledModules ?? [];
+  const navItems = NAV_KEYS.filter((item) => {
+    if (userRole === null || !item.roles.includes(userRole)) return false;
+    if (userRole === "WORKER" && "requiredModule" in item && item.requiredModule) {
+      return enabledModules.includes(item.requiredModule);
+    }
+    return true;
+  });
   const adminMessageItems = navItems.filter((item) =>
     ADMIN_MESSAGE_CHILD_ROUTES.includes(item.to as (typeof ADMIN_MESSAGE_CHILD_ROUTES)[number])
   );
   const usersNavItems = navItems.filter((item) =>
     USERS_SECTION_ROUTES.includes(item.to as (typeof USERS_SECTION_ROUTES)[number])
   );
+  const timeClockNavItems = navItems.filter((item) =>
+    TIME_CLOCK_SECTION_ROUTES.includes(item.to as (typeof TIME_CLOCK_SECTION_ROUTES)[number])
+  );
   const navItemsWithoutAdminMessages = navItems.filter(
     (item) =>
       !ADMIN_MESSAGE_CHILD_ROUTES.includes(item.to as (typeof ADMIN_MESSAGE_CHILD_ROUTES)[number]) &&
-      !USERS_SECTION_ROUTES.includes(item.to as (typeof USERS_SECTION_ROUTES)[number])
+      !USERS_SECTION_ROUTES.includes(item.to as (typeof USERS_SECTION_ROUTES)[number]) &&
+      !TIME_CLOCK_SECTION_ROUTES.includes(item.to as (typeof TIME_CLOCK_SECTION_ROUTES)[number])
   );
   const isAdminMessagesSectionActive = ADMIN_MESSAGE_CHILD_ROUTES.some(
     (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
@@ -147,6 +201,13 @@ const AdminLayout = () => {
   useEffect(() => {
     if (isUsersSectionActive) setUsersSectionOpen(true);
   }, [isUsersSectionActive]);
+
+  const isTimeClockSectionActive = location.pathname.startsWith("/admin/control-fichajes");
+  const [timeClockSectionOpen, setTimeClockSectionOpen] = useState(isTimeClockSectionActive);
+
+  useEffect(() => {
+    if (isTimeClockSectionActive) setTimeClockSectionOpen(true);
+  }, [isTimeClockSectionActive]);
 
   const navNeedsAttention = (to: string) => {
     if (to === "/admin/solicitudes-ficha" && userRole === "ADMIN") return pendingAdminProfileCount > 0;
@@ -181,6 +242,8 @@ const AdminLayout = () => {
     if (path === "/admin") return pathname === "/admin";
     /** Evita marcar «Usuarios» activo en rutas hijas como alta masiva. */
     if (path === "/admin/usuarios") return pathname === "/admin/usuarios";
+    /** Evita marcar «Control de fichajes» activo en «Informes fichajes». */
+    if (path === "/admin/control-fichajes") return pathname === "/admin/control-fichajes";
     return pathname === path || pathname.startsWith(`${path}/`);
   };
 
@@ -217,19 +280,19 @@ const AdminLayout = () => {
               title={pendingLabel}
               className={cn(
                 "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full",
-                attention ? "font-bold" : "font-medium",
+                active ? "font-bold" : attention ? "font-semibold" : "font-medium",
                 isAdmin
                   ? active
                     ? attention
                       ? "bg-red-950/50 text-red-400 border-l-2 border-red-500 -ml-px pl-[11px]"
-                      : "bg-primary/20 text-primary border-l-2 border-primary -ml-px pl-[11px]"
+                      : "bg-primary/20 text-primary border-l-2 border-primary -ml-px pl-[11px] font-bold"
                     : attention
                       ? "text-red-400 border-l-2 border-transparent hover:bg-slate-800 hover:text-red-300"
                       : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
                   : active
                     ? attention
                       ? "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 font-bold"
-                      : "bg-secondary text-secondary-foreground"
+                      : "bg-secondary text-secondary-foreground font-bold"
                     : attention
                       ? "text-red-600 dark:text-red-400 font-bold hover:bg-muted hover:text-red-700 dark:hover:text-red-300"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -260,7 +323,12 @@ const AdminLayout = () => {
                   type="button"
                   onClick={() => setUsersSectionOpen((v) => !v)}
                   aria-expanded={usersSectionOpen}
-                  className="flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full font-medium text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
+                  className={cn(
+                    "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full border-l-2",
+                    isUsersSectionActive
+                      ? "font-bold text-primary bg-primary/20 border-primary -ml-px pl-[11px]"
+                      : "font-medium text-slate-300 hover:bg-slate-800 hover:text-white border-transparent"
+                  )}
                 >
                   <span className="flex items-center gap-3 min-w-0">
                     <Users className="h-4 w-4 shrink-0 opacity-90" />
@@ -282,7 +350,7 @@ const AdminLayout = () => {
                           className={cn(
                             "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors w-full",
                             subActive
-                              ? "bg-primary/20 text-primary"
+                              ? "bg-primary/20 text-primary font-bold"
                               : "text-slate-300 hover:bg-slate-800 hover:text-white"
                           )}
                         >
@@ -294,9 +362,57 @@ const AdminLayout = () => {
                 ) : null}
               </div>
             ) : null}
+            {item.to === "/admin/control-fichajes" && isAdmin && timeClockNavItems.length > 0 ? (
+              null
+            ) : null}
           </Fragment>
         );
       })}
+      {isAdmin && timeClockNavItems.length > 0 ? (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => setTimeClockSectionOpen((v) => !v)}
+            aria-expanded={timeClockSectionOpen}
+            className={cn(
+              "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full border-l-2",
+              isTimeClockSectionActive
+                ? "font-bold text-primary bg-primary/20 border-primary -ml-px pl-[11px]"
+                : "font-medium text-slate-300 hover:bg-slate-800 hover:text-white border-transparent"
+            )}
+          >
+            <span className="flex items-center gap-3 min-w-0">
+              <Clock3 className="h-4 w-4 shrink-0 opacity-90" />
+              <span className="truncate">{t("admin.layout.nav_time_clock_hub")}</span>
+            </span>
+            <ChevronDown
+              className={cn("h-4 w-4 shrink-0 transition-transform", timeClockSectionOpen && "rotate-180")}
+            />
+          </button>
+          {timeClockSectionOpen ? (
+            <div className="space-y-1 pl-8">
+              {timeClockNavItems.map((sub) => {
+                const subActive = isNavActive(sub.to);
+                return (
+                  <Link
+                    key={sub.to}
+                    to={sub.to}
+                    onClick={() => mobile && setMobileNavOpen(false)}
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors w-full",
+                      subActive
+                        ? "bg-primary/20 text-primary font-bold"
+                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    )}
+                  >
+                    <span className="truncate">{t(sub.labelKey)}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {isAdmin && adminMessageItems.length > 0 ? (
         <div className="space-y-1">
           <button
@@ -312,6 +428,7 @@ const AdminLayout = () => {
             }
             className={cn(
               "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full",
+              isAdminMessagesSectionActive && "font-bold bg-primary/20 text-primary border-l-2 border-primary -ml-px pl-[11px]",
               pendingAdminMessagesCount > 0
                 ? "font-bold text-red-400 border-l-2 border-transparent hover:bg-slate-800 hover:text-red-300"
                 : "font-medium text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
@@ -374,8 +491,8 @@ const AdminLayout = () => {
                       "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors w-full",
                       active
                         ? attention
-                          ? "bg-red-950/50 text-red-400"
-                          : "bg-primary/20 text-primary"
+                          ? "bg-red-950/50 text-red-400 font-bold"
+                          : "bg-primary/20 text-primary font-bold"
                         : attention
                           ? "text-red-400 hover:bg-slate-800 hover:text-red-300"
                           : "text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -548,6 +665,7 @@ const AdminLayout = () => {
                   variant={active ? "secondary" : "ghost"}
                   className={cn(
                     "w-full justify-start gap-2",
+                    active && "font-bold",
                     attention && "font-bold text-red-600 dark:text-red-400",
                     attention && active && "bg-red-100 dark:bg-red-950/40"
                   )}
@@ -567,6 +685,7 @@ const AdminLayout = () => {
           <div className="md:hidden fixed inset-0 z-20 bg-background/80 backdrop-blur-sm top-14">
             <nav className="p-4 flex flex-col gap-1 border-b bg-card">
               {navItems.map((item) => {
+                const active = isNavActive(item.to);
                 const attention = navNeedsAttention(item.to);
                 const aria =
                   attention && item.to === "/admin/mi-ficha" ? t("admin.layout.nav_my_profile_pending_aria") : undefined;
@@ -576,6 +695,7 @@ const AdminLayout = () => {
                     variant="ghost"
                     className={cn(
                       "justify-start gap-2",
+                      active && "font-bold bg-secondary text-secondary-foreground",
                       attention && "font-bold text-red-600 dark:text-red-400"
                     )}
                     asChild

@@ -71,6 +71,18 @@ export async function fetchPendingWorkerVacationChangeRequests(): Promise<
   return (data ?? []).map((r) => rowToDomain(r as WorkerVacationChangeRequestRow));
 }
 
+export async function fetchAllWorkerVacationChangeRequests(): Promise<
+  WorkerVacationChangeRequestRecord[]
+> {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from("worker_vacation_change_requests")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throwErr(error);
+  return (data ?? []).map((r) => rowToDomain(r as WorkerVacationChangeRequestRow));
+}
+
 export async function fetchWorkerVacationChangeRequestsForWorker(
   companyWorkerId: string
 ): Promise<WorkerVacationChangeRequestRecord[]> {
@@ -128,9 +140,24 @@ export async function submitWorkerVacationChangeRequest(
 
   const approvedDates = await fetchApprovedVacationDatesForWorkerYear(workerId, year);
   const normalized = [...new Set(input.proposedDates.map((d) => parseIsoDateYmdCalendar(d).iso))].sort();
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate()
+  ).padStart(2, "0")}`;
   for (const iso of normalized) {
     const parsed = parseIsoDateYmdCalendar(iso);
     if (parsed.year !== year) throw new Error("Todas las fechas propuestas deben pertenecer al ano seleccionado.");
+  }
+
+  const approvedPast = approvedDates.filter((d) => d < todayIso).sort();
+  const proposedPast = normalized.filter((d) => d < todayIso).sort();
+  const samePast =
+    approvedPast.length === proposedPast.length &&
+    approvedPast.every((d, idx) => d === proposedPast[idx]);
+  if (!samePast) {
+    throw new Error(
+      "No puedes modificar vacaciones ya disfrutadas. Solo se permiten cambios desde hoy en adelante."
+    );
   }
 
   if (normalized.length > worker.vacationDays) {
@@ -266,4 +293,18 @@ export async function rejectWorkerVacationChangeRequest(
   } catch (e) {
     console.error("[messages] No se pudo crear mensaje de rechazo de vacaciones:", e);
   }
+}
+
+export async function deleteWorkerVacationChangeRequest(requestId: string): Promise<void> {
+  const sb = requireSupabase();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) throw new Error("Sesion no valida.");
+  const adminProfile = await getProfileByAuthUserId(user.id);
+  if (!adminProfile || adminProfile.role !== "ADMIN") {
+    throw new Error("Solo un administrador puede eliminar solicitudes.");
+  }
+  const { error } = await sb.from("worker_vacation_change_requests").delete().eq("id", requestId);
+  if (error) throwErr(error);
 }

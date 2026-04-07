@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -26,9 +27,10 @@ import { useToast } from "@/hooks/use-toast";
 import { queryKeys } from "@/lib/queryKeys";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
 import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
-import { usePendingWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
+import { useAllWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
 import {
   approveWorkerVacationChangeRequest,
+  deleteWorkerVacationChangeRequest,
   rejectWorkerVacationChangeRequest,
 } from "@/api/workerVacationChangeRequestsApi";
 import { companyWorkerDisplayName } from "@/types/companyWorkers";
@@ -60,7 +62,7 @@ const AdminVacationRequests = () => {
   const queryClient = useQueryClient();
   const { data: workers = [] } = useCompanyWorkers();
   const { data: sites = [] } = useWorkCalendarSites();
-  const { data: pending = [], isLoading, isError, error } = usePendingWorkerVacationChangeRequests();
+  const { data: requests = [], isLoading, isError, error } = useAllWorkerVacationChangeRequests();
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<WorkerVacationChangeRequestRecord | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -123,6 +125,21 @@ const AdminVacationRequests = () => {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteWorkerVacationChangeRequest,
+    onSuccess: async () => {
+      toast({ title: t("admin.vacationRequests.toast_deleted") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workerVacationChangeRequests });
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
@@ -152,11 +169,11 @@ const AdminVacationRequests = () => {
         <CardHeader>
           <CardTitle className="text-base">{t("admin.vacationRequests.pending_title")}</CardTitle>
           <CardDescription>
-            {t("admin.common.showing")} {pending.length}
+            {t("admin.common.showing")} {requests.length}
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          {pending.length === 0 ? (
+          {requests.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">{t("admin.vacationRequests.empty")}</p>
           ) : (
             <Table>
@@ -166,13 +183,14 @@ const AdminVacationRequests = () => {
                   <TableHead>{t("admin.vacationRequests.col_site")}</TableHead>
                   <TableHead>{t("admin.vacationRequests.col_year")}</TableHead>
                   <TableHead>{t("admin.vacationRequests.col_date")}</TableHead>
+                  <TableHead>{t("admin.common.status")}</TableHead>
                   <TableHead>{t("admin.vacationRequests.col_message")}</TableHead>
                   <TableHead>{t("admin.vacationRequests.col_changes")}</TableHead>
                   <TableHead className="text-right w-[160px]">{t("admin.common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pending.map((req) => (
+                {requests.map((req) => (
                   <TableRow key={req.id}>
                     <TableCell className="font-medium whitespace-nowrap">
                       {workerNameById.get(req.companyWorkerId) ?? req.companyWorkerId}
@@ -182,34 +200,51 @@ const AdminVacationRequests = () => {
                     <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                       {formatDt(req.createdAt)}
                     </TableCell>
+                    <TableCell>
+                      <Badge variant={req.status === "PENDING" ? "default" : "outline"}>{req.status}</Badge>
+                    </TableCell>
                     <TableCell className="text-sm max-w-[220px]">{req.workerMessage || "—"}</TableCell>
                     <TableCell className="text-xs max-w-md">
                       <DiffSummary req={req} />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        {req.status === "PENDING" ? (
+                          <>
+                            <Button
+                              size="sm"
+                              className="gap-1"
+                              disabled={approveMutation.isPending}
+                              onClick={() => approveMutation.mutate(req.id)}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              {t("admin.vacationRequests.approve")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 text-destructive"
+                              disabled={rejectMutation.isPending}
+                              onClick={() => {
+                                setRejectTarget(req);
+                                setRejectReason("");
+                                setRejectOpen(true);
+                              }}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              {t("admin.vacationRequests.reject")}
+                            </Button>
+                          </>
+                        ) : null}
                         <Button
                           size="sm"
-                          className="gap-1"
-                          disabled={approveMutation.isPending}
-                          onClick={() => approveMutation.mutate(req.id)}
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          {t("admin.vacationRequests.approve")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
+                          variant="ghost"
                           className="gap-1 text-destructive"
-                          disabled={rejectMutation.isPending}
-                          onClick={() => {
-                            setRejectTarget(req);
-                            setRejectReason("");
-                            setRejectOpen(true);
-                          }}
+                          disabled={deleteMutation.isPending}
+                          onClick={() => deleteMutation.mutate(req.id)}
                         >
-                          <X className="h-3.5 w-3.5" />
-                          {t("admin.vacationRequests.reject")}
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {t("admin.common.delete")}
                         </Button>
                       </div>
                     </TableCell>

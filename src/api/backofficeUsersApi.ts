@@ -4,7 +4,13 @@ import { createMemorySupabaseClient } from "@/lib/supabaseMemoryClient";
 import { generateInitialPassword } from "@/lib/passwordPolicy";
 import { backofficeUserRowToDomain } from "@/lib/supabase/mappers";
 import type { BackofficeUserRow } from "@/types/database";
-import type { BackofficeUserRecord, EmploymentType, UserRole } from "@/types/backoffice";
+import {
+  ALL_WORKER_MODULES,
+  type BackofficeUserRecord,
+  type EmploymentType,
+  type UserRole,
+  type WorkerModuleKey,
+} from "@/types/backoffice";
 import { getDisplayName } from "@/types/backoffice";
 import type { CompanyWorkerRecord } from "@/types/companyWorkers";
 
@@ -123,6 +129,7 @@ export type CreateUserInput = {
   password: string;
   role: UserRole;
   active: boolean;
+  enabledModules?: WorkerModuleKey[];
 };
 
 export type CreateUserResult = {
@@ -170,6 +177,7 @@ export async function createUser(input: CreateUserInput): Promise<CreateUserResu
     city: fromWorker.city,
     employment_type: fromWorker.employmentType,
     active: input.active,
+    enabled_modules: input.enabledModules ?? [...ALL_WORKER_MODULES],
     auth_user_id: authData.user.id,
     must_change_password: true,
     password_changed_at: null as string | null,
@@ -304,6 +312,7 @@ export type UpdateUserInput = {
   password?: string;
   role?: UserRole;
   active?: boolean;
+  enabledModules?: WorkerModuleKey[];
   /** Solo administradores: obligar al usuario a cambiar contraseña en el próximo acceso. */
   forcePasswordChange?: boolean;
 };
@@ -349,6 +358,7 @@ export async function updateUser(
     email: input.email !== undefined ? input.email.trim().toLowerCase() : current.email,
     role: input.role ?? current.role,
     active: input.active !== undefined ? input.active : current.active,
+    enabledModules: input.enabledModules ?? current.enabledModules,
     password: current.password,
     mustChangePassword: current.mustChangePassword,
     passwordChangedAt: current.passwordChangedAt,
@@ -378,6 +388,7 @@ export async function updateUser(
     email: merged.email,
     role: merged.role,
     active: merged.active,
+    enabled_modules: merged.enabledModules,
     first_name: merged.firstName,
     last_name: merged.lastName,
     dni: merged.dni,
@@ -392,6 +403,27 @@ export async function updateUser(
   const { data: updated, error } = await sb.from("backoffice_users").update(patch).eq("id", id).select("*").single();
   if (error) throw error;
   return backofficeUserRowToDomain(updated as BackofficeUserRow);
+}
+
+export async function updateWorkerModules(
+  userId: string,
+  enabledModules: WorkerModuleKey[]
+): Promise<BackofficeUserRecord> {
+  const user = await getUserById(userId);
+  if (!user) throw new Error("Usuario no encontrado.");
+  if (user.role !== "WORKER") throw new Error("Solo se pueden configurar módulos de usuarios trabajador.");
+  return updateUser(userId, { enabledModules });
+}
+
+export async function bulkUpdateWorkerModules(
+  enabledModules: WorkerModuleKey[],
+  target: "ALL_WORKERS" | "ONLY_ACTIVE_WORKERS" = "ALL_WORKERS"
+): Promise<void> {
+  const sb = requireSupabase();
+  let q = sb.from("backoffice_users").update({ enabled_modules: enabledModules }).eq("role", "WORKER");
+  if (target === "ONLY_ACTIVE_WORKERS") q = q.eq("active", true);
+  const { error } = await q;
+  if (error) throw error;
 }
 
 /**

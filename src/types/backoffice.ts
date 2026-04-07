@@ -3,6 +3,9 @@ import { companyWorkerDisplayName } from "@/types/companyWorkers";
 
 /** Rol en el backoffice Inorme */
 export type UserRole = "ADMIN" | "WORKER";
+export type WorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK";
+
+export const ALL_WORKER_MODULES: WorkerModuleKey[] = ["VACATIONS", "MESSAGES", "TIME_CLOCK"];
 
 /**
  * Tipo de relación laboral / contrato (alineado con ficha de trabajador)
@@ -46,6 +49,8 @@ export interface BackofficeUserRecord {
   employmentType: EmploymentType;
   /** Si false, no puede iniciar sesión */
   active: boolean;
+  /** Módulos del backoffice habilitados para trabajadores. */
+  enabledModules: WorkerModuleKey[];
   /** Obligatorio cambiar contraseña (alta o forzado por administrador). */
   mustChangePassword: boolean;
   /** Último cambio de contraseña (política anual). Null si aún no consta. */
@@ -63,6 +68,7 @@ export interface BackofficeSession {
   role: UserRole;
   /** Ficha en Trabajadores vinculada al usuario backoffice; null si no hay ficha. */
   companyWorkerId: string | null;
+  enabledModules: WorkerModuleKey[];
 }
 
 /** @deprecated usar BackofficeUserRecord — mantenido por migración de tipos */

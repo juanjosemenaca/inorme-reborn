@@ -5,6 +5,7 @@
  */
 
 export type DbUserRole = "ADMIN" | "WORKER";
+export type DbWorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK";
 
 export type DbEmploymentType =
   | "FIJO"
@@ -177,6 +178,7 @@ export interface BackofficeUserRow {
   must_change_password: boolean;
   /** Último cambio de contraseña registrado en la app (Auth). */
   password_changed_at: string | null;
+  enabled_modules: DbWorkerModuleKey[];
   created_at: string;
   updated_at: string;
 }
@@ -278,6 +280,28 @@ export interface CompanyWorkerVacationDayNotificationRow {
   calendar_year: number;
   vacation_date_added: string;
   created_at: string;
+}
+
+export type DbWorkerTimeClockEventKind =
+  | "CLOCK_IN"
+  | "CLOCK_OUT"
+  | "BREAK_START"
+  | "BREAK_END"
+  | "ABSENCE";
+
+export type DbWorkerTimeClockSource = "WORKER" | "ADMIN";
+
+export interface WorkerTimeClockEventRow {
+  id: string;
+  company_worker_id: string;
+  event_kind: DbWorkerTimeClockEventKind;
+  event_at: string;
+  absence_reason: string | null;
+  comment: string;
+  source: DbWorkerTimeClockSource;
+  created_by_backoffice_user_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Perfil backoffice (sin contraseña; Auth en `auth.users`). */
