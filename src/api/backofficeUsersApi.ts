@@ -315,6 +315,8 @@ export type UpdateUserInput = {
   enabledModules?: WorkerModuleKey[];
   /** Solo administradores: obligar al usuario a cambiar contraseña en el próximo acceso. */
   forcePasswordChange?: boolean;
+  /** Vincular ficha de trabajador (obligatorio para rol ADMIN). */
+  companyWorkerId?: string | null;
 };
 
 export async function updateUser(
@@ -374,7 +376,33 @@ export async function updateUser(
     merged.mustChangePassword = input.forcePasswordChange;
   }
 
-  if (merged.companyWorkerId) {
+  if (input.companyWorkerId !== undefined) {
+    const raw = input.companyWorkerId?.trim() ?? "";
+    if (!raw) {
+      merged = { ...merged, companyWorkerId: null };
+    } else {
+      const linkedElsewhere = await isCompanyWorkerLinkedToUser(raw, id);
+      if (linkedElsewhere) {
+        throw new Error("Ese trabajador ya tiene un usuario de acceso.");
+      }
+      const w = await getCompanyWorkerById(raw);
+      if (!w) throw new Error("Trabajador no encontrado.");
+      if (!w.active) throw new Error("Activa primero la ficha del trabajador en Trabajadores.");
+      merged = {
+        ...merged,
+        companyWorkerId: w.id,
+        ...denormalizeFromWorker(w),
+      };
+    }
+  }
+
+  if (merged.role === "ADMIN" && !merged.companyWorkerId) {
+    throw new Error(
+      "Un administrador debe tener una ficha de trabajador vinculada. Elige un trabajador en el formulario."
+    );
+  }
+
+  if (merged.companyWorkerId && input.companyWorkerId === undefined) {
     const w = await getCompanyWorkerById(merged.companyWorkerId);
     if (w) {
       merged = {
@@ -389,6 +417,7 @@ export async function updateUser(
     role: merged.role,
     active: merged.active,
     enabled_modules: merged.enabledModules,
+    company_worker_id: merged.companyWorkerId,
     first_name: merged.firstName,
     last_name: merged.lastName,
     dni: merged.dni,
@@ -411,7 +440,9 @@ export async function updateWorkerModules(
 ): Promise<BackofficeUserRecord> {
   const user = await getUserById(userId);
   if (!user) throw new Error("Usuario no encontrado.");
-  if (user.role !== "WORKER") throw new Error("Solo se pueden configurar módulos de usuarios trabajador.");
+  if (user.role !== "WORKER" && user.role !== "ADMIN") {
+    throw new Error("Solo se pueden configurar módulos de usuarios trabajador o administrador.");
+  }
   return updateUser(userId, { enabledModules });
 }
 

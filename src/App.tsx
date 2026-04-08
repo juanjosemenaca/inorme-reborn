@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { ProtectedRoute } from "@/components/admin/ProtectedRoute";
@@ -28,11 +28,16 @@ import WorkerMyCalendar from "./pages/admin/WorkerMyCalendar";
 import WorkerMessages from "./pages/admin/WorkerMessages";
 import AdminWorkerMessages from "./pages/admin/AdminWorkerMessages";
 import AdminWorkerProfileRequests from "./pages/admin/AdminWorkerProfileRequests";
-import WorkerTimeClock from "./pages/admin/WorkerTimeClock";
+import WorkerTimeClockLayout from "./pages/admin/WorkerTimeClockLayout";
+import WorkerTimeClockFichar from "./pages/admin/WorkerTimeClockFichar";
+import WorkerTimeClockCorrection from "./pages/admin/WorkerTimeClockCorrection";
+import WorkerTimeClockHistory from "./pages/admin/WorkerTimeClockHistory";
 import AdminTimeClock from "./pages/admin/AdminTimeClock";
 import AdminTimeClockRequests from "./pages/admin/AdminTimeClockRequests";
 import AdminTimeClockReports from "./pages/admin/AdminTimeClockReports";
 import AdminUserModuleActivation from "./pages/admin/AdminUserModuleActivation";
+import WorkerAgenda from "./pages/admin/WorkerAgenda";
+import AdminWorkerAgenda from "./pages/admin/AdminWorkerAgenda";
 
 const queryClient = new QueryClient();
 
@@ -61,7 +66,7 @@ const App = () => (
                 <Route
                   path="mi-ficha"
                   element={
-                    <RoleRoute allowedRoles={["WORKER"]}>
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]}>
                       <WorkerMyProfile />
                     </RoleRoute>
                   }
@@ -69,8 +74,24 @@ const App = () => (
                 <Route
                   path="mi-calendario"
                   element={
-                    <RoleRoute allowedRoles={["WORKER"]} requiredModule="VACATIONS">
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="VACATIONS">
                       <WorkerMyCalendar />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="mi-agenda"
+                  element={
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="AGENDA">
+                      <WorkerAgenda />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="agendas-trabajadores"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminWorkerAgenda />
                     </RoleRoute>
                   }
                 />
@@ -85,7 +106,7 @@ const App = () => (
                 <Route
                   path="mensajes"
                   element={
-                    <RoleRoute allowedRoles={["WORKER"]} requiredModule="MESSAGES">
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="MESSAGES">
                       <WorkerMessages />
                     </RoleRoute>
                   }
@@ -93,11 +114,16 @@ const App = () => (
                 <Route
                   path="fichajes"
                   element={
-                    <RoleRoute allowedRoles={["WORKER"]} requiredModule="TIME_CLOCK">
-                      <WorkerTimeClock />
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="TIME_CLOCK">
+                      <WorkerTimeClockLayout />
                     </RoleRoute>
                   }
-                />
+                >
+                  <Route index element={<Navigate to="fichar" replace />} />
+                  <Route path="fichar" element={<WorkerTimeClockFichar />} />
+                  <Route path="correccion" element={<WorkerTimeClockCorrection />} />
+                  <Route path="historial" element={<WorkerTimeClockHistory />} />
+                </Route>
                 <Route
                   path="control-fichajes"
                   element={

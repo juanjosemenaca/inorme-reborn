@@ -27,4 +27,6 @@ export const queryKeys = {
     ["workerTimeClockEvents", workerId, fromIsoDate, toIsoDate] as const,
   workersTimeClockEvents: (workerIdsKey: string, fromIsoDate: string, toIsoDate: string) =>
     ["workersTimeClockEvents", workerIdsKey, fromIsoDate, toIsoDate] as const,
+  workerAgendaItems: (companyWorkerId: string, fromIsoDate: string, toIsoDate: string) =>
+    ["workerAgendaItems", companyWorkerId, fromIsoDate, toIsoDate] as const,
 };

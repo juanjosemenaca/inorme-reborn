@@ -90,6 +90,9 @@ type Props = {
   vacationDayCanClick?: (iso: string) => boolean;
   vacationLegendLabel?: string;
   vacationTooltipLine?: string;
+  /** Número de entradas de agenda personal por fecha ISO (día local). */
+  agendaCountByIso?: ReadonlyMap<string, number>;
+  agendaLegendLabel?: string;
 };
 
 export function WorkCalendarYearGrid({
@@ -115,6 +118,8 @@ export function WorkCalendarYearGrid({
   vacationDayCanClick,
   vacationLegendLabel,
   vacationTooltipLine,
+  agendaCountByIso,
+  agendaLegendLabel,
 }: Props) {
   const todayIso = useMemo(() => {
     const now = new Date();
@@ -190,6 +195,14 @@ export function WorkCalendarYearGrid({
               <span>{vacationLegendLabel}</span>
             </span>
           ) : null}
+          {agendaLegendLabel ? (
+            <span className="flex items-center gap-1.5">
+              <span className="relative inline-flex size-4 items-end justify-center rounded border border-violet-400/70 bg-violet-50 dark:bg-violet-950/40">
+                <span className="mb-0.5 size-1.5 rounded-full bg-violet-600 dark:bg-violet-400" aria-hidden />
+              </span>
+              <span>{agendaLegendLabel}</span>
+            </span>
+          ) : null}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -262,6 +275,10 @@ export function WorkCalendarYearGrid({
                       if (isVac && vacationTooltipLine) {
                         tooltipLines.push(vacationTooltipLine);
                       }
+                      const agendaN = agendaCountByIso?.get(cell.iso) ?? 0;
+                      if (agendaN > 0 && agendaLegendLabel) {
+                        tooltipLines.push(`${agendaLegendLabel}: ${agendaN}`);
+                      }
 
                       const cellInteractiveCls =
                         onVacationDayClick && canVac
@@ -292,10 +309,22 @@ export function WorkCalendarYearGrid({
                                 }
                                 disabled={!canVac}
                               >
-                                {cell.day}
+                                <span className="relative flex flex-col items-center justify-center gap-0.5">
+                                  <span>{cell.day}</span>
+                                  {(agendaCountByIso?.get(cell.iso) ?? 0) > 0 ? (
+                                    <span className="size-1.5 rounded-full bg-violet-600 dark:bg-violet-400" aria-hidden />
+                                  ) : null}
+                                </span>
                               </button>
                             ) : (
-                              <div className={cellClassName}>{cell.day}</div>
+                              <div className={cellClassName}>
+                                <span className="relative flex flex-col items-center justify-center gap-0.5">
+                                  <span>{cell.day}</span>
+                                  {(agendaCountByIso?.get(cell.iso) ?? 0) > 0 ? (
+                                    <span className="size-1.5 rounded-full bg-violet-600 dark:bg-violet-400" aria-hidden />
+                                  ) : null}
+                                </span>
+                              </div>
                             )}
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-xs">

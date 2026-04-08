@@ -68,6 +68,8 @@ export type UserEditFormValues = {
   password?: string;
   role: z.infer<typeof roleEnum>;
   active: boolean;
+  /** Ficha de trabajador vinculada (obligatoria si el rol es ADMIN). */
+  companyWorkerId: string;
 };
 
 type Props = {
@@ -77,8 +79,8 @@ type Props = {
   initial?: BackofficeUserRecord | null;
   /** Trabajadores que pueden recibir usuario (activos y aún sin cuenta) */
   selectableWorkers: CompanyWorkerRecord[];
-  /** Ficha de trabajador vinculada al editar (si existe) */
-  linkedWorker?: CompanyWorkerRecord | null;
+  /** Edición: fichas que pueden vincularse (incluye la del usuario editado). */
+  selectableWorkersForEdit?: CompanyWorkerRecord[];
   onSubmitCreate: (values: UserCreateFormValues) => void | Promise<void>;
   onSubmitEdit: (values: UserEditFormValues) => void | Promise<void>;
 };
@@ -89,7 +91,7 @@ function UserFormDialogInner({
   mode,
   initial,
   selectableWorkers,
-  linkedWorker,
+  selectableWorkersForEdit = [],
   onSubmitCreate,
   onSubmitEdit,
 }: Props) {
@@ -112,15 +114,26 @@ function UserFormDialogInner({
 
   const editSchema = useMemo(
     () =>
-      z.object({
-        email: z.string().email(t("admin.users.validation_email")),
-        password: z
-          .string()
-          .optional()
-          .refine((v) => !v || v.length >= 8, t("admin.users.edit_password_refine")),
-        role: roleEnum,
-        active: z.boolean(),
-      }),
+      z
+        .object({
+          email: z.string().email(t("admin.users.validation_email")),
+          password: z
+            .string()
+            .optional()
+            .refine((v) => !v || v.length >= 8, t("admin.users.edit_password_refine")),
+          role: roleEnum,
+          active: z.boolean(),
+          companyWorkerId: z.string(),
+        })
+        .superRefine((data, ctx) => {
+          if (data.role === "ADMIN" && !data.companyWorkerId?.trim()) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: t("admin.users.validation_worker_admin"),
+              path: ["companyWorkerId"],
+            });
+          }
+        }),
     [t]
   );
 
@@ -142,6 +155,7 @@ function UserFormDialogInner({
       password: "",
       role: "WORKER",
       active: true,
+      companyWorkerId: "",
     },
   });
 
@@ -151,6 +165,13 @@ function UserFormDialogInner({
   const selectedWorker = useMemo(
     () => selectableWorkers.find((w) => w.id === watchedWorkerId),
     [selectableWorkers, watchedWorkerId]
+  );
+
+  const watchedEditWorkerId = editForm.watch("companyWorkerId");
+  const watchedEditRole = editForm.watch("role");
+  const selectedEditWorker = useMemo(
+    () => selectableWorkersForEdit.find((w) => w.id === watchedEditWorkerId),
+    [selectableWorkersForEdit, watchedEditWorkerId]
   );
 
   const workerSearchValue = (w: CompanyWorkerRecord) =>
@@ -168,6 +189,7 @@ function UserFormDialogInner({
         password: "",
         role: initial.role,
         active: initial.active,
+        companyWorkerId: initial.companyWorkerId ?? "",
       });
     } else if (mode === "create") {
       createForm.reset({
@@ -199,7 +221,7 @@ function UserFormDialogInner({
           <DialogDescription>
             {mode === "create"
               ? "Elige la ficha del trabajador, define el email de acceso (por defecto el de la ficha), la contraseña y el rol."
-              : "Credenciales y rol. Los datos personales se toman de la ficha en Trabajadores (se actualizan al guardar)."}
+              : t("admin.users.dialog_edit_desc")}
           </DialogDescription>
         </DialogHeader>
 
@@ -406,22 +428,114 @@ function UserFormDialogInner({
               onSubmit={editForm.handleSubmit((v) => onSubmitEdit(v))}
               className="space-y-4"
             >
-              {linkedWorker ? (
-                <div className="rounded-lg border bg-muted/40 px-3 py-3 text-sm space-y-1">
-                  <p className="font-medium text-foreground">
-                    {companyWorkerDisplayName(linkedWorker)}
+              <FormField
+                control={editForm.control}
+                name="companyWorkerId"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>{t("admin.users.edit_worker_label")}</FormLabel>
+                    <p className="text-xs text-muted-foreground mb-1.5">
+                      {watchedEditRole === "ADMIN"
+                        ? t("admin.users.edit_worker_help_admin")
+                        : t("admin.users.edit_worker_help_worker")}
+                    </p>
+                    <Popover open={workerComboOpen} onOpenChange={setWorkerComboOpen}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={workerComboOpen}
+                            disabled={selectableWorkersForEdit.length === 0 && watchedEditRole !== "ADMIN"}
+                            className={cn(
+                              "w-full justify-between font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value
+                              ? (() => {
+                                  const w = selectableWorkersForEdit.find((x) => x.id === field.value);
+                                  return w
+                                    ? `${companyWorkerDisplayName(w)} · ${w.dni}`
+                                    : t("admin.users.worker_pick_placeholder");
+                                })()
+                              : t("admin.users.worker_pick_placeholder")}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="p-0 w-[min(calc(100vw-2rem),32rem)]" align="start">
+                        <Command>
+                          <CommandInput placeholder={t("admin.users.worker_search_ph")} />
+                          <CommandList>
+                            <CommandEmpty>{t("admin.users.worker_search_empty")}</CommandEmpty>
+                            <CommandGroup>
+                              {watchedEditRole === "WORKER" ? (
+                                <CommandItem
+                                  value="__clear__ sin seleccionar"
+                                  onSelect={() => {
+                                    field.onChange("");
+                                    setWorkerComboOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      !field.value ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {t("admin.users.worker_clear_choice")}
+                                </CommandItem>
+                              ) : null}
+                              {selectableWorkersForEdit.map((w) => (
+                                <CommandItem
+                                  key={w.id}
+                                  value={workerSearchValue(w)}
+                                  onSelect={() => {
+                                    field.onChange(w.id);
+                                    if (w.email.trim()) {
+                                      editForm.setValue("email", w.email.trim().toLowerCase());
+                                    }
+                                    setWorkerComboOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      field.value === w.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {companyWorkerDisplayName(w)} · {w.dni}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    {selectableWorkersForEdit.length === 0 && watchedEditRole === "ADMIN" ? (
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        {t("admin.users.edit_worker_none_available")}
+                      </p>
+                    ) : null}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {selectedEditWorker ? (
+                <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground space-y-1">
+                  <p>
+                    <span className="font-medium text-foreground">{t("admin.users.preview_city")}</span>{" "}
+                    {selectedEditWorker.city}
                   </p>
-                  <p className="text-muted-foreground">DNI: {linkedWorker.dni}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Datos personales en Administración → Trabajadores.
+                  <p>
+                    <span className="font-medium text-foreground">{t("admin.users.preview_employment")}</span>{" "}
+                    {COMPANY_WORKER_EMPLOYMENT_LABELS[selectedEditWorker.employmentType]}
                   </p>
                 </div>
-              ) : (
-                <div className="rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
-                  Usuario sin ficha de trabajador vinculada (cuenta anterior). Puedes seguir
-                  editando email y rol.
-                </div>
-              )}
+              ) : null}
 
               {initial && (
                 <div className="rounded-lg border bg-muted/30 px-3 py-3 text-sm space-y-2">

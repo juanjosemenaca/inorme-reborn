@@ -16,12 +16,13 @@ import {
 } from "@/api/backofficeUsersApi";
 import { ALL_WORKER_MODULES, type WorkerModuleKey } from "@/types/backoffice";
 
-const MODULE_ORDER: WorkerModuleKey[] = ["VACATIONS", "MESSAGES", "TIME_CLOCK"];
+const MODULE_ORDER: WorkerModuleKey[] = ["VACATIONS", "MESSAGES", "TIME_CLOCK", "AGENDA"];
 
 function moduleLabel(module: WorkerModuleKey, t: (key: string) => string): string {
   if (module === "VACATIONS") return t("admin.moduleActivation.mod_vacations");
   if (module === "MESSAGES") return t("admin.moduleActivation.mod_messages");
-  return t("admin.moduleActivation.mod_time_clock");
+  if (module === "TIME_CLOCK") return t("admin.moduleActivation.mod_time_clock");
+  return t("admin.moduleActivation.mod_agenda");
 }
 
 const AdminUserModuleActivation = () => {
@@ -38,7 +39,7 @@ const AdminUserModuleActivation = () => {
   const workers = useMemo(
     () =>
       users
-        .filter((u) => u.role === "WORKER")
+        .filter((u) => u.role === "WORKER" || u.role === "ADMIN")
         .filter((u) => {
           const q = query.trim().toLowerCase();
           if (!q) return true;
@@ -187,7 +188,14 @@ const AdminUserModuleActivation = () => {
                     <TableRow key={u.id}>
                       <TableCell>
                         <div className="space-y-0.5">
-                          <p className="font-medium">{`${u.firstName} ${u.lastName}`.trim()}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">{`${u.firstName} ${u.lastName}`.trim()}</p>
+                            {u.role === "ADMIN" ? (
+                              <Badge variant="secondary" className="text-[10px]">
+                                {t("admin.layout.badge_admin")}
+                              </Badge>
+                            ) : null}
+                          </div>
                           <p className="text-xs text-muted-foreground">{u.email}</p>
                           {!u.active ? <Badge variant="outline">{t("admin.common.inactive")}</Badge> : null}
                         </div>

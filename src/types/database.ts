@@ -5,7 +5,7 @@
  */
 
 export type DbUserRole = "ADMIN" | "WORKER";
-export type DbWorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK";
+export type DbWorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK" | "AGENDA";
 
 export type DbEmploymentType =
   | "FIJO"
@@ -299,6 +299,20 @@ export interface WorkerTimeClockEventRow {
   absence_reason: string | null;
   comment: string;
   source: DbWorkerTimeClockSource;
+  created_by_backoffice_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkerAgendaItemRow {
+  id: string;
+  company_worker_id: string;
+  title: string;
+  description: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  item_type: string;
+  source: string;
   created_by_backoffice_user_id: string | null;
   created_at: string;
   updated_at: string;

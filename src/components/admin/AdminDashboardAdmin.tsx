@@ -1,39 +1,15 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import {
-  Users2,
-  Building2,
-  FolderKanban,
-  Truck,
-  Contact2,
-  ArrowRight,
-  Clock,
-} from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useBackofficeUsers } from "@/hooks/useBackofficeUsers";
-import { useClients } from "@/hooks/useClients";
-import { useProviders } from "@/hooks/useProviders";
-import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
-import { useProjects } from "@/hooks/useProjects";
+import { FileUser, Palmtree, Inbox, MessageSquare } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { BackofficeTodayDateCard } from "@/components/admin/BackofficeTodayDateCard";
+import { useMyBackofficeMessages } from "@/hooks/useBackofficeMessages";
+import { usePendingWorkerProfileChangeRequests } from "@/hooks/useWorkerProfileChangeRequests";
+import { usePendingWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import type { BackofficeSession } from "@/types/backoffice";
-import {
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-
-const chartData = [
-  { mes: "Sep", contactos: 12 },
-  { mes: "Oct", contactos: 19 },
-  { mes: "Nov", contactos: 15 },
-  { mes: "Dic", contactos: 22 },
-  { mes: "Ene", contactos: 18 },
-  { mes: "Feb", contactos: 24 },
-];
 
 type Props = {
   session: BackofficeSession;
@@ -41,206 +17,128 @@ type Props = {
 
 export function AdminDashboardAdmin({ session }: Props) {
   const { t, language } = useLanguage();
-  const allUsers = useBackofficeUsers();
-  const allClients = useClients();
-  const allProviders = useProviders();
-  const allCompanyWorkers = useCompanyWorkers();
-  const { data: allProjects = [] } = useProjects();
-  const userCount = allUsers.length;
-  const clientCount = allClients.length;
-  const projectCount = allProjects.length;
-  const providerCount = allProviders.length;
-  const workerCount = allCompanyWorkers.length;
 
-  const dateLocale = language === "ca" ? "ca-ES" : language === "en" ? "en-GB" : "es-ES";
+  const supabaseOk = isSupabaseConfigured();
+  const fetchPending = supabaseOk && !!session.userId;
+  const { data: pendingProfileRequests = [] } = usePendingWorkerProfileChangeRequests(fetchPending);
+  const { data: pendingVacationRequests = [] } = usePendingWorkerVacationChangeRequests(fetchPending);
+  const { data: backofficeMessages = [] } = useMyBackofficeMessages(fetchPending);
+  const myUserId = session.userId;
+
+  const pendingProfileCount = pendingProfileRequests.length;
+  const pendingVacationCount = pendingVacationRequests.length;
+
+  const { pendingTimeClockCount, unreadChatCount } = useMemo(() => {
+    let tc = 0;
+    let chat = 0;
+    for (const m of backofficeMessages) {
+      if (m.recipientBackofficeUserId !== myUserId || m.readAt !== null) continue;
+      if (m.category === "TIME_CLOCK_CORRECTION") {
+        const st = (m.payload as { requestStatus?: string }).requestStatus ?? "PENDING";
+        if (st === "PENDING") tc += 1;
+        continue;
+      }
+      chat += 1;
+    }
+    return { pendingTimeClockCount: tc, unreadChatCount: chat };
+  }, [backofficeMessages, myUserId]);
+
+  const hasPendingStrip =
+    pendingProfileCount > 0 ||
+    pendingVacationCount > 0 ||
+    pendingTimeClockCount > 0 ||
+    unreadChatCount > 0;
+
+  const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-muted-foreground">{t("admin.dashboard.admin_control")}</p>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            {t("admin.dashboard.admin_hello")} {session.name.split(" ")[0]}
+            {t("admin.dashboard.admin_hello")} {session.name}
           </h1>
-          <p className="text-muted-foreground text-sm mt-1 max-w-xl">{t("admin.dashboard.admin_subtitle")}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Clock className="h-3.5 w-3.5" />
-          {new Date().toLocaleDateString(dateLocale, {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })}
+        <BackofficeTodayDateCard
+          todayTitle={t("admin.dashboard.worker_today_title")}
+          language={language}
+          localeTag={localeTag}
+        />
+      </div>
+
+      {hasPendingStrip ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {pendingProfileCount > 0 ? (
+            <Link to="/admin/solicitudes-ficha" className="block min-w-0">
+              <Card className="h-full border-amber-500/35 bg-amber-500/[0.06] transition-colors hover:bg-amber-500/10">
+                <CardContent className="flex items-center justify-between gap-3 py-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <FileUser className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
+                    <span className="text-sm font-medium leading-tight">
+                      {t("admin.layout.nav_profile_requests")}
+                    </span>
+                  </span>
+                  <Badge variant="secondary" className="shrink-0 tabular-nums">
+                    {pendingProfileCount > 99 ? "99+" : pendingProfileCount}
+                  </Badge>
+                </CardContent>
+              </Card>
+            </Link>
+          ) : null}
+          {pendingVacationCount > 0 ? (
+            <Link to="/admin/solicitudes-vacaciones" className="block min-w-0">
+              <Card className="h-full border-amber-500/35 bg-amber-500/[0.06] transition-colors hover:bg-amber-500/10">
+                <CardContent className="flex items-center justify-between gap-3 py-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Palmtree className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
+                    <span className="text-sm font-medium leading-tight">
+                      {t("admin.layout.nav_vacation_requests")}
+                    </span>
+                  </span>
+                  <Badge variant="secondary" className="shrink-0 tabular-nums">
+                    {pendingVacationCount > 99 ? "99+" : pendingVacationCount}
+                  </Badge>
+                </CardContent>
+              </Card>
+            </Link>
+          ) : null}
+          {pendingTimeClockCount > 0 ? (
+            <Link to="/admin/solicitudes-fichajes" className="block min-w-0">
+              <Card className="h-full border-amber-500/35 bg-amber-500/[0.06] transition-colors hover:bg-amber-500/10">
+                <CardContent className="flex items-center justify-between gap-3 py-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Inbox className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
+                    <span className="text-sm font-medium leading-tight">
+                      {t("admin.timeClock.requests_title")}
+                    </span>
+                  </span>
+                  <Badge variant="secondary" className="shrink-0 tabular-nums">
+                    {pendingTimeClockCount > 99 ? "99+" : pendingTimeClockCount}
+                  </Badge>
+                </CardContent>
+              </Card>
+            </Link>
+          ) : null}
+          {unreadChatCount > 0 ? (
+            <Link to="/admin/mensajes-trabajadores" className="block min-w-0">
+              <Card className="h-full border-amber-500/35 bg-amber-500/[0.06] transition-colors hover:bg-amber-500/10">
+                <CardContent className="flex items-center justify-between gap-3 py-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <MessageSquare className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
+                    <span className="text-sm font-medium leading-tight">
+                      {t("admin.layout.nav_worker_messages_admin")}
+                    </span>
+                  </span>
+                  <Badge variant="secondary" className="shrink-0 tabular-nums">
+                    {unreadChatCount > 99 ? "99+" : unreadChatCount}
+                  </Badge>
+                </CardContent>
+              </Card>
+            </Link>
+          ) : null}
         </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t("admin.dashboard.kpi_users")}
-            </CardTitle>
-            <div className="rounded-lg bg-muted p-2">
-              <Users2 className="h-4 w-4 text-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums">{userCount}</div>
-            <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <Link to="/admin/usuarios">{t("admin.dashboard.link_users")}</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t("admin.dashboard.kpi_clients")}
-            </CardTitle>
-            <div className="rounded-lg bg-muted p-2">
-              <Building2 className="h-4 w-4 text-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums">{clientCount}</div>
-            <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <Link to="/admin/clientes">{t("admin.dashboard.link_clients")}</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t("admin.dashboard.kpi_projects")}
-            </CardTitle>
-            <div className="rounded-lg bg-muted p-2">
-              <FolderKanban className="h-4 w-4 text-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums">{projectCount}</div>
-            <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <Link to="/admin/proyectos">{t("admin.dashboard.link_projects")}</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t("admin.dashboard.kpi_providers")}
-            </CardTitle>
-            <div className="rounded-lg bg-muted p-2">
-              <Truck className="h-4 w-4 text-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums">{providerCount}</div>
-            <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <Link to="/admin/proveedores">{t("admin.dashboard.link_providers")}</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t("admin.dashboard.kpi_workers")}
-            </CardTitle>
-            <div className="rounded-lg bg-muted p-2">
-              <Contact2 className="h-4 w-4 text-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums">{workerCount}</div>
-            <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <Link to="/admin/trabajadores">{t("admin.dashboard.link_workers")}</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle className="text-base">{t("admin.common.chart_demo")}</CardTitle>
-            <CardDescription>{t("admin.common.chart_demo_desc")}</CardDescription>
-          </CardHeader>
-          <CardContent className="pl-0">
-            <div className="h-[220px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <XAxis dataKey="mes" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={12} width={32} />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: "8px",
-                      border: "1px solid hsl(var(--border))",
-                    }}
-                  />
-                  <Bar dataKey="contactos" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">{t("admin.common.quick_links")}</CardTitle>
-            <CardDescription>{t("admin.common.quick_links_desc")}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <Button variant="outline" className="justify-between h-auto py-3" asChild>
-              <Link to="/admin/usuarios">
-                <span className="flex items-center gap-2">
-                  <Users2 className="h-4 w-4 text-primary" />
-                  {t("admin.dashboard.link_users_roles")}
-                </span>
-                <ArrowRight className="h-4 w-4 opacity-50" />
-              </Link>
-            </Button>
-            <Button variant="outline" className="justify-between h-auto py-3" asChild>
-              <Link to="/admin/clientes">
-                <span className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-primary" />
-                  {t("admin.dashboard.link_clients_contacts")}
-                </span>
-                <ArrowRight className="h-4 w-4 opacity-50" />
-              </Link>
-            </Button>
-            <Button variant="outline" className="justify-between h-auto py-3" asChild>
-              <Link to="/admin/proyectos">
-                <span className="flex items-center gap-2">
-                  <FolderKanban className="h-4 w-4 text-primary" />
-                  {t("admin.dashboard.link_projects")}
-                </span>
-                <ArrowRight className="h-4 w-4 opacity-50" />
-              </Link>
-            </Button>
-            <Button variant="outline" className="justify-between h-auto py-3" asChild>
-              <Link to="/admin/proveedores">
-                <span className="flex items-center gap-2">
-                  <Truck className="h-4 w-4 text-primary" />
-                  {t("admin.dashboard.kpi_providers")}
-                </span>
-                <ArrowRight className="h-4 w-4 opacity-50" />
-              </Link>
-            </Button>
-            <Button variant="outline" className="justify-between h-auto py-3" asChild>
-              <Link to="/admin/trabajadores">
-                <span className="flex items-center gap-2">
-                  <Contact2 className="h-4 w-4 text-primary" />
-                  {t("admin.dashboard.link_workers_full")}
-                </span>
-                <ArrowRight className="h-4 w-4 opacity-50" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      ) : null}
     </div>
   );
 }

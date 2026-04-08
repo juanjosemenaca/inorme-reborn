@@ -25,7 +25,7 @@ export function RoleRoute({
   const { user } = useAdminAuth();
   const role = normalizeRole(user?.role);
   const hasModule =
-    !requiredModule || role !== "WORKER" || user?.enabledModules?.includes(requiredModule) === true;
+    !requiredModule || user?.enabledModules?.includes(requiredModule) === true;
   const canAccess = role !== null && allowedRoles.includes(role) && hasModule;
 
   if (!user || !canAccess) {

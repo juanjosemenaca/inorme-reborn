@@ -66,7 +66,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { queryKeys } from "@/lib/queryKeys";
 import { nextPasswordRenewalDeadline } from "@/lib/passwordPolicy";
-import { isWorkerEligibleForNewBackofficeUser } from "@/lib/workerBackofficeUserEligibility";
+import {
+  isWorkerEligibleForNewBackofficeUser,
+  isWorkerEligibleForBackofficeUserEdit,
+} from "@/lib/workerBackofficeUserEligibility";
 
 function initialsFromDisplayName(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -146,10 +149,10 @@ const AdminUsers = () => {
     [companyWorkers, users]
   );
 
-  const linkedWorkerForEdit = useMemo(() => {
-    if (!editing?.companyWorkerId) return null;
-    return companyWorkers.find((w) => w.id === editing.companyWorkerId) ?? null;
-  }, [editing, companyWorkers]);
+  const selectableWorkersForEdit = useMemo(() => {
+    if (!editing) return [];
+    return companyWorkers.filter((w) => isWorkerEligibleForBackofficeUserEdit(w, users, editing.id));
+  }, [companyWorkers, users, editing]);
 
   const openCreate = () => {
     setDialogMode("create");
@@ -205,6 +208,7 @@ const AdminUsers = () => {
           email: values.email,
           role: values.role,
           active: values.active,
+          companyWorkerId: values.companyWorkerId.trim() || null,
           password: values.password && values.password.length > 0 ? values.password : undefined,
         },
         { isSelf: session?.userId === editing.id }
@@ -595,7 +599,7 @@ const AdminUsers = () => {
         mode={dialogMode}
         initial={editing}
         selectableWorkers={selectableWorkers}
-        linkedWorker={linkedWorkerForEdit}
+        selectableWorkersForEdit={selectableWorkersForEdit}
         onSubmitCreate={handleSubmitCreate}
         onSubmitEdit={handleSubmitEdit}
       />

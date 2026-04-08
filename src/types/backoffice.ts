@@ -3,9 +3,9 @@ import { companyWorkerDisplayName } from "@/types/companyWorkers";
 
 /** Rol en el backoffice Inorme */
 export type UserRole = "ADMIN" | "WORKER";
-export type WorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK";
+export type WorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK" | "AGENDA";
 
-export const ALL_WORKER_MODULES: WorkerModuleKey[] = ["VACATIONS", "MESSAGES", "TIME_CLOCK"];
+export const ALL_WORKER_MODULES: WorkerModuleKey[] = ["VACATIONS", "MESSAGES", "TIME_CLOCK", "AGENDA"];
 
 /**
  * Tipo de relación laboral / contrato (alineado con ficha de trabajador)

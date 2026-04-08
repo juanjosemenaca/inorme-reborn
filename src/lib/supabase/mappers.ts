@@ -340,7 +340,12 @@ function normalizeModules(value: unknown): WorkerModuleKey[] {
   const set = new Set<WorkerModuleKey>();
   for (const v of arr) {
     const raw = typeof v === "string" ? v.trim().toUpperCase() : "";
-    if (raw === "VACATIONS" || raw === "MESSAGES" || raw === "TIME_CLOCK") {
+    if (
+      raw === "VACATIONS" ||
+      raw === "MESSAGES" ||
+      raw === "TIME_CLOCK" ||
+      raw === "AGENDA"
+    ) {
       set.add(raw);
     }
   }

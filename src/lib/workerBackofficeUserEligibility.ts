@@ -15,3 +15,19 @@ export function isWorkerEligibleForNewBackofficeUser(
   if (email && users.some((u) => u.email.trim().toLowerCase() === email)) return false;
   return true;
 }
+
+/**
+ * Trabajadores que pueden vincularse al editar un usuario (excluye la fila que se está editando).
+ */
+export function isWorkerEligibleForBackofficeUserEdit(
+  w: CompanyWorkerRecord,
+  users: BackofficeUserRecord[],
+  editingUserId: string
+): boolean {
+  if (!w.active) return false;
+  const others = users.filter((u) => u.id !== editingUserId);
+  if (others.some((u) => u.companyWorkerId === w.id)) return false;
+  const email = w.email.trim().toLowerCase();
+  if (email && others.some((u) => u.email.trim().toLowerCase() === email)) return false;
+  return true;
+}
