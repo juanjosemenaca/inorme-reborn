@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Clock3, Inbox, Loader2, MessageSquare, NotebookPen, CalendarRange } from "lucide-react";
+import { Clock3, Euro, Inbox, Loader2, MessageSquare, NotebookPen, CalendarRange } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useMyTimeClockEvents } from "@/hooks/useTimeTracking";
 import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
 import { useWorkerAgendaItems } from "@/hooks/useWorkerAgenda";
+import { useWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
+import { computeSheetTotal } from "@/api/workerExpenseSheetsApi";
 import { addDays, dateToLocalYmd, startOfWeekMonday } from "@/components/admin/WorkerAgendaTimeViews";
 import {
   deriveTodayWorkerTimeClock,
@@ -88,6 +90,7 @@ export function WorkerDashboard() {
   const hasTimeClock = modules.includes("TIME_CLOCK");
   const hasMessages = modules.includes("MESSAGES");
   const hasAgenda = modules.includes("AGENDA");
+  const hasGastos = modules.includes("GASTOS");
   const companyWorkerId = user?.companyWorkerId ?? null;
 
   const today = new Date();
@@ -129,6 +132,20 @@ export function WorkerDashboard() {
     hasTimeClock
   );
   const { data: unreadCount = 0, isLoading: msgLoading } = useMyUnreadBackofficeMessageCount(hasMessages);
+
+  const { data: expenseSheets = [], isLoading: expensesLoading } = useWorkerExpenseSheets(
+    companyWorkerId,
+    hasGastos && !!companyWorkerId
+  );
+
+  const currentMonthExpenseSheet = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    return expenseSheets.find(
+      (s) => s.periodKind === "MONTH" && s.calendarYear === y && s.calendarMonth === m
+    );
+  }, [expenseSheets]);
 
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const agendaRangeLabel = useMemo(() => {
@@ -178,6 +195,14 @@ export function WorkerDashboard() {
   const showAgendaFridayCard =
     isFriday && hasAgenda && !!companyWorkerId && !nextWeekLoading && nextWeekItems.length > 0;
   const showAgendaSection = showAgendaWeekCard || showAgendaFridayCard;
+
+  const expenseStatusLabel = (status: string): string => {
+    if (status === "DRAFT") return t("admin.expenses.status_draft");
+    if (status === "SUBMITTED") return t("admin.expenses.status_submitted");
+    if (status === "APPROVED") return t("admin.expenses.status_approved");
+    if (status === "REJECTED") return t("admin.expenses.status_rejected");
+    return status;
+  };
 
   return (
     <div className="space-y-6">
@@ -250,6 +275,53 @@ export function WorkerDashboard() {
               <div className="mt-auto pt-2">
                 <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
                   <Link to="/admin/fichajes/fichar">{t("admin.dashboard.worker_timeclock_link")}</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {/* Gastos: acceso al parte del mes en curso */}
+        {hasGastos && companyWorkerId ? (
+          <Card className="flex flex-col border-2 shadow-sm">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <Euro className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                <CardTitle className="text-base">{t("admin.dashboard.worker_expenses_title")}</CardTitle>
+              </div>
+              <CardDescription>{t("admin.dashboard.worker_expenses_hint")}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-1 flex-col gap-3">
+              {expensesLoading ? (
+                <div className="flex items-center gap-2 py-4 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  {t("admin.common.loading")}
+                </div>
+              ) : currentMonthExpenseSheet ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="font-normal">
+                      {expenseStatusLabel(currentMonthExpenseSheet.status)}
+                    </Badge>
+                    <span className="text-sm tabular-nums text-muted-foreground">
+                      {computeSheetTotal(currentMonthExpenseSheet).toLocaleString(localeTag, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      €
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("admin.dashboard.worker_expenses_period_label")}:{" "}
+                    {currentMonthExpenseSheet.calendarYear}-{String(currentMonthExpenseSheet.calendarMonth).padStart(2, "0")}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t("admin.dashboard.worker_expenses_empty_month")}</p>
+              )}
+              <div className="mt-auto pt-1">
+                <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
+                  <Link to="/admin/mis-gastos">{t("admin.dashboard.worker_expenses_link")}</Link>
                 </Button>
               </div>
             </CardContent>

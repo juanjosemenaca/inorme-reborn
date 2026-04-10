@@ -16,13 +16,14 @@ import {
 } from "@/api/backofficeUsersApi";
 import { ALL_WORKER_MODULES, type WorkerModuleKey } from "@/types/backoffice";
 
-const MODULE_ORDER: WorkerModuleKey[] = ["VACATIONS", "MESSAGES", "TIME_CLOCK", "AGENDA"];
+const MODULE_ORDER: WorkerModuleKey[] = ["VACATIONS", "MESSAGES", "TIME_CLOCK", "AGENDA", "GASTOS"];
 
 function moduleLabel(module: WorkerModuleKey, t: (key: string) => string): string {
   if (module === "VACATIONS") return t("admin.moduleActivation.mod_vacations");
   if (module === "MESSAGES") return t("admin.moduleActivation.mod_messages");
   if (module === "TIME_CLOCK") return t("admin.moduleActivation.mod_time_clock");
-  return t("admin.moduleActivation.mod_agenda");
+  if (module === "AGENDA") return t("admin.moduleActivation.mod_agenda");
+  return t("admin.moduleActivation.mod_expenses");
 }
 
 const AdminUserModuleActivation = () => {

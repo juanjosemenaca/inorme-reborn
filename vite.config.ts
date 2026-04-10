@@ -8,7 +8,11 @@ export default defineConfig(({ mode }) => ({
   server: {
     /** Puerto del proyecto. Sin `host: "::"` para evitar fallos de `os.networkInterfaces()` en entornos restringidos. */
     port: 8080,
-    strictPort: false,
+    strictPort: true,
+    /** Evita que el navegador sirva un JS antiguo y parezca que los cambios no aplican. */
+    headers: {
+      "Cache-Control": "no-store",
+    },
     hmr: {
       overlay: false,
     },

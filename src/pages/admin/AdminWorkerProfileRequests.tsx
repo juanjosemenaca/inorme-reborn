@@ -277,8 +277,8 @@ function DiffSummary({
   next: WorkerProfileChangeRequestRecord["suggested"];
   t: (k: string) => string;
 }) {
-  if (!prev) return <span className="text-muted-foreground">—</span>;
-  const keys: (keyof typeof next)[] = [
+  if (!prev || !next) return <span className="text-muted-foreground">—</span>;
+  const keys: (keyof WorkerProfileChangeRequestRecord["suggested"])[] = [
     "firstName",
     "lastName",
     "dni",

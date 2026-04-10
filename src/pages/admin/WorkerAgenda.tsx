@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,10 +41,12 @@ import {
 import { expandSummerRangesToWeekdayIsoSet } from "@/lib/workCalendarSummerRange";
 import { useToast } from "@/hooks/use-toast";
 import {
+  completeWorkerAgendaTodo,
   createWorkerAgendaItem,
   deleteWorkerAgendaItem,
   updateWorkerAgendaItem,
 } from "@/api/workerAgendaApi";
+import { queryKeys } from "@/lib/queryKeys";
 import type { WorkCalendarHolidayKind } from "@/types/workCalendars";
 import type { WorkerAgendaItemRecord, WorkerAgendaItemType } from "@/types/agenda";
 import { cn } from "@/lib/utils";
@@ -284,6 +286,24 @@ const WorkerAgenda = () => {
     },
   });
 
+  const completeTodoMutation = useMutation({
+    mutationFn: (id: string) => completeWorkerAgendaTodo(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["workerAgendaItems"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessageUnreadCount });
+      toast({ title: t("admin.agenda.toast_todo_done") });
+      setDetailItem(null);
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
+
   const openNew = () => {
     setEditing(null);
     setFormTitle("");
@@ -494,7 +514,10 @@ const WorkerAgenda = () => {
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        className="text-left font-medium hover:underline"
+                        className={cn(
+                          "text-left font-medium hover:underline",
+                          it.itemType === "todo" && it.completedAt && "line-through text-muted-foreground"
+                        )}
                         onClick={() => setDetailItem(it)}
                       >
                         {it.title}
@@ -502,6 +525,11 @@ const WorkerAgenda = () => {
                       <Badge variant="outline" className="text-[10px]">
                         {t(`admin.agenda.type_${it.itemType}`)}
                       </Badge>
+                      {it.itemType === "todo" && it.completedAt ? (
+                        <Badge className="text-[10px] bg-emerald-600 hover:bg-emerald-600">
+                          {t("admin.agenda.todo_done_badge")}
+                        </Badge>
+                      ) : null}
                       {it.source === "ADMIN" ? (
                         <Badge variant="secondary" className="text-[10px]">
                           {t("admin.agenda.badge_admin")}
@@ -521,24 +549,44 @@ const WorkerAgenda = () => {
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">{it.description}</p>
                     ) : null}
                   </div>
-                  {it.source === "WORKER" ? (
-                    <div className="flex shrink-0 gap-1">
-                      <Button type="button" size="icon" variant="ghost" onClick={() => openEdit(it)} aria-label="Edit">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                    {it.source === "ADMIN" &&
+                    it.itemType === "todo" &&
+                    !it.completedAt ? (
                       <Button
                         type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="text-destructive"
-                        onClick={() => deleteMutation.mutate(it.id)}
-                        disabled={deleteMutation.isPending}
-                        aria-label="Delete"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => completeTodoMutation.mutate(it.id)}
+                        disabled={completeTodoMutation.isPending}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {completeTodoMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        )}
+                        {t("admin.agenda.todo_mark_done")}
                       </Button>
-                    </div>
-                  ) : null}
+                    ) : null}
+                    {it.source === "WORKER" ? (
+                      <>
+                        <Button type="button" size="icon" variant="ghost" onClick={() => openEdit(it)} aria-label="Edit">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => deleteMutation.mutate(it.id)}
+                          disabled={deleteMutation.isPending}
+                          aria-label="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -574,6 +622,17 @@ const WorkerAgenda = () => {
                 ) : (
                   <p className="text-sm text-muted-foreground">{t("admin.agenda.detail_no_description")}</p>
                 )}
+                {detailItem.itemType === "todo" && detailItem.completedAt ? (
+                  <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                    {t("admin.agenda.todo_completed_at").replace(
+                      "{{date}}",
+                      new Date(detailItem.completedAt).toLocaleString(dateLocale, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                    )}
+                  </p>
+                ) : null}
               </div>
               <DialogFooter className="gap-2 sm:gap-0">
                 {detailItem.source === "WORKER" ? (
@@ -601,9 +660,26 @@ const WorkerAgenda = () => {
                     </Button>
                   </>
                 ) : (
-                  <Button type="button" variant="secondary" onClick={() => setDetailItem(null)}>
-                    {t("admin.agenda.detail_close")}
-                  </Button>
+                  <>
+                    {detailItem.itemType === "todo" && !detailItem.completedAt ? (
+                      <Button
+                        type="button"
+                        className="gap-1"
+                        onClick={() => completeTodoMutation.mutate(detailItem.id)}
+                        disabled={completeTodoMutation.isPending}
+                      >
+                        {completeTodoMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4" />
+                        )}
+                        {t("admin.agenda.todo_mark_done")}
+                      </Button>
+                    ) : null}
+                    <Button type="button" variant="secondary" onClick={() => setDetailItem(null)}>
+                      {t("admin.agenda.detail_close")}
+                    </Button>
+                  </>
                 )}
               </DialogFooter>
             </>

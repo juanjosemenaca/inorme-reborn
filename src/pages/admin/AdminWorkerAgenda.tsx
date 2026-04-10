@@ -41,7 +41,8 @@ import { expandSummerRangesToWeekdayIsoSet } from "@/lib/workCalendarSummerRange
 import { useToast } from "@/hooks/use-toast";
 import { createWorkerAgendaItem } from "@/api/workerAgendaApi";
 import type { WorkCalendarHolidayKind } from "@/types/workCalendars";
-import type { WorkerAgendaItemRecord } from "@/types/agenda";
+import type { WorkerAgendaItemRecord, WorkerAgendaItemType } from "@/types/agenda";
+import { ADMIN_WORKER_AGENDA_CREATE_TYPES } from "@/types/agenda";
 import { companyWorkerDisplayName } from "@/types/companyWorkers";
 import { cn } from "@/lib/utils";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
@@ -84,6 +85,7 @@ const AdminWorkerAgenda = () => {
   const [noteBody, setNoteBody] = useState("");
   const [noteDate, setNoteDate] = useState(() => dateToLocalYmd(now));
   const [noteTime, setNoteTime] = useState("12:00");
+  const [adminAgendaType, setAdminAgendaType] = useState<WorkerAgendaItemType>("note");
   const [detailItem, setDetailItem] = useState<WorkerAgendaItemRecord | null>(null);
   const [summaryIso, setSummaryIso] = useState<string | null>(null);
 
@@ -235,7 +237,7 @@ const AdminWorkerAgenda = () => {
         description: noteBody.trim() || null,
         startsAt: start.toISOString(),
         endsAt: null,
-        itemType: "admin_note",
+        itemType: adminAgendaType,
       });
     },
     onSuccess: async () => {
@@ -310,10 +312,28 @@ const AdminWorkerAgenda = () => {
         <>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("admin.agenda.admin_note_title")}</CardTitle>
-              <CardDescription>{t("admin.agenda.admin_note_desc")}</CardDescription>
+              <CardTitle className="text-base">{t("admin.agenda.admin_entry_title")}</CardTitle>
+              <CardDescription>{t("admin.agenda.admin_entry_desc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 max-w-xl">
+              <div className="space-y-2">
+                <Label>{t("admin.agenda.field_type")}</Label>
+                <Select
+                  value={adminAgendaType}
+                  onValueChange={(v) => setAdminAgendaType(v as WorkerAgendaItemType)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ADMIN_WORKER_AGENDA_CREATE_TYPES.map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {t(`admin.agenda.type_${k}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label>{t("admin.agenda.field_title")}</Label>
                 <Input value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} />
@@ -343,7 +363,7 @@ const AdminWorkerAgenda = () => {
                 onClick={() => noteMutation.mutate()}
               >
                 {noteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                {t("admin.agenda.admin_note_submit")}
+                {t("admin.agenda.admin_entry_submit")}
               </Button>
             </CardContent>
           </Card>
@@ -494,7 +514,10 @@ const AdminWorkerAgenda = () => {
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
-                            className="text-left font-medium hover:underline"
+                            className={cn(
+                              "text-left font-medium hover:underline",
+                              it.itemType === "todo" && it.completedAt && "line-through text-muted-foreground"
+                            )}
                             onClick={() => setDetailItem(it)}
                           >
                             {it.title}
@@ -502,6 +525,11 @@ const AdminWorkerAgenda = () => {
                           <Badge variant="outline" className="text-[10px]">
                             {t(`admin.agenda.type_${it.itemType}`)}
                           </Badge>
+                          {it.itemType === "todo" && it.completedAt ? (
+                            <Badge className="text-[10px] bg-emerald-600 hover:bg-emerald-600">
+                              {t("admin.agenda.todo_done_badge")}
+                            </Badge>
+                          ) : null}
                           {it.source === "ADMIN" ? (
                             <Badge variant="secondary" className="text-[10px]">
                               {t("admin.agenda.badge_admin")}
@@ -556,6 +584,17 @@ const AdminWorkerAgenda = () => {
                     ) : (
                       <p className="text-sm text-muted-foreground">{t("admin.agenda.detail_no_description")}</p>
                     )}
+                    {detailItem.itemType === "todo" && detailItem.completedAt ? (
+                      <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                        {t("admin.agenda.todo_completed_at").replace(
+                          "{{date}}",
+                          new Date(detailItem.completedAt).toLocaleString(dateLocale, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })
+                        )}
+                      </p>
+                    ) : null}
                   </div>
                   <DialogFooter>
                     <Button type="button" variant="secondary" onClick={() => setDetailItem(null)}>

@@ -5,7 +5,7 @@
  */
 
 export type DbUserRole = "ADMIN" | "WORKER";
-export type DbWorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK" | "AGENDA";
+export type DbWorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK" | "AGENDA" | "GASTOS";
 
 export type DbEmploymentType =
   | "FIJO"
@@ -314,6 +314,47 @@ export interface WorkerAgendaItemRow {
   item_type: string;
   source: string;
   created_by_backoffice_user_id: string | null;
+  completed_at: string | null;
+  completed_by_backoffice_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DbWorkerExpensePeriodKind = "MONTH" | "CUSTOM";
+export type DbWorkerExpenseSheetStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
+
+export interface WorkerExpenseSheetRow {
+  id: string;
+  company_worker_id: string;
+  period_kind: DbWorkerExpensePeriodKind;
+  calendar_year: number | null;
+  calendar_month: number | null;
+  period_start: string;
+  period_end: string;
+  status: DbWorkerExpenseSheetStatus;
+  observations: string;
+  submitted_at: string | null;
+  reviewed_by_backoffice_user_id: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  pdf_storage_path: string | null;
+  pdf_generated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkerExpenseSheetLineRow {
+  id: string;
+  sheet_id: string;
+  expense_date: string;
+  amount_tickets: string;
+  amount_taxis_parking: string;
+  amount_kms_fuel: string;
+  amount_toll: string;
+  amount_per_diem: string;
+  amount_hotel: string;
+  amount_supplies: string;
+  amount_other: string;
   created_at: string;
   updated_at: string;
 }

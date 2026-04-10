@@ -1,15 +1,17 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { FileUser, Palmtree, Inbox, MessageSquare } from "lucide-react";
+import { Euro, FileUser, Palmtree, Inbox, MessageSquare } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BackofficeTodayDateCard } from "@/components/admin/BackofficeTodayDateCard";
 import { useMyBackofficeMessages } from "@/hooks/useBackofficeMessages";
 import { usePendingWorkerProfileChangeRequests } from "@/hooks/useWorkerProfileChangeRequests";
 import { usePendingWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
+import { usePendingWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import type { BackofficeSession } from "@/types/backoffice";
+import { ADMIN_PATHS } from "@/constants/adminPaths";
 
 type Props = {
   session: BackofficeSession;
@@ -22,11 +24,13 @@ export function AdminDashboardAdmin({ session }: Props) {
   const fetchPending = supabaseOk && !!session.userId;
   const { data: pendingProfileRequests = [] } = usePendingWorkerProfileChangeRequests(fetchPending);
   const { data: pendingVacationRequests = [] } = usePendingWorkerVacationChangeRequests(fetchPending);
+  const { data: pendingExpenseSheets = [] } = usePendingWorkerExpenseSheets(fetchPending);
   const { data: backofficeMessages = [] } = useMyBackofficeMessages(fetchPending);
   const myUserId = session.userId;
 
   const pendingProfileCount = pendingProfileRequests.length;
   const pendingVacationCount = pendingVacationRequests.length;
+  const pendingExpenseCount = pendingExpenseSheets.length;
 
   const { pendingTimeClockCount, unreadChatCount } = useMemo(() => {
     let tc = 0;
@@ -46,6 +50,7 @@ export function AdminDashboardAdmin({ session }: Props) {
   const hasPendingStrip =
     pendingProfileCount > 0 ||
     pendingVacationCount > 0 ||
+    pendingExpenseCount > 0 ||
     pendingTimeClockCount > 0 ||
     unreadChatCount > 0;
 
@@ -69,8 +74,25 @@ export function AdminDashboardAdmin({ session }: Props) {
 
       {hasPendingStrip ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {pendingExpenseCount > 0 ? (
+            <Link to={ADMIN_PATHS.gastosTrabajadores} className="block min-w-0">
+              <Card className="h-full border-amber-500/35 bg-amber-500/[0.06] transition-colors hover:bg-amber-500/10">
+                <CardContent className="flex items-center justify-between gap-3 py-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Euro className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
+                    <span className="text-sm font-medium leading-tight">
+                      {t("admin.dashboard.admin_expenses_pending_short")}
+                    </span>
+                  </span>
+                  <Badge variant="secondary" className="shrink-0 tabular-nums">
+                    {pendingExpenseCount > 99 ? "99+" : pendingExpenseCount}
+                  </Badge>
+                </CardContent>
+              </Card>
+            </Link>
+          ) : null}
           {pendingProfileCount > 0 ? (
-            <Link to="/admin/solicitudes-ficha" className="block min-w-0">
+            <Link to={ADMIN_PATHS.solicitudesFicha} className="block min-w-0">
               <Card className="h-full border-amber-500/35 bg-amber-500/[0.06] transition-colors hover:bg-amber-500/10">
                 <CardContent className="flex items-center justify-between gap-3 py-3">
                   <span className="flex min-w-0 items-center gap-2">
@@ -87,7 +109,7 @@ export function AdminDashboardAdmin({ session }: Props) {
             </Link>
           ) : null}
           {pendingVacationCount > 0 ? (
-            <Link to="/admin/solicitudes-vacaciones" className="block min-w-0">
+            <Link to={ADMIN_PATHS.solicitudesVacaciones} className="block min-w-0">
               <Card className="h-full border-amber-500/35 bg-amber-500/[0.06] transition-colors hover:bg-amber-500/10">
                 <CardContent className="flex items-center justify-between gap-3 py-3">
                   <span className="flex min-w-0 items-center gap-2">
@@ -104,7 +126,7 @@ export function AdminDashboardAdmin({ session }: Props) {
             </Link>
           ) : null}
           {pendingTimeClockCount > 0 ? (
-            <Link to="/admin/solicitudes-fichajes" className="block min-w-0">
+            <Link to={ADMIN_PATHS.solicitudesFichajes} className="block min-w-0">
               <Card className="h-full border-amber-500/35 bg-amber-500/[0.06] transition-colors hover:bg-amber-500/10">
                 <CardContent className="flex items-center justify-between gap-3 py-3">
                   <span className="flex min-w-0 items-center gap-2">
@@ -121,7 +143,7 @@ export function AdminDashboardAdmin({ session }: Props) {
             </Link>
           ) : null}
           {unreadChatCount > 0 ? (
-            <Link to="/admin/mensajes-trabajadores" className="block min-w-0">
+            <Link to={ADMIN_PATHS.mensajesTrabajadores} className="block min-w-0">
               <Card className="h-full border-amber-500/35 bg-amber-500/[0.06] transition-colors hover:bg-amber-500/10">
                 <CardContent className="flex items-center justify-between gap-3 py-3">
                   <span className="flex min-w-0 items-center gap-2">

@@ -6,6 +6,7 @@ import {
   hasPendingWorkerProfileRequest,
 } from "@/api/workerProfileChangeRequestsApi";
 import { queryKeys } from "@/lib/queryKeys";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 export function usePendingWorkerProfileChangeRequests(enabled = true) {
   return useQuery({

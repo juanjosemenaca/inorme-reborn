@@ -38,6 +38,9 @@ import AdminTimeClockReports from "./pages/admin/AdminTimeClockReports";
 import AdminUserModuleActivation from "./pages/admin/AdminUserModuleActivation";
 import WorkerAgenda from "./pages/admin/WorkerAgenda";
 import AdminWorkerAgenda from "./pages/admin/AdminWorkerAgenda";
+import WorkerExpenses from "./pages/admin/WorkerExpenses";
+import AdminWorkerExpenses from "./pages/admin/AdminWorkerExpenses";
+import { ADMIN_ROUTE_SEG } from "@/constants/adminPaths";
 
 const queryClient = new QueryClient();
 
@@ -84,6 +87,22 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="AGENDA">
                       <WorkerAgenda />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="mis-gastos"
+                  element={
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="GASTOS">
+                      <WorkerExpenses />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path={ADMIN_ROUTE_SEG.gastosTrabajadores}
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminWorkerExpenses />
                     </RoleRoute>
                   }
                 />
@@ -141,7 +160,7 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="solicitudes-fichajes"
+                  path={ADMIN_ROUTE_SEG.solicitudesFichajes}
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
                       <AdminTimeClockRequests />
@@ -149,14 +168,13 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="solicitudes-ficha"
+                  path={ADMIN_ROUTE_SEG.solicitudesFicha}
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
                       <AdminWorkerProfileRequests />
                     </RoleRoute>
                   }
                 />
-                <Route index element={<AdminDashboard />} />
                 <Route
                   path="usuarios/alta-masiva"
                   element={
@@ -230,13 +248,14 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="solicitudes-vacaciones"
+                  path={ADMIN_ROUTE_SEG.solicitudesVacaciones}
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
                       <AdminVacationRequests />
                     </RoleRoute>
                   }
                 />
+                <Route index element={<AdminDashboard />} />
               </Route>
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
