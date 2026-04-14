@@ -50,6 +50,7 @@ const schema = z
     linkedFinalClientId: z.string().optional(),
     phone: z.string(),
     contactEmail: optionalEmail,
+    website: z.string().optional(),
     notes: z.string().optional(),
     active: z.boolean(),
   })
@@ -105,6 +106,7 @@ export function ClientFormDialog({
       linkedFinalClientId: "",
       phone: "",
       contactEmail: "",
+      website: "",
       notes: "",
       active: true,
     },
@@ -144,6 +146,7 @@ export function ClientFormDialog({
         linkedFinalClientId: initial.linkedFinalClientId ?? "",
         phone: initial.phone,
         contactEmail: initial.contactEmail,
+        website: initial.websiteUrl ?? "",
         notes: initial.notes ?? "",
         active: initial.active,
       });
@@ -159,6 +162,7 @@ export function ClientFormDialog({
         linkedFinalClientId: "",
         phone: "",
         contactEmail: "",
+        website: "",
         notes: "",
         active: true,
       });
@@ -369,6 +373,25 @@ export function ClientFormDialog({
                     <FormLabel>Email contacto (empresa)</FormLabel>
                     <FormControl>
                       <Input type="email" placeholder="contacto@empresa.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="website"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>Sitio web (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="url"
+                        placeholder="https://www.empresa.com"
+                        inputMode="url"
+                        autoComplete="url"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

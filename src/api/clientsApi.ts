@@ -1,3 +1,4 @@
+import { syncDraftInvoicesRecipientWebsite } from "@/api/billingApi";
 import { requireSupabase } from "@/api/supabaseRequire";
 import {
   clientContactRowToDomain,
@@ -86,6 +87,7 @@ export type CreateClientInput = {
   linkedFinalClientId?: string | null;
   phone: string;
   contactEmail: string;
+  websiteUrl?: string;
   notes: string;
   active: boolean;
 };
@@ -111,6 +113,7 @@ export async function createClient(input: CreateClientInput): Promise<ClientReco
     linkedFinalClientId: resolveLinkedFinalForCreate(all, input.clientKind, input.linkedFinalClientId),
     phone: input.phone.trim(),
     contactEmail: input.contactEmail.trim().toLowerCase(),
+    websiteUrl: input.websiteUrl?.trim() ?? "",
     notes: input.notes.trim(),
     active: input.active,
   });
@@ -153,6 +156,7 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
       input.contactEmail !== undefined
         ? input.contactEmail.trim().toLowerCase()
         : current.contactEmail,
+    websiteUrl: input.websiteUrl !== undefined ? input.websiteUrl.trim() : current.websiteUrl,
     notes: input.notes !== undefined ? input.notes.trim() : current.notes,
     active: input.active !== undefined ? input.active : current.active,
   });
@@ -168,6 +172,7 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
       linked_final_client_id: patch.linked_final_client_id,
       phone: patch.phone,
       contact_email: patch.contact_email,
+      website_url: patch.website_url,
       notes: patch.notes,
       active: patch.active,
     })
@@ -175,6 +180,8 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
     .select("*")
     .single();
   if (error) throw error;
+  const web = (patch.website_url ?? "").trim();
+  await syncDraftInvoicesRecipientWebsite(id, web || null);
   const { data: contactRows } = await sb.from("client_contact_persons").select("*").eq("client_id", id);
   return clientRowToDomain(updated as ClientRow, (contactRows ?? []) as ClientContactPersonRow[]);
 }

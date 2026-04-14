@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeEuro, Ban, CheckCircle2, FileText, Loader2, Plus, Receipt, Save } from "lucide-react";
+import { BadgeEuro, Ban, CheckCircle2, Copy, FileSearch, FileText, Loader2, Plus, Receipt, Save, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,22 +20,36 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { useClients } from "@/hooks/useClients";
 import { queryKeys } from "@/lib/queryKeys";
-import { useBillingInvoices, useBillingIssuerProfile, useBillingSeries } from "@/hooks/useBilling";
+import { useBillingInvoices, useBillingIssuers, useBillingSeries } from "@/hooks/useBilling";
 import {
   cancelBillingInvoice,
+  createBillingIssuer,
   createBillingSeries,
   createBillingInvoiceDraft,
   createRectificativeDraftFromInvoice,
+  deleteBillingInvoiceDraft,
   deleteBillingInvoiceForTests,
+  duplicateBillingInvoiceDraft,
   emitBillingInvoice,
+  fetchBillingIssuerLogoDataUrl,
   registerBillingReceipt,
+  removeBillingIssuerLogo,
   replaceBillingInvoiceLines,
+  setBillingIssuerActive,
   setBillingSeriesActive,
-  upsertBillingIssuerProfile,
+  updateBillingIssuer,
   updateBillingInvoiceDraftHeader,
+  uploadBillingIssuerLogo,
 } from "@/api/billingApi";
-import { openBillingInvoicePdfDownload } from "@/lib/billingInvoicePdf";
-import type { BillingInvoiceLineInput, BillingInvoiceRecord } from "@/types/billing";
+import { openBillingInvoicePdfDownload, openBillingInvoiceProformaDownload } from "@/lib/billingInvoicePdf";
+import { isInormeInformaticaOrganizacionIssuer } from "@/lib/billingPrivacyFooter";
+import type { ClientRecord } from "@/types/clients";
+import type {
+  BillingInvoiceLineInput,
+  BillingInvoiceRecord,
+  BillingIssuerRecord,
+  BillingSeriesRecord,
+} from "@/types/billing";
 
 function emptyLine(): BillingInvoiceLineInput {
   return { lineType: "BILLABLE", description: "", quantity: 1, unitPrice: 0, vatRate: 21, irpfRate: 0 };
@@ -53,6 +67,51 @@ function emptyBlockSubtitleLine(): BillingInvoiceLineInput {
   return { lineType: "BLOCK_SUBTITLE", description: "", quantity: 0, unitPrice: 0, vatRate: 21, irpfRate: 0 };
 }
 
+/** Cabecera emisor/fechas como en pantalla (puede no estar guardada aún). */
+function mergeProformaHeaderFromForm(
+  inv: BillingInvoiceRecord,
+  draftIssuerId: string,
+  issuerList: BillingIssuerRecord[],
+  draftDueDate: string,
+  draftNotes: string,
+  allSeries: BillingSeriesRecord[],
+  draftSeriesIdForHeader: string,
+  clientList: Pick<ClientRecord, "id" | "websiteUrl">[]
+): BillingInvoiceRecord {
+  const issuer = issuerList.find((i) => i.id === draftIssuerId);
+  const client = clientList.find((c) => c.id === inv.clientId);
+  const sid = draftSeriesIdForHeader || inv.seriesId;
+  const ser = allSeries.find((s) => s.id === sid);
+  const clientWeb = client?.websiteUrl?.trim();
+  return {
+    ...inv,
+    seriesId: sid,
+    seriesCode: ser?.code ?? inv.seriesCode,
+    dueDate: draftDueDate || null,
+    notes: draftNotes,
+    issuerLogoStoragePath: issuer?.logoStoragePath ?? inv.issuerLogoStoragePath,
+    issuerWebsiteUrl: issuer?.websiteUrl ?? inv.issuerWebsiteUrl,
+    issuerPrivacyFooter: issuer
+      ? isInormeInformaticaOrganizacionIssuer(issuer.taxId)
+        ? null
+        : issuer.privacyFooterText?.trim() || null
+      : inv.issuerPrivacyFooter,
+    recipientWebsiteUrl: clientWeb ? clientWeb : inv.recipientWebsiteUrl,
+    ...(issuer
+      ? {
+          issuerId: issuer.id,
+          issuerCode: issuer.code,
+          issuerName: issuer.legalName,
+          issuerTaxId: issuer.taxId,
+          issuerFiscalAddress: issuer.fiscalAddress,
+          issuerBankAccountIban: issuer.bankAccountIban,
+          issuerBankAccountSwift: issuer.bankAccountSwift,
+          issuerBankName: issuer.bankName,
+        }
+      : {}),
+  };
+}
+
 function variantByStatus(status: BillingInvoiceRecord["status"]): "outline" | "default" | "destructive" | "secondary" {
   if (status === "PAID") return "default";
   if (status === "CANCELLED") return "destructive";
@@ -66,12 +125,15 @@ const AdminBilling = () => {
   const qc = useQueryClient();
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const { data: clients = [] } = useClients();
-  const { data: issuerProfile } = useBillingIssuerProfile(true);
+  const { data: issuers = [] } = useBillingIssuers(true);
   const { data: series = [] } = useBillingSeries(true);
   const { data: invoices = [], isLoading } = useBillingInvoices(true);
 
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [newSeriesId, setNewSeriesId] = useState("");
+  const [newIssuerId, setNewIssuerId] = useState("");
+  const [newSeriesIssuerId, setNewSeriesIssuerId] = useState("");
+  const [rectificativeSeriesId, setRectificativeSeriesId] = useState("");
   const [newSeriesCode, setNewSeriesCode] = useState("");
   const [newSeriesLabel, setNewSeriesLabel] = useState("");
   const [newClientId, setNewClientId] = useState("");
@@ -80,8 +142,14 @@ const AdminBilling = () => {
   const [billingTab, setBillingTab] = useState<"issuers" | "series" | "drafts" | "issued">("drafts");
   const [issuedSearch, setIssuedSearch] = useState("");
   const [issuedClientIdFilter, setIssuedClientIdFilter] = useState("all");
+  const [issuedIssuerIdFilter, setIssuedIssuerIdFilter] = useState("all");
   const [issuedFromDate, setIssuedFromDate] = useState("");
   const [issuedToDate, setIssuedToDate] = useState("");
+  const [issuerFormOpen, setIssuerFormOpen] = useState(false);
+  const [seriesCreateOpen, setSeriesCreateOpen] = useState(false);
+  const [newDraftFormOpen, setNewDraftFormOpen] = useState(false);
+  const [editingIssuerId, setEditingIssuerId] = useState<string | null>(null);
+  const [issuerCode, setIssuerCode] = useState("");
   const [issuerLegalName, setIssuerLegalName] = useState("");
   const [issuerTaxId, setIssuerTaxId] = useState("");
   const [issuerFiscalAddress, setIssuerFiscalAddress] = useState("");
@@ -90,15 +158,24 @@ const AdminBilling = () => {
   const [issuerBankName, setIssuerBankName] = useState("");
   const [issuerEmail, setIssuerEmail] = useState("");
   const [issuerPhone, setIssuerPhone] = useState("");
+  const [issuerWebsiteUrl, setIssuerWebsiteUrl] = useState("");
+  const [issuerPrivacyFooterText, setIssuerPrivacyFooterText] = useState("");
+  const [issuerLogoPreviewUrl, setIssuerLogoPreviewUrl] = useState("");
 
   const selectedInvoice = useMemo(
     () => (selectedInvoiceId ? invoices.find((x) => x.id === selectedInvoiceId) ?? null : null),
     [invoices, selectedInvoiceId]
   );
+  const seriesForRectificative = useMemo(() => {
+    if (!selectedInvoice || selectedInvoice.status === "DRAFT") return [];
+    return series.filter((s) => s.active && s.issuerId === selectedInvoice.issuerId);
+  }, [series, selectedInvoice]);
   const editable = selectedInvoice?.status === "DRAFT";
 
   const [draftDueDate, setDraftDueDate] = useState("");
   const [draftNotes, setDraftNotes] = useState("");
+  const [draftIssuerId, setDraftIssuerId] = useState("");
+  const [draftSeriesId, setDraftSeriesId] = useState("");
   const [draftLines, setDraftLines] = useState<BillingInvoiceLineInput[]>([]);
 
   const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -106,13 +183,27 @@ const AdminBilling = () => {
   const [receiptMethod, setReceiptMethod] = useState("BANK_TRANSFER");
   const [receiptReference, setReceiptReference] = useState("");
 
-  const activeSeries = useMemo(() => series.filter((s) => s.active), [series]);
+  const seriesForNewDraft = useMemo(
+    () => series.filter((s) => s.active && s.issuerId === newIssuerId),
+    [series, newIssuerId]
+  );
+  const issuerLabelById = useMemo(() => new Map(issuers.map((i) => [i.id, `${i.code} · ${i.legalName}`] as const)), [issuers]);
+  const seriesSelectableForDraft = useMemo(
+    () => series.filter((s) => (s.active && s.issuerId === draftIssuerId) || s.id === draftSeriesId),
+    [series, draftIssuerId, draftSeriesId]
+  );
+  const activeIssuers = useMemo(() => issuers.filter((i) => i.active), [issuers]);
+  const issuersSelectableForDraft = useMemo(
+    () => issuers.filter((i) => i.active || i.id === draftIssuerId),
+    [issuers, draftIssuerId]
+  );
   const draftInvoices = useMemo(() => invoices.filter((i) => i.status === "DRAFT"), [invoices]);
   const issuedInvoices = useMemo(() => invoices.filter((i) => i.status !== "DRAFT"), [invoices]);
   const issuedInvoicesFiltered = useMemo(() => {
     const q = issuedSearch.trim().toLowerCase();
     return issuedInvoices.filter((inv) => {
       if (issuedClientIdFilter !== "all" && inv.clientId !== issuedClientIdFilter) return false;
+      if (issuedIssuerIdFilter !== "all" && inv.issuerId !== issuedIssuerIdFilter) return false;
       if (issuedFromDate && (inv.issueDate ?? "") < issuedFromDate) return false;
       if (issuedToDate && (inv.issueDate ?? "") > issuedToDate) return false;
       if (!q) return true;
@@ -120,27 +211,73 @@ const AdminBilling = () => {
         inv.invoiceNumber && inv.fiscalYear
           ? `${inv.seriesCode}-${inv.fiscalYear}/${String(inv.invoiceNumber).padStart(4, "0")}`
           : `${inv.seriesCode}-${inv.status}`;
-      const hay = [number, inv.recipientName, inv.recipientTaxId, inv.notes].join(" ").toLowerCase();
+      const hay = [number, inv.issuerCode, inv.issuerName, inv.recipientName, inv.recipientTaxId, inv.notes]
+        .join(" ")
+        .toLowerCase();
       return hay.includes(q);
     });
-  }, [issuedInvoices, issuedSearch, issuedClientIdFilter, issuedFromDate, issuedToDate]);
+  }, [issuedInvoices, issuedSearch, issuedClientIdFilter, issuedIssuerIdFilter, issuedFromDate, issuedToDate]);
 
   useEffect(() => {
-    if (!newSeriesId && activeSeries.length > 0) setNewSeriesId(activeSeries[0].id);
     if (!newClientId && clients.length > 0) setNewClientId(clients[0].id);
-  }, [activeSeries, clients, newSeriesId, newClientId]);
+  }, [clients, newClientId]);
 
   useEffect(() => {
-    setIssuerLegalName(issuerProfile?.legalName ?? "");
-    setIssuerTaxId(issuerProfile?.taxId ?? "");
-    setIssuerFiscalAddress(issuerProfile?.fiscalAddress ?? "");
-    setIssuerBankAccountIban(issuerProfile?.bankAccountIban ?? "");
-    setIssuerBankAccountSwift(issuerProfile?.bankAccountSwift ?? "");
-    setIssuerBankName(issuerProfile?.bankName ?? "");
-    setIssuerEmail(issuerProfile?.email ?? "");
-    setIssuerPhone(issuerProfile?.phone ?? "");
-  }, [issuerProfile]);
+    if (seriesForNewDraft.length === 0) {
+      setNewSeriesId("");
+      return;
+    }
+    if (!newSeriesId || !seriesForNewDraft.some((s) => s.id === newSeriesId)) {
+      setNewSeriesId(seriesForNewDraft[0].id);
+    }
+  }, [seriesForNewDraft, newSeriesId]);
 
+  useEffect(() => {
+    if (!newSeriesIssuerId && activeIssuers.length > 0) setNewSeriesIssuerId(activeIssuers[0].id);
+  }, [activeIssuers, newSeriesIssuerId]);
+
+  useEffect(() => {
+    if (!newIssuerId && activeIssuers.length > 0) setNewIssuerId(activeIssuers[0].id);
+  }, [activeIssuers, newIssuerId]);
+
+  useEffect(() => {
+    if (selectedInvoice?.status === "DRAFT") {
+      setDraftIssuerId(selectedInvoice.issuerId);
+      setDraftSeriesId(selectedInvoice.seriesId);
+    }
+  }, [selectedInvoice?.id, selectedInvoice?.issuerId, selectedInvoice?.seriesId, selectedInvoice?.status]);
+
+  useEffect(() => {
+    if (seriesForRectificative.length === 0) {
+      setRectificativeSeriesId("");
+      return;
+    }
+    if (!rectificativeSeriesId || !seriesForRectificative.some((s) => s.id === rectificativeSeriesId)) {
+      setRectificativeSeriesId(seriesForRectificative[0].id);
+    }
+  }, [seriesForRectificative, rectificativeSeriesId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!editingIssuerId) {
+      setIssuerLogoPreviewUrl("");
+      return;
+    }
+    const rec = issuers.find((x) => x.id === editingIssuerId);
+    const path = rec?.logoStoragePath;
+    if (!path) {
+      setIssuerLogoPreviewUrl("");
+      return;
+    }
+    void fetchBillingIssuerLogoDataUrl(path).then((url) => {
+      if (!cancelled && url) setIssuerLogoPreviewUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editingIssuerId, issuers]);
+
+  /** Si el id seleccionado ya no está en la pestaña actual (p. ej. emitido o borrado), limpiar; no auto-abrir el primero. */
   useEffect(() => {
     const scope =
       billingTab === "drafts" ? draftInvoices : billingTab === "issued" ? issuedInvoicesFiltered : [];
@@ -148,8 +285,8 @@ const AdminBilling = () => {
       setSelectedInvoiceId(null);
       return;
     }
-    if (!selectedInvoiceId || !scope.some((x) => x.id === selectedInvoiceId)) {
-      setSelectedInvoiceId(scope[0].id);
+    if (selectedInvoiceId && !scope.some((x) => x.id === selectedInvoiceId)) {
+      setSelectedInvoiceId(null);
     }
   }, [billingTab, selectedInvoiceId, draftInvoices, issuedInvoicesFiltered]);
 
@@ -175,14 +312,49 @@ const AdminBilling = () => {
   }, [selectedInvoice]);
 
   const invalidateAll = async () => {
-    await qc.invalidateQueries({ queryKey: queryKeys.billingIssuerProfile });
+    await qc.invalidateQueries({ queryKey: queryKeys.billingIssuers });
     await qc.invalidateQueries({ queryKey: queryKeys.billingSeries });
     await qc.invalidateQueries({ queryKey: queryKeys.billingInvoices });
   };
 
+  const closeIssuerForm = () => {
+    setIssuerFormOpen(false);
+    setEditingIssuerId(null);
+    setIssuerCode("");
+    setIssuerLegalName("");
+    setIssuerTaxId("");
+    setIssuerFiscalAddress("");
+    setIssuerBankAccountIban("");
+    setIssuerBankAccountSwift("");
+    setIssuerBankName("");
+    setIssuerEmail("");
+    setIssuerPhone("");
+    setIssuerWebsiteUrl("");
+    setIssuerPrivacyFooterText("");
+    setIssuerLogoPreviewUrl("");
+  };
+
+  const openNewIssuerForm = () => {
+    setEditingIssuerId(null);
+    setIssuerCode("");
+    setIssuerLegalName("");
+    setIssuerTaxId("");
+    setIssuerFiscalAddress("");
+    setIssuerBankAccountIban("");
+    setIssuerBankAccountSwift("");
+    setIssuerBankName("");
+    setIssuerEmail("");
+    setIssuerPhone("");
+    setIssuerWebsiteUrl("");
+    setIssuerPrivacyFooterText("");
+    setIssuerLogoPreviewUrl("");
+    setIssuerFormOpen(true);
+  };
+
   const saveIssuerMutation = useMutation({
-    mutationFn: () =>
-      upsertBillingIssuerProfile({
+    mutationFn: () => {
+      const payload = {
+        code: issuerCode,
         legalName: issuerLegalName,
         taxId: issuerTaxId,
         fiscalAddress: issuerFiscalAddress,
@@ -191,9 +363,17 @@ const AdminBilling = () => {
         bankName: issuerBankName || null,
         email: issuerEmail || null,
         phone: issuerPhone || null,
-      }),
+        websiteUrl: issuerWebsiteUrl.trim() || null,
+        privacyFooterText: isInormeInformaticaOrganizacionIssuer(issuerTaxId)
+          ? null
+          : issuerPrivacyFooterText.trim() || null,
+      };
+      if (editingIssuerId) return updateBillingIssuer(editingIssuerId, payload);
+      return createBillingIssuer(payload);
+    },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: queryKeys.billingIssuerProfile });
+      await qc.invalidateQueries({ queryKey: queryKeys.billingIssuers });
+      closeIssuerForm();
       toast({ title: t("admin.billing.toast_issuer_saved") });
     },
     onError: (e) =>
@@ -204,12 +384,59 @@ const AdminBilling = () => {
       }),
   });
 
+  const uploadIssuerLogoMutation = useMutation({
+    mutationFn: ({ issuerId, file }: { issuerId: string; file: File }) => uploadBillingIssuerLogo(issuerId, file),
+    onSuccess: async () => {
+      await invalidateAll();
+      toast({ title: t("admin.billing.toast_issuer_logo_saved") });
+    },
+    onError: (e) =>
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      }),
+  });
+
+  const removeIssuerLogoMutation = useMutation({
+    mutationFn: (issuerId: string) => removeBillingIssuerLogo(issuerId),
+    onSuccess: async () => {
+      setIssuerLogoPreviewUrl("");
+      await invalidateAll();
+      toast({ title: t("admin.billing.toast_issuer_logo_removed") });
+    },
+    onError: (e) =>
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      }),
+  });
+
+  const toggleIssuerMutation = useMutation({
+    mutationFn: ({ issuerId, active }: { issuerId: string; active: boolean }) =>
+      setBillingIssuerActive(issuerId, active),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: queryKeys.billingIssuers });
+      toast({ title: t("admin.billing.toast_issuer_updated") });
+    },
+    onError: (e) =>
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      }),
+  });
+
   const createSeriesMutation = useMutation({
-    mutationFn: () => createBillingSeries({ code: newSeriesCode, label: newSeriesLabel }),
+    mutationFn: () =>
+      createBillingSeries({ issuerId: newSeriesIssuerId, code: newSeriesCode, label: newSeriesLabel }),
     onSuccess: async (created) => {
       await qc.invalidateQueries({ queryKey: queryKeys.billingSeries });
       setNewSeriesCode("");
       setNewSeriesLabel("");
+      setSeriesCreateOpen(false);
+      setNewIssuerId(created.issuerId);
       setNewSeriesId(created.id);
       toast({ title: t("admin.billing.toast_series_created") });
     },
@@ -239,6 +466,7 @@ const AdminBilling = () => {
   const createDraftMutation = useMutation({
     mutationFn: () =>
       createBillingInvoiceDraft({
+        issuerId: newIssuerId,
         seriesId: newSeriesId,
         clientId: newClientId,
         dueDate: newDueDate || null,
@@ -246,6 +474,7 @@ const AdminBilling = () => {
       }),
     onSuccess: async (created) => {
       await invalidateAll();
+      setNewDraftFormOpen(false);
       setSelectedInvoiceId(created.id);
       setNewNotes("");
       toast({ title: t("admin.billing.toast_draft_created") });
@@ -261,11 +490,17 @@ const AdminBilling = () => {
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
       if (!selectedInvoice) throw new Error("Factura no encontrada.");
-      await updateBillingInvoiceDraftHeader(selectedInvoice.id, { dueDate: draftDueDate || null, notes: draftNotes });
+      await updateBillingInvoiceDraftHeader(selectedInvoice.id, {
+        dueDate: draftDueDate || null,
+        notes: draftNotes,
+        issuerId: draftIssuerId || selectedInvoice.issuerId,
+        seriesId: draftSeriesId || selectedInvoice.seriesId,
+      });
       await replaceBillingInvoiceLines(selectedInvoice.id, draftLines);
     },
     onSuccess: async () => {
       await invalidateAll();
+      setSelectedInvoiceId(null);
       toast({ title: t("admin.billing.toast_draft_saved") });
     },
     onError: (e) =>
@@ -279,12 +514,18 @@ const AdminBilling = () => {
   const emitMutation = useMutation({
     mutationFn: async () => {
       if (!selectedInvoice) throw new Error("Factura no encontrada.");
-      await updateBillingInvoiceDraftHeader(selectedInvoice.id, { dueDate: draftDueDate || null, notes: draftNotes });
+      await updateBillingInvoiceDraftHeader(selectedInvoice.id, {
+        dueDate: draftDueDate || null,
+        notes: draftNotes,
+        issuerId: draftIssuerId || selectedInvoice.issuerId,
+        seriesId: draftSeriesId || selectedInvoice.seriesId,
+      });
       await replaceBillingInvoiceLines(selectedInvoice.id, draftLines);
       await emitBillingInvoice(selectedInvoice.id);
     },
     onSuccess: async () => {
       await invalidateAll();
+      setSelectedInvoiceId(null);
       toast({ title: t("admin.billing.toast_issued") });
     },
     onError: (e) =>
@@ -304,6 +545,7 @@ const AdminBilling = () => {
     },
     onSuccess: async () => {
       await invalidateAll();
+      setSelectedInvoiceId(null);
       toast({ title: t("admin.billing.toast_cancelled") });
     },
     onError: (e) =>
@@ -317,13 +559,43 @@ const AdminBilling = () => {
   const rectificativeMutation = useMutation({
     mutationFn: async () => {
       if (!selectedInvoice) throw new Error("Factura no encontrada.");
-      if (!newSeriesId) throw new Error("Selecciona serie.");
-      return createRectificativeDraftFromInvoice(selectedInvoice.id, newSeriesId);
+      if (!rectificativeSeriesId) throw new Error("Selecciona serie.");
+      return createRectificativeDraftFromInvoice(selectedInvoice.id, rectificativeSeriesId);
     },
     onSuccess: async (draft) => {
       await invalidateAll();
       setSelectedInvoiceId(draft.id);
       toast({ title: t("admin.billing.toast_rectificative_created") });
+    },
+    onError: (e) =>
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      }),
+  });
+
+  const duplicateDraftMutation = useMutation({
+    mutationFn: (invoiceId: string) => duplicateBillingInvoiceDraft(invoiceId),
+    onSuccess: async (created) => {
+      await invalidateAll();
+      setSelectedInvoiceId(created.id);
+      toast({ title: t("admin.billing.toast_draft_duplicated") });
+    },
+    onError: (e) =>
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      }),
+  });
+
+  const deleteDraftMutation = useMutation({
+    mutationFn: (invoiceId: string) => deleteBillingInvoiceDraft(invoiceId),
+    onSuccess: async (_, invoiceId) => {
+      await invalidateAll();
+      if (selectedInvoiceId === invoiceId) setSelectedInvoiceId(null);
+      toast({ title: t("admin.billing.toast_draft_deleted") });
     },
     onError: (e) =>
       toast({
@@ -402,10 +674,97 @@ const AdminBilling = () => {
         <TabsContent value="issuers" className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("admin.billing.issuer_title")}</CardTitle>
+              <CardTitle className="text-base">{t("admin.billing.issuers_list_title")}</CardTitle>
               <CardDescription>{t("admin.billing.issuer_desc")}</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
+            <CardContent className="space-y-3">
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("admin.billing.issuer_code")}</TableHead>
+                      <TableHead>{t("admin.billing.issuer_legal_name")}</TableHead>
+                      <TableHead>{t("admin.billing.issuer_tax_id")}</TableHead>
+                      <TableHead>{t("admin.common.status")}</TableHead>
+                      <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {issuers.map((i) => (
+                      <TableRow key={i.id}>
+                        <TableCell className="font-medium">{i.code}</TableCell>
+                        <TableCell>{i.legalName}</TableCell>
+                        <TableCell>{i.taxId}</TableCell>
+                        <TableCell>
+                          <Badge variant={i.active ? "default" : "outline"}>
+                            {i.active ? t("admin.billing.series_status_active") : t("admin.billing.series_status_inactive")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingIssuerId(i.id);
+                              setIssuerCode(i.code);
+                              setIssuerLegalName(i.legalName);
+                              setIssuerTaxId(i.taxId);
+                              setIssuerFiscalAddress(i.fiscalAddress);
+                              setIssuerBankAccountIban(i.bankAccountIban ?? "");
+                              setIssuerBankAccountSwift(i.bankAccountSwift ?? "");
+                              setIssuerBankName(i.bankName ?? "");
+                              setIssuerEmail(i.email ?? "");
+                              setIssuerPhone(i.phone ?? "");
+                              setIssuerWebsiteUrl(i.websiteUrl ?? "");
+                              setIssuerPrivacyFooterText(i.privacyFooterText ?? "");
+                              setIssuerFormOpen(true);
+                            }}
+                          >
+                            {t("admin.common.edit")}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={toggleIssuerMutation.isPending}
+                            onClick={() => toggleIssuerMutation.mutate({ issuerId: i.id, active: !i.active })}
+                          >
+                            {i.active ? t("admin.billing.series_disable") : t("admin.billing.series_enable")}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <Button type="button" variant="secondary" onClick={openNewIssuerForm}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t("admin.billing.issuer_new")}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {issuerFormOpen ? (
+            <Card>
+              <CardHeader className="pb-2 flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+                <CardTitle className="text-base">
+                  {editingIssuerId ? t("admin.billing.issuer_form_edit") : t("admin.billing.issuer_form_create")}
+                </CardTitle>
+                <Button type="button" variant="ghost" size="sm" className="shrink-0 -mt-0.5" onClick={closeIssuerForm}>
+                  <X className="h-4 w-4 mr-1" />
+                  {t("admin.common.close")}
+                </Button>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>{t("admin.billing.issuer_code")}</Label>
+                <Input
+                  value={issuerCode}
+                  onChange={(e) => setIssuerCode(e.target.value.toUpperCase())}
+                  placeholder={t("admin.billing.issuer_code_ph")}
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label>{t("admin.billing.issuer_legal_name")}</Label>
                 <Input value={issuerLegalName} onChange={(e) => setIssuerLegalName(e.target.value)} />
@@ -438,6 +797,68 @@ const AdminBilling = () => {
                 <Label>{t("admin.common.phone")}</Label>
                 <Input value={issuerPhone} onChange={(e) => setIssuerPhone(e.target.value)} />
               </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>{t("admin.billing.issuer_website")}</Label>
+                <Input
+                  value={issuerWebsiteUrl}
+                  onChange={(e) => setIssuerWebsiteUrl(e.target.value)}
+                  placeholder={t("admin.billing.issuer_website_ph")}
+                  inputMode="url"
+                  autoComplete="url"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>{t("admin.billing.issuer_privacy_footer")}</Label>
+                <p className="text-xs text-muted-foreground">{t("admin.billing.issuer_privacy_footer_help")}</p>
+                {isInormeInformaticaOrganizacionIssuer(issuerTaxId) ? (
+                  <p className="text-sm text-muted-foreground border rounded-md px-3 py-2 bg-muted/30">
+                    {t("admin.billing.issuer_privacy_footer_inorme_fixed")}
+                  </p>
+                ) : (
+                  <Textarea
+                    value={issuerPrivacyFooterText}
+                    onChange={(e) => setIssuerPrivacyFooterText(e.target.value)}
+                    rows={5}
+                    className="min-h-[100px] font-mono text-xs"
+                    placeholder={t("admin.billing.issuer_privacy_footer_ph")}
+                  />
+                )}
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>{t("admin.billing.issuer_logo")}</Label>
+                <p className="text-xs text-muted-foreground">{t("admin.billing.issuer_logo_help")}</p>
+                {editingIssuerId ? (
+                  <>
+                    {issuerLogoPreviewUrl ? (
+                      <img src={issuerLogoPreviewUrl} alt="" className="max-h-20 object-contain object-left border rounded p-1 bg-muted/30" />
+                    ) : null}
+                    <Input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      className="cursor-pointer max-w-md"
+                      disabled={uploadIssuerLogoMutation.isPending}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f && editingIssuerId) uploadIssuerLogoMutation.mutate({ issuerId: editingIssuerId, file: f });
+                      }}
+                    />
+                    {issuers.find((i) => i.id === editingIssuerId)?.logoStoragePath ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={removeIssuerLogoMutation.isPending}
+                        onClick={() => editingIssuerId && removeIssuerLogoMutation.mutate(editingIssuerId)}
+                      >
+                        {t("admin.billing.issuer_logo_remove")}
+                      </Button>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t("admin.billing.issuer_logo_after_save")}</p>
+                )}
+              </div>
               <div className="sm:col-span-2">
                 <Button type="button" variant="outline" onClick={() => saveIssuerMutation.mutate()} disabled={saveIssuerMutation.isPending}>
                   {saveIssuerMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
@@ -445,36 +866,136 @@ const AdminBilling = () => {
                 </Button>
               </div>
             </CardContent>
-          </Card>
+            </Card>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="series" className="space-y-4">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("admin.billing.series_title")}</CardTitle>
-              <CardDescription>{t("admin.billing.series_desc")}</CardDescription>
+            <CardHeader className="pb-2 flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+              <div className="space-y-1.5">
+                <CardTitle className="text-base">{t("admin.billing.series_title")}</CardTitle>
+                <CardDescription>{t("admin.billing.series_desc")}</CardDescription>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                {seriesCreateOpen ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSeriesCreateOpen(false)}>
+                    <X className="h-4 w-4 mr-1" />
+                    {t("admin.common.close")}
+                  </Button>
+                ) : (
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setSeriesCreateOpen(true)}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    {t("admin.billing.series_create")}
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-[120px_1fr_auto]">
-                <Input
-                  placeholder={t("admin.billing.series_code_ph")}
-                  value={newSeriesCode}
-                  onChange={(e) => setNewSeriesCode(e.target.value.toUpperCase())}
-                />
-                <Input
-                  placeholder={t("admin.billing.series_label_ph")}
-                  value={newSeriesLabel}
-                  onChange={(e) => setNewSeriesLabel(e.target.value)}
-                />
-                <Button type="button" onClick={() => createSeriesMutation.mutate()} disabled={createSeriesMutation.isPending}>
-                  {createSeriesMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                  {t("admin.billing.series_create")}
-                </Button>
-              </div>
+              {seriesCreateOpen ? (
+                <>
+                  <div className="flex flex-col gap-4 xl:hidden">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="billing-series-issuer-sm">{t("admin.billing.series_issuer")}</Label>
+                      <Select value={newSeriesIssuerId} onValueChange={setNewSeriesIssuerId}>
+                        <SelectTrigger id="billing-series-issuer-sm" className="h-10 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {activeIssuers.map((i) => (
+                            <SelectItem key={i.id} value={i.id}>
+                              {i.code} · {i.legalName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="billing-series-code-sm">{t("admin.billing.col_series")}</Label>
+                      <Input
+                        id="billing-series-code-sm"
+                        placeholder={t("admin.billing.series_code_ph")}
+                        value={newSeriesCode}
+                        onChange={(e) => setNewSeriesCode(e.target.value.toUpperCase())}
+                        className="h-10"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="billing-series-label-sm">{t("admin.common.name")}</Label>
+                      <Input
+                        id="billing-series-label-sm"
+                        placeholder={t("admin.billing.series_label_ph")}
+                        value={newSeriesLabel}
+                        onChange={(e) => setNewSeriesLabel(e.target.value)}
+                        className="h-10"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      className="h-10 w-full shrink-0"
+                      onClick={() => createSeriesMutation.mutate()}
+                      disabled={createSeriesMutation.isPending || !newSeriesIssuerId}
+                    >
+                      {createSeriesMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                      {t("admin.billing.series_create")}
+                    </Button>
+                  </div>
+
+                  <div className="hidden min-w-0 w-full gap-x-3 gap-y-1.5 xl:grid xl:grid-cols-[minmax(200px,1fr)_7rem_minmax(160px,1fr)_auto]">
+                    <Label htmlFor="billing-series-issuer" className="block text-sm font-medium leading-none">
+                      {t("admin.billing.series_issuer")}
+                    </Label>
+                    <Label htmlFor="billing-series-code" className="block text-sm font-medium leading-none text-muted-foreground">
+                      {t("admin.billing.col_series")}
+                    </Label>
+                    <Label htmlFor="billing-series-label" className="block text-sm font-medium leading-none text-muted-foreground">
+                      {t("admin.common.name")}
+                    </Label>
+                    <span className="block min-h-[1.25rem] select-none" aria-hidden />
+
+                    <Select value={newSeriesIssuerId} onValueChange={setNewSeriesIssuerId}>
+                      <SelectTrigger id="billing-series-issuer" className="h-10 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeIssuers.map((i) => (
+                          <SelectItem key={i.id} value={i.id}>
+                            {i.code} · {i.legalName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      id="billing-series-code"
+                      placeholder={t("admin.billing.series_code_ph")}
+                      value={newSeriesCode}
+                      onChange={(e) => setNewSeriesCode(e.target.value.toUpperCase())}
+                      className="h-10"
+                    />
+                    <Input
+                      id="billing-series-label"
+                      placeholder={t("admin.billing.series_label_ph")}
+                      value={newSeriesLabel}
+                      onChange={(e) => setNewSeriesLabel(e.target.value)}
+                      className="h-10"
+                    />
+                    <Button
+                      type="button"
+                      className="h-10 w-full shrink-0 whitespace-nowrap xl:w-auto"
+                      onClick={() => createSeriesMutation.mutate()}
+                      disabled={createSeriesMutation.isPending || !newSeriesIssuerId}
+                    >
+                      {createSeriesMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                      {t("admin.billing.series_create")}
+                    </Button>
+                  </div>
+                </>
+              ) : null}
               <div className="rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>{t("admin.billing.col_issuer")}</TableHead>
                       <TableHead>{t("admin.billing.col_series")}</TableHead>
                       <TableHead>{t("admin.common.name")}</TableHead>
                       <TableHead>{t("admin.common.status")}</TableHead>
@@ -484,6 +1005,7 @@ const AdminBilling = () => {
                   <TableBody>
                     {series.map((s) => (
                       <TableRow key={s.id}>
+                        <TableCell className="text-muted-foreground text-sm">{issuerLabelById.get(s.issuerId) ?? "—"}</TableCell>
                         <TableCell className="font-medium">{s.code}</TableCell>
                         <TableCell>{s.label}</TableCell>
                         <TableCell>
@@ -491,16 +1013,19 @@ const AdminBilling = () => {
                             {s.active ? t("admin.billing.series_status_active") : t("admin.billing.series_status_inactive")}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={toggleSeriesMutation.isPending}
-                            onClick={() => toggleSeriesMutation.mutate({ seriesId: s.id, active: !s.active })}
-                          >
-                            {s.active ? t("admin.billing.series_disable") : t("admin.billing.series_enable")}
-                          </Button>
+                        <TableCell className="p-4 text-right align-middle">
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="shrink-0"
+                              disabled={toggleSeriesMutation.isPending}
+                              onClick={() => toggleSeriesMutation.mutate({ seriesId: s.id, active: !s.active })}
+                            >
+                              {s.active ? t("admin.billing.series_disable") : t("admin.billing.series_enable")}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -513,65 +1038,21 @@ const AdminBilling = () => {
 
         <TabsContent value="drafts" className="space-y-4">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("admin.billing.new_draft_title")}</CardTitle>
-              <CardDescription>{t("admin.billing.new_draft_desc")}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>{t("admin.billing.col_series")}</Label>
-                <Select value={newSeriesId} onValueChange={setNewSeriesId}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeSeries.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.code} · {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("admin.billing.col_client")}</Label>
-                <Select value={newClientId} onValueChange={setNewClientId}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {(c.companyName || c.tradeName || c.cif).trim()} · {c.cif}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("admin.billing.col_due_date")}</Label>
-                <Input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label>{t("admin.billing.col_notes")}</Label>
-                <Textarea rows={2} value={newNotes} onChange={(e) => setNewNotes(e.target.value)} />
-              </div>
-              <div className="sm:col-span-2">
-                <Button
-                  type="button"
-                  onClick={() => createDraftMutation.mutate()}
-                  disabled={createDraftMutation.isPending || !newSeriesId || !newClientId}
-                >
-                  {createDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                  {t("admin.billing.action_create_draft")}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
               <CardTitle className="text-base">{t("admin.billing.drafts_title")}</CardTitle>
+              <div className="flex shrink-0 gap-2">
+                {newDraftFormOpen ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setNewDraftFormOpen(false)}>
+                    <X className="h-4 w-4 mr-1" />
+                    {t("admin.common.close")}
+                  </Button>
+                ) : (
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setNewDraftFormOpen(true)}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    {t("admin.billing.new_draft_title")}
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -586,6 +1067,7 @@ const AdminBilling = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>{t("admin.billing.col_issuer")}</TableHead>
                         <TableHead>{t("admin.billing.col_invoice")}</TableHead>
                         <TableHead>{t("admin.billing.col_client")}</TableHead>
                         <TableHead>{t("admin.billing.col_due_date")}</TableHead>
@@ -595,13 +1077,48 @@ const AdminBilling = () => {
                     <TableBody>
                       {draftInvoices.map((inv) => (
                         <TableRow key={inv.id}>
+                          <TableCell className="font-medium">{inv.issuerCode}</TableCell>
                           <TableCell className="font-medium">{`${inv.seriesCode}-BORRADOR`}</TableCell>
                           <TableCell>{inv.recipientName || "—"}</TableCell>
                           <TableCell>{inv.dueDate ?? "—"}</TableCell>
                           <TableCell className="text-right">
-                            <Button type="button" size="sm" variant="outline" onClick={() => setSelectedInvoiceId(inv.id)}>
-                              {t("admin.billing.action_open")}
-                            </Button>
+                            <div className="inline-flex flex-wrap items-center justify-end gap-1">
+                              <Button type="button" size="sm" variant="outline" onClick={() => setSelectedInvoiceId(inv.id)}>
+                                {t("admin.billing.action_open")}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => duplicateDraftMutation.mutate(inv.id)}
+                                disabled={duplicateDraftMutation.isPending}
+                                title={t("admin.billing.action_duplicate_draft")}
+                              >
+                                {duplicateDraftMutation.isPending ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                                onClick={() => {
+                                  if (!window.confirm(t("admin.billing.delete_draft_confirm"))) return;
+                                  deleteDraftMutation.mutate(inv.id);
+                                }}
+                                disabled={deleteDraftMutation.isPending}
+                                title={t("admin.billing.action_delete_draft")}
+                              >
+                                {deleteDraftMutation.isPending ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -611,6 +1128,86 @@ const AdminBilling = () => {
               )}
             </CardContent>
           </Card>
+
+          {newDraftFormOpen ? (
+            <Card>
+              <CardHeader className="pb-2 flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+                <div>
+                  <CardTitle className="text-base">{t("admin.billing.new_draft_title")}</CardTitle>
+                  <CardDescription>{t("admin.billing.new_draft_desc")}</CardDescription>
+                </div>
+                <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => setNewDraftFormOpen(false)}>
+                  <X className="h-4 w-4 mr-1" />
+                  {t("admin.common.close")}
+                </Button>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>{t("admin.billing.col_issuer")}</Label>
+                  <Select value={newIssuerId} onValueChange={setNewIssuerId}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeIssuers.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>
+                          {i.code} · {i.legalName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t("admin.billing.col_series")}</Label>
+                  <Select value={newSeriesId} onValueChange={setNewSeriesId}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {seriesForNewDraft.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.code} · {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t("admin.billing.col_client")}</Label>
+                  <Select value={newClientId} onValueChange={setNewClientId}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {(c.companyName || c.tradeName || c.cif).trim()} · {c.cif}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t("admin.billing.col_due_date")}</Label>
+                  <Input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>{t("admin.billing.col_notes")}</Label>
+                  <Textarea rows={2} value={newNotes} onChange={(e) => setNewNotes(e.target.value)} />
+                </div>
+                <div className="sm:col-span-2">
+                  <Button
+                    type="button"
+                    onClick={() => createDraftMutation.mutate()}
+                    disabled={createDraftMutation.isPending || !newIssuerId || !newSeriesId || !newClientId}
+                  >
+                    {createDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                    {t("admin.billing.action_create_draft")}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="issued" className="space-y-4">
@@ -618,7 +1215,7 @@ const AdminBilling = () => {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">{t("admin.billing.issued_filters_title")}</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-4">
+            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>{t("admin.billing.search_ph")}</Label>
                 <Input
@@ -626,6 +1223,22 @@ const AdminBilling = () => {
                   value={issuedSearch}
                   onChange={(e) => setIssuedSearch(e.target.value)}
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t("admin.billing.col_issuer")}</Label>
+                <Select value={issuedIssuerIdFilter} onValueChange={setIssuedIssuerIdFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
+                    {issuers.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.code} · {i.legalName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label>{t("admin.billing.col_client")}</Label>
@@ -671,6 +1284,7 @@ const AdminBilling = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>{t("admin.billing.col_issuer")}</TableHead>
                         <TableHead>{t("admin.billing.col_invoice")}</TableHead>
                         <TableHead>{t("admin.billing.col_status")}</TableHead>
                         <TableHead>{t("admin.billing.col_client")}</TableHead>
@@ -684,6 +1298,7 @@ const AdminBilling = () => {
                         const number = `${inv.seriesCode}-${inv.fiscalYear}/${String(inv.invoiceNumber).padStart(4, "0")}`;
                         return (
                           <TableRow key={inv.id}>
+                            <TableCell className="font-medium">{inv.issuerCode}</TableCell>
                             <TableCell className="font-medium">{number}</TableCell>
                             <TableCell>
                               <Badge variant={variantByStatus(inv.status)}>{inv.status}</Badge>
@@ -712,18 +1327,97 @@ const AdminBilling = () => {
 
       {selectedInvoice && (billingTab === "drafts" || billingTab === "issued") ? (
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">
-              {selectedInvoice.invoiceNumber && selectedInvoice.fiscalYear
-                ? `${selectedInvoice.seriesCode}-${selectedInvoice.fiscalYear}/${String(selectedInvoice.invoiceNumber).padStart(4, "0")}`
-                : `${seriesById.get(selectedInvoice.seriesId)?.code ?? "?"} · ${t("admin.billing.draft_label")}`}
-            </CardTitle>
-            <CardDescription>
-              {selectedInvoice.recipientName} · {selectedInvoice.recipientTaxId}
-            </CardDescription>
+          <CardHeader className="pb-2 flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+            <div>
+              <CardTitle className="text-base">
+                {selectedInvoice.invoiceNumber && selectedInvoice.fiscalYear
+                  ? `${selectedInvoice.issuerCode} · ${selectedInvoice.seriesCode}-${selectedInvoice.fiscalYear}/${String(selectedInvoice.invoiceNumber).padStart(4, "0")}`
+                  : `${selectedInvoice.issuerCode} · ${seriesById.get(selectedInvoice.seriesId)?.code ?? "?"} · ${t("admin.billing.draft_label")}`}
+              </CardTitle>
+              <CardDescription>
+                {selectedInvoice.recipientName} · {selectedInvoice.recipientTaxId}
+              </CardDescription>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => setSelectedInvoiceId(null)}>
+              <X className="h-4 w-4 mr-1" />
+              {t("admin.common.close")}
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
+              {editable ? (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>{t("admin.billing.col_issuer")}</Label>
+                    <Select
+                      value={draftIssuerId}
+                      onValueChange={(v) => {
+                        setDraftIssuerId(v);
+                        const first = series.find((s) => s.issuerId === v && s.active);
+                        if (first) setDraftSeriesId(first.id);
+                        if (selectedInvoice?.status === "DRAFT" && first) {
+                          void updateBillingInvoiceDraftHeader(selectedInvoice.id, {
+                            issuerId: v,
+                            seriesId: first.id,
+                          }).then(() => qc.invalidateQueries({ queryKey: queryKeys.billingInvoices }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {issuersSelectableForDraft.map((i) => (
+                          <SelectItem key={i.id} value={i.id}>
+                            {i.code} · {i.legalName}
+                            {!i.active ? ` (${t("admin.billing.issuer_inactive_label")})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("admin.billing.col_series")}</Label>
+                    <Select
+                      value={draftSeriesId}
+                      onValueChange={(v) => {
+                        setDraftSeriesId(v);
+                        if (selectedInvoice?.status === "DRAFT") {
+                          void updateBillingInvoiceDraftHeader(selectedInvoice.id, { seriesId: v }).then(() =>
+                            qc.invalidateQueries({ queryKey: queryKeys.billingInvoices })
+                          );
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {seriesSelectableForDraft.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.code} · {s.label}
+                            {!s.active ? ` (${t("admin.billing.series_status_inactive")})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>{t("admin.billing.col_issuer")}</Label>
+                    <Input value={`${selectedInvoice.issuerCode} · ${selectedInvoice.issuerName}`} disabled />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("admin.billing.col_series")}</Label>
+                    <Input
+                      value={`${selectedInvoice.seriesCode} · ${seriesById.get(selectedInvoice.seriesId)?.label ?? ""}`}
+                      disabled
+                    />
+                  </div>
+                </>
+              )}
               <div className="space-y-1.5">
                 <Label>{t("admin.billing.col_due_date")}</Label>
                 <Input type="date" value={draftDueDate} onChange={(e) => setDraftDueDate(e.target.value)} disabled={!editable} />
@@ -738,6 +1432,9 @@ const AdminBilling = () => {
               </div>
             </div>
 
+            {editable ? (
+              <p className="text-xs text-muted-foreground -mt-1 mb-1">{t("admin.billing.line_concept_rich_hint")}</p>
+            ) : null}
             <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -787,7 +1484,9 @@ const AdminBilling = () => {
                         </Select>
                       </TableCell>
                       <TableCell>
-                        <Input
+                        <Textarea
+                          rows={2}
+                          className="min-h-[52px] max-w-md text-sm resize-y"
                           value={line.description}
                           disabled={!editable}
                           onChange={(e) =>
@@ -877,9 +1576,59 @@ const AdminBilling = () => {
                     {saveDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                     {t("admin.billing.action_save_draft")}
                   </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      if (!selectedInvoice) return;
+                      const header = mergeProformaHeaderFromForm(
+                        selectedInvoice,
+                        draftIssuerId || selectedInvoice.issuerId,
+                        issuers,
+                        draftDueDate,
+                        draftNotes,
+                        series,
+                        draftSeriesId || selectedInvoice.seriesId,
+                        clients
+                      );
+                      void openBillingInvoiceProformaDownload(header, draftLines).catch((e) =>
+                        toast({
+                          title: t("admin.common.error"),
+                          description: e instanceof Error ? e.message : "",
+                          variant: "destructive",
+                        })
+                      );
+                    }}
+                  >
+                    <FileSearch className="h-4 w-4 mr-2" />
+                    {t("admin.billing.action_pdf_proforma")}
+                  </Button>
                   <Button type="button" onClick={() => emitMutation.mutate()} disabled={emitMutation.isPending}>
                     {emitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
                     {t("admin.billing.action_emit")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => selectedInvoice && duplicateDraftMutation.mutate(selectedInvoice.id)}
+                    disabled={duplicateDraftMutation.isPending || !selectedInvoice}
+                  >
+                    {duplicateDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                    {t("admin.billing.action_duplicate_draft")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                    onClick={() => {
+                      if (!selectedInvoice) return;
+                      if (!window.confirm(t("admin.billing.delete_draft_confirm"))) return;
+                      deleteDraftMutation.mutate(selectedInvoice.id);
+                    }}
+                    disabled={deleteDraftMutation.isPending || !selectedInvoice}
+                  >
+                    {deleteDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                    {t("admin.billing.action_delete_draft")}
                   </Button>
                 </>
               ) : (
@@ -900,10 +1649,32 @@ const AdminBilling = () => {
                     <FileText className="h-4 w-4 mr-2" />
                     {t("admin.billing.action_pdf")}
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => rectificativeMutation.mutate()} disabled={rectificativeMutation.isPending}>
-                    {rectificativeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Receipt className="h-4 w-4 mr-2" />}
-                    {t("admin.billing.action_rectificative")}
-                  </Button>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="space-y-1.5 min-w-[200px]">
+                      <Label className="text-xs">{t("admin.billing.rectificative_series")}</Label>
+                      <Select value={rectificativeSeriesId} onValueChange={setRectificativeSeriesId}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {seriesForRectificative.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.code} · {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => rectificativeMutation.mutate()}
+                      disabled={rectificativeMutation.isPending || !rectificativeSeriesId || seriesForRectificative.length === 0}
+                    >
+                      {rectificativeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Receipt className="h-4 w-4 mr-2" />}
+                      {t("admin.billing.action_rectificative")}
+                    </Button>
+                  </div>
                   {selectedInvoice.status !== "CANCELLED" ? (
                     <Button type="button" variant="destructive" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
                       {cancelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}

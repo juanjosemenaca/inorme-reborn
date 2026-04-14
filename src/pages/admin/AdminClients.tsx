@@ -156,6 +156,7 @@ const AdminClients = () => {
               : null,
           phone: values.phone,
           contactEmail: values.contactEmail,
+          websiteUrl: values.website?.trim() ?? "",
           notes: values.notes ?? "",
           active: values.active,
         });
@@ -174,6 +175,7 @@ const AdminClients = () => {
               : null,
           phone: values.phone,
           contactEmail: values.contactEmail,
+          websiteUrl: values.website?.trim() ?? "",
           notes: values.notes ?? "",
           active: values.active,
         });

@@ -5,13 +5,15 @@ export type BillingLineType = "BILLABLE" | "BLOCK_TITLE" | "BLOCK_SUBTITLE" | "C
 
 export interface BillingSeriesRecord {
   id: string;
+  issuerId: string;
   code: string;
   label: string;
   active: boolean;
 }
 
-export interface BillingIssuerProfileRecord {
+export interface BillingIssuerRecord {
   id: string;
+  code: string;
   legalName: string;
   taxId: string;
   fiscalAddress: string;
@@ -20,6 +22,12 @@ export interface BillingIssuerProfileRecord {
   bankName: string | null;
   email: string | null;
   phone: string | null;
+  logoStoragePath: string | null;
+  /** URL pública opcional (factura/PDF). */
+  websiteUrl: string | null;
+  /** Texto opcional pie PDF (RGPD); no aplica al emisor INORME (texto fijo por CIF en código). */
+  privacyFooterText: string | null;
+  active: boolean;
 }
 
 export interface BillingInvoiceLineRecord {
@@ -40,6 +48,8 @@ export interface BillingInvoiceLineRecord {
 
 export interface BillingInvoiceRecord {
   id: string;
+  issuerId: string;
+  issuerCode: string;
   seriesId: string;
   seriesCode: string;
   fiscalYear: number | null;
@@ -59,9 +69,16 @@ export interface BillingInvoiceRecord {
   issuerBankAccountIban: string | null;
   issuerBankAccountSwift: string | null;
   issuerBankName: string | null;
+  issuerLogoStoragePath: string | null;
+  /** Web del emisor en el PDF (snapshot). */
+  issuerWebsiteUrl: string | null;
+  /** Pie PDF RGPD para emisores distintos de INORME (snapshot); INORME usa texto fijo en generación. */
+  issuerPrivacyFooter: string | null;
   recipientName: string;
   recipientTaxId: string;
   recipientFiscalAddress: string;
+  /** Web del cliente en el PDF (snapshot). */
+  recipientWebsiteUrl: string | null;
   taxableBaseTotal: number;
   vatTotal: number;
   irpfTotal: number;
@@ -87,12 +104,15 @@ export interface BillingReceiptRecord {
 }
 
 export interface BillingInvoiceDraftInput {
+  issuerId: string;
   seriesId: string;
   clientId: string;
   dueDate?: string | null;
   notes?: string;
   invoiceKind?: BillingInvoiceKind;
   rectifiesInvoiceId?: string | null;
+  /** Rectificativas pueden mantener el emisor aunque esté inactivo en catálogo. */
+  allowInactiveIssuer?: boolean;
 }
 
 export interface BillingInvoiceLineInput {

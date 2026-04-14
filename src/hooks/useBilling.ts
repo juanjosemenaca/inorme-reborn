@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchBillingInvoices, fetchBillingIssuerProfile, fetchBillingSeries } from "@/api/billingApi";
+import { fetchBillingInvoices, fetchBillingIssuers, fetchBillingSeries } from "@/api/billingApi";
 import { queryKeys } from "@/lib/queryKeys";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
-export function useBillingIssuerProfile(enabled = true) {
+export function useBillingIssuers(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.billingIssuerProfile,
-    queryFn: fetchBillingIssuerProfile,
+    queryKey: queryKeys.billingIssuers,
+    queryFn: fetchBillingIssuers,
     enabled: isSupabaseConfigured() && enabled,
   });
 }

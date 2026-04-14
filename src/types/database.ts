@@ -62,6 +62,8 @@ export interface ClientRow {
   linked_final_client_id: string | null;
   phone: string;
   contact_email: string;
+  /** Sitio web público (opcional). */
+  website_url: string;
   notes: string;
   active: boolean;
   created_at: string;
@@ -381,8 +383,29 @@ export type DbBillingLineType = "BILLABLE" | "BLOCK_TITLE" | "BLOCK_SUBTITLE" | 
 
 export interface BillingSeriesRow {
   id: string;
+  issuer_id: string;
   code: string;
   label: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BillingIssuerRow {
+  id: string;
+  code: string;
+  legal_name: string;
+  tax_id: string;
+  fiscal_address: string;
+  bank_account_iban: string | null;
+  bank_account_swift: string | null;
+  bank_name: string | null;
+  email: string | null;
+  phone: string | null;
+  logo_storage_path: string | null;
+  website_url: string | null;
+  /** Texto opcional pie PDF (protección de datos); INORME usa bloque fijo por CIF en cliente. */
+  privacy_footer_text: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -391,6 +414,7 @@ export interface BillingSeriesRow {
 export interface BillingInvoiceRow {
   id: string;
   series_id: string;
+  issuer_id: string;
   fiscal_year: number | null;
   invoice_number: number | null;
   status: DbBillingInvoiceStatus;
@@ -408,9 +432,13 @@ export interface BillingInvoiceRow {
   issuer_bank_account_iban: string | null;
   issuer_bank_account_swift: string | null;
   issuer_bank_name: string | null;
+  issuer_logo_storage_path: string | null;
+  issuer_website_url: string | null;
+  issuer_privacy_footer: string | null;
   recipient_name: string;
   recipient_tax_id: string;
   recipient_fiscal_address: string;
+  recipient_website_url: string | null;
   taxable_base_total: string;
   vat_total: string;
   irpf_total: string;

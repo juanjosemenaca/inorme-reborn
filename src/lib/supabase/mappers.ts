@@ -214,6 +214,7 @@ export function clientRowToDomain(row: ClientRow, contacts: ClientContactPersonR
     linkedFinalClientId: row.linked_final_client_id,
     phone: row.phone,
     contactEmail: row.contact_email,
+    websiteUrl: row.website_url?.trim() ?? "",
     notes: row.notes,
     active: row.active,
     contacts: contacts.map(clientContactRowToDomain),
@@ -237,6 +238,7 @@ export function clientRecordToRowInsert(record: Omit<ClientRecord, "contacts" | 
     linked_final_client_id: record.linkedFinalClientId,
     phone: record.phone,
     contact_email: record.contactEmail,
+    website_url: record.websiteUrl?.trim() ?? "",
     notes: record.notes,
     active: record.active,
   };

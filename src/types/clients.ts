@@ -41,6 +41,8 @@ export interface ClientRecord {
   phone: string;
   /** Email de contacto general de la empresa */
   contactEmail: string;
+  /** Sitio web público (opcional), p. ej. https://empresa.com */
+  websiteUrl: string;
   /** Notas internas opcionales */
   notes: string;
   active: boolean;
