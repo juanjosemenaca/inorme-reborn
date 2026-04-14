@@ -1418,9 +1418,29 @@ const AdminBilling = () => {
                   </div>
                 </>
               )}
-              <div className="space-y-1.5">
-                <Label>{t("admin.billing.col_due_date")}</Label>
-                <Input type="date" value={draftDueDate} onChange={(e) => setDraftDueDate(e.target.value)} disabled={!editable} />
+              <div className="space-y-2 sm:col-span-1">
+                <div className="space-y-1.5">
+                  <Label>{t("admin.billing.invoice_date_field")}</Label>
+                  <Input
+                    value={selectedInvoice.issueDate ?? ""}
+                    disabled
+                    placeholder="—"
+                    className="font-medium"
+                  />
+                  {editable && !selectedInvoice.issueDate ? (
+                    <p className="text-xs text-muted-foreground">{t("admin.billing.invoice_date_hint_draft")}</p>
+                  ) : null}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-normal text-muted-foreground">{t("admin.billing.col_due_date")}</Label>
+                  <Input
+                    type="date"
+                    value={draftDueDate}
+                    onChange={(e) => setDraftDueDate(e.target.value)}
+                    disabled={!editable}
+                    className="h-9 max-w-[220px] text-sm"
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>{t("admin.billing.col_payment_status")}</Label>

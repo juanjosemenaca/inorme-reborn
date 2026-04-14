@@ -44,6 +44,22 @@ function money(n: number): string {
   return n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Fecha YYYY-MM-DD o ISO → dd/mm/aaaa (sin desfase por zona). */
+function formatInvoiceDateEs(raw: string | null | undefined): string {
+  if (!raw?.trim()) return "—";
+  const s = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
+  const t = Date.parse(s);
+  if (!Number.isNaN(t)) {
+    return new Date(t).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
+  return s;
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -246,13 +262,23 @@ export async function generateBillingInvoicePdfBlob(
         ? `${invoice.seriesCode}-${invoice.fiscalYear}/${String(invoice.invoiceNumber).padStart(4, "0")}`
         : "BORRADOR";
   write(`Numero: ${numberLabel}`, metaSize, true);
-  write(
-    variant === "proforma"
-      ? `Fecha emision prevista: ${invoice.issueDate ?? "—"}`
-      : `Fecha emision: ${invoice.issueDate ?? "—"}`,
-    metaSize
-  );
-  write(`Vencimiento: ${invoice.dueDate ?? "—"}`, metaSize);
+
+  const issueFmt = formatInvoiceDateEs(invoice.issueDate);
+  const dueFmt = formatInvoiceDateEs(invoice.dueDate);
+  const facturaLine =
+    variant === "proforma" ? `Fecha factura (prevista): ${issueFmt}` : `Fecha factura: ${issueFmt}`;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text(facturaLine, margin, y);
+  y += bump(10);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.7);
+  doc.setTextColor(82, 82, 82);
+  doc.text(`Vencimiento: ${dueFmt}`, margin, y);
+  y += bump(6.7) + 1.2;
+  doc.setTextColor(0, 0, 0);
 
   y += 2;
   write("Emisor", sectionLabelSize, true);
