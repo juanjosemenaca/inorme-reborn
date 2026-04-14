@@ -30,11 +30,15 @@ import { queryKeys } from "@/lib/queryKeys";
 import {
   computeLineTotal,
   computeSheetTotal,
+  deleteExpenseSheetAttachment,
   getOrCreateExpenseSheet,
-  saveExpenseSheetDraft,
+  openExpenseSheetAttachmentDownload,
   openExpenseSheetPdfDownload,
+  saveExpenseSheetDraft,
   submitExpenseSheet,
+  uploadExpenseSheetAttachment,
 } from "@/api/workerExpenseSheetsApi";
+import { ExpenseSheetAttachmentsEditor } from "@/components/admin/ExpenseSheetAttachmentsBlock";
 import type {
   WorkerExpenseCategoryKey,
   WorkerExpenseLineAmounts,
@@ -469,6 +473,44 @@ const WorkerExpenses = () => {
             </div>
 
             <p className="text-xs text-muted-foreground">{t("admin.expenses.totals_hint")}</p>
+
+            <ExpenseSheetAttachmentsEditor
+              periodDates={draftLines.map((l) => l.expenseDate)}
+              localeTag={localeTag}
+              t={t}
+              editable={!!editable}
+              attachments={sheet.attachments ?? []}
+              onUploadFiles={async (files, expenseDate) => {
+                if (!sheet) return;
+                try {
+                  for (const file of files) {
+                    await uploadExpenseSheetAttachment(sheet.id, file, expenseDate);
+                  }
+                  toast({ title: t("admin.expenses.attachments_toast_uploaded") });
+                  await qc.invalidateQueries({ queryKey: queryKeys.workerExpenseSheets(companyWorkerId!) });
+                } catch (e) {
+                  toast({
+                    title: t("admin.common.error"),
+                    description: e instanceof Error ? e.message : "",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              onDelete={async (id) => {
+                try {
+                  await deleteExpenseSheetAttachment(id);
+                  toast({ title: t("admin.expenses.attachments_toast_removed") });
+                  await qc.invalidateQueries({ queryKey: queryKeys.workerExpenseSheets(companyWorkerId!) });
+                } catch (e) {
+                  toast({
+                    title: t("admin.common.error"),
+                    description: e instanceof Error ? e.message : "",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              onOpen={async (a) => openExpenseSheetAttachmentDownload(a)}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="exp-obs">{t("admin.expenses.observations")}</Label>

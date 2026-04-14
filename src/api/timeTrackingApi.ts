@@ -1,6 +1,7 @@
 import { createBackofficeMessage } from "@/api/backofficeMessagesApi";
 import { fetchBackofficeUsers, getProfileByAuthUserId } from "@/api/backofficeUsersApi";
 import { requireSupabase } from "@/api/supabaseRequire";
+import { fetchClientPublicIp } from "@/lib/clientPublicIp";
 import { getErrorMessage } from "@/lib/errorMessage";
 import type { WorkerTimeClockEventRow } from "@/types/database";
 import type { TimeClockDailySummary, TimeClockEventKind, TimeClockEventRecord } from "@/types/timeTracking";
@@ -9,7 +10,11 @@ function throwErr(error: unknown): never {
   throw new Error(getErrorMessage(error));
 }
 
-function rowToDomain(row: WorkerTimeClockEventRow): TimeClockEventRecord {
+/** Columnas expuestas al trabajador (sin IP de entrada). */
+const WORKER_TIME_CLOCK_COLUMNS =
+  "id, company_worker_id, event_kind, event_at, absence_reason, comment, source, created_by_backoffice_user_id, created_at, updated_at";
+
+function rowToDomain(row: WorkerTimeClockEventRow, includeClockInIp: boolean): TimeClockEventRecord {
   return {
     id: row.id,
     companyWorkerId: row.company_worker_id,
@@ -19,6 +24,8 @@ function rowToDomain(row: WorkerTimeClockEventRow): TimeClockEventRecord {
     comment: row.comment ?? "",
     source: row.source,
     createdByBackofficeUserId: row.created_by_backoffice_user_id,
+    clockInClientIp:
+      includeClockInIp && row.event_kind === "CLOCK_IN" ? (row.clock_in_client_ip ?? null) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -101,13 +108,13 @@ export async function fetchMyTimeClockEvents(fromIsoDate: string, toIsoDate: str
   if (!profile.companyWorkerId) return [];
   const { data, error } = await sb
     .from("worker_time_clock_events")
-    .select("*")
+    .select(WORKER_TIME_CLOCK_COLUMNS)
     .eq("company_worker_id", profile.companyWorkerId)
     .gte("event_at", toIsoStart(fromIsoDate))
     .lte("event_at", toIsoEnd(toIsoDate))
     .order("event_at", { ascending: true });
   if (error) throwErr(error);
-  return (data ?? []).map((r) => rowToDomain(r as WorkerTimeClockEventRow));
+  return (data ?? []).map((r) => rowToDomain(r as WorkerTimeClockEventRow, false));
 }
 
 export async function fetchWorkerTimeClockEvents(
@@ -126,7 +133,7 @@ export async function fetchWorkerTimeClockEvents(
     .lte("event_at", toIsoEnd(toIsoDate))
     .order("event_at", { ascending: true });
   if (error) throwErr(error);
-  return (data ?? []).map((r) => rowToDomain(r as WorkerTimeClockEventRow));
+  return (data ?? []).map((r) => rowToDomain(r as WorkerTimeClockEventRow, true));
 }
 
 export async function fetchWorkersTimeClockEventsAsAdmin(
@@ -147,7 +154,7 @@ export async function fetchWorkersTimeClockEventsAsAdmin(
     .order("company_worker_id", { ascending: true })
     .order("event_at", { ascending: true });
   if (error) throwErr(error);
-  return (data ?? []).map((r) => rowToDomain(r as WorkerTimeClockEventRow));
+  return (data ?? []).map((r) => rowToDomain(r as WorkerTimeClockEventRow, true));
 }
 
 export type CreateTimeClockEventInput = {
@@ -186,6 +193,11 @@ export async function createMyTimeClockEvent(input: CreateTimeClockEventInput): 
     }
     effectiveComment = inherited;
   }
+  let clockInClientIp: string | null = null;
+  if (input.eventKind === "CLOCK_IN") {
+    clockInClientIp = await fetchClientPublicIp();
+  }
+
   const { error } = await sb.from("worker_time_clock_events").insert({
     company_worker_id: profile.companyWorkerId,
     event_kind: input.eventKind,
@@ -194,6 +206,7 @@ export async function createMyTimeClockEvent(input: CreateTimeClockEventInput): 
     comment: effectiveComment,
     source: "WORKER",
     created_by_backoffice_user_id: profile.backofficeUserId,
+    clock_in_client_ip: input.eventKind === "CLOCK_IN" ? clockInClientIp : null,
   });
   if (error) throwErr(error);
 }
@@ -205,6 +218,10 @@ export async function createAdminTimeClockEvent(
   const sb = requireSupabase();
   const profile = await requireCurrentProfile();
   if (profile.role !== "ADMIN") throw new Error("Solo administracion puede crear fichajes de terceros.");
+  let clockInClientIp: string | null = null;
+  if (input.eventKind === "CLOCK_IN") {
+    clockInClientIp = await fetchClientPublicIp();
+  }
   const { error } = await sb.from("worker_time_clock_events").insert({
     company_worker_id: workerId,
     event_kind: input.eventKind,
@@ -213,6 +230,7 @@ export async function createAdminTimeClockEvent(
     comment: input.comment?.trim() ?? "",
     source: "ADMIN",
     created_by_backoffice_user_id: profile.backofficeUserId,
+    clock_in_client_ip: input.eventKind === "CLOCK_IN" ? clockInClientIp : null,
   });
   if (error) throwErr(error);
 }

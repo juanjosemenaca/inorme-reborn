@@ -76,6 +76,12 @@ const NAV_KEYS = [
     requiredModule: "GASTOS" as const,
   },
   {
+    to: "/admin/facturacion",
+    labelKey: "admin.layout.nav_billing",
+    icon: FileText,
+    roles: ["WORKER", "ADMIN"] as const,
+  },
+  {
     to: "/admin/mensajes",
     labelKey: "admin.layout.nav_messages",
     icon: Inbox,
@@ -163,6 +169,7 @@ const ADMIN_SELF_SERVICE_PATHS = [
   "/admin/mi-calendario",
   "/admin/mi-agenda",
   "/admin/mis-gastos",
+  "/admin/facturacion",
   "/admin/mensajes",
 ] as const;
 /** Submenú solo bajo «Fichajes» (no van en NAV_KEYS para no duplicar enlaces de primer nivel). */

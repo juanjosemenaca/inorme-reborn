@@ -42,7 +42,9 @@ const schema = z
     tradeName: z.string(),
     companyName: z.string(),
     cif: z.string(),
+    postalAddress: z.string(),
     fiscalAddress: z.string(),
+    fiscalAddressSameAsPostal: z.boolean(),
     clientKind: kindEnum,
     /** Vacío o id de cliente final (solo intermediarios) */
     linkedFinalClientId: z.string().optional(),
@@ -54,6 +56,20 @@ const schema = z
   .refine((d) => d.tradeName.trim().length > 0 || d.companyName.trim().length > 0, {
     message: "Indica al menos nombre comercial o razón social",
     path: ["tradeName"],
+  })
+  .refine(
+    (d) =>
+      d.fiscalAddressSameAsPostal
+        ? d.postalAddress.trim().length > 0
+        : d.fiscalAddress.trim().length > 0,
+    {
+      message: "Indica dirección fiscal o marca que es igual a la dirección principal",
+      path: ["fiscalAddress"],
+    }
+  )
+  .refine((d) => d.postalAddress.trim().length > 0, {
+    message: "Indica la dirección principal del cliente",
+    path: ["postalAddress"],
   });
 
 export type ClientFormValues = z.infer<typeof schema>;
@@ -82,7 +98,9 @@ export function ClientFormDialog({
       tradeName: "",
       companyName: "",
       cif: "",
+      postalAddress: "",
       fiscalAddress: "",
+      fiscalAddressSameAsPostal: false,
       clientKind: "FINAL",
       linkedFinalClientId: "",
       phone: "",
@@ -93,6 +111,11 @@ export function ClientFormDialog({
   });
 
   const clientKind = useWatch({ control: form.control, name: "clientKind" });
+  const fiscalAddressSameAsPostal = useWatch({
+    control: form.control,
+    name: "fiscalAddressSameAsPostal",
+  });
+  const postalAddress = useWatch({ control: form.control, name: "postalAddress" });
 
   useEffect(() => {
     if (clientKind === "FINAL") {
@@ -101,13 +124,22 @@ export function ClientFormDialog({
   }, [clientKind, form]);
 
   useEffect(() => {
+    if (!fiscalAddressSameAsPostal) return;
+    form.setValue("fiscalAddress", postalAddress ?? "", { shouldDirty: true });
+  }, [fiscalAddressSameAsPostal, postalAddress, form]);
+
+  useEffect(() => {
     if (!open) return;
     if (mode === "edit" && initial) {
       form.reset({
         tradeName: initial.tradeName,
         companyName: initial.companyName,
         cif: initial.cif,
+        postalAddress: initial.postalAddress,
         fiscalAddress: initial.fiscalAddress,
+        fiscalAddressSameAsPostal:
+          initial.postalAddress.trim().length > 0 &&
+          initial.postalAddress.trim() === initial.fiscalAddress.trim(),
         clientKind: initial.clientKind,
         linkedFinalClientId: initial.linkedFinalClientId ?? "",
         phone: initial.phone,
@@ -120,7 +152,9 @@ export function ClientFormDialog({
         tradeName: "",
         companyName: "",
         cif: "",
+        postalAddress: "",
         fiscalAddress: "",
+        fiscalAddressSameAsPostal: false,
         clientKind: "FINAL",
         linkedFinalClientId: "",
         phone: "",
@@ -148,7 +182,11 @@ export function ClientFormDialog({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit((v) => {
-              onSubmit(v);
+              const normalized: ClientFormValues = {
+                ...v,
+                fiscalAddress: v.fiscalAddressSameAsPostal ? v.postalAddress : v.fiscalAddress,
+              };
+              onSubmit(normalized);
             })}
             className="space-y-4"
           >
@@ -260,6 +298,40 @@ export function ClientFormDialog({
               )}
               <FormField
                 control={form.control}
+                name="postalAddress"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>Dirección principal</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Calle, número, CP, población, provincia"
+                        className="min-h-[72px] resize-y"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="fiscalAddressSameAsPostal"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2 flex flex-row items-center justify-between rounded-lg border p-3">
+                    <div>
+                      <FormLabel className="text-base">Dirección fiscal igual a la principal</FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        Si la marcas, copiamos automáticamente la dirección principal.
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="fiscalAddress"
                 render={({ field }) => (
                   <FormItem className="sm:col-span-2">
@@ -268,6 +340,7 @@ export function ClientFormDialog({
                       <Textarea
                         placeholder="Calle, número, CP, población, provincia"
                         className="min-h-[72px] resize-y"
+                        disabled={fiscalAddressSameAsPostal}
                         {...field}
                       />
                     </FormControl>

@@ -27,6 +27,8 @@ export interface ClientRecord {
   /** Razón social / nombre de empresa */
   companyName: string;
   cif: string;
+  /** Dirección principal / operativa */
+  postalAddress: string;
   /** Dirección fiscal completa */
   fiscalAddress: string;
   clientKind: ClientKind;

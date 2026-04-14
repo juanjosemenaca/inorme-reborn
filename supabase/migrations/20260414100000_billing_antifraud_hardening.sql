@@ -1,0 +1,350 @@
+-- Endurecimiento antifraude y trazabilidad de facturación.
+-- Nota: se mantiene modo pruebas para borrado según billing_runtime_settings.
+
+CREATE OR REPLACE FUNCTION public.is_backoffice_authenticated()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.backoffice_users bu
+      WHERE bu.auth_user_id = auth.uid()
+        AND bu.active = true
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION public.billing_prevent_issued_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_emit_context boolean := COALESCE(current_setting('app.billing_emit_context', true), '') = '1';
+BEGIN
+  -- Solo se permite salir de DRAFT por la función de emisión.
+  IF OLD.status = 'DRAFT' AND NEW.status <> 'DRAFT' THEN
+    IF NOT (NEW.status = 'ISSUED' AND v_emit_context) THEN
+      RAISE EXCEPTION 'No se permite cambiar estado desde borrador fuera del proceso de emisión.';
+    END IF;
+  END IF;
+
+  -- Estado anulada terminal.
+  IF OLD.status = 'CANCELLED' AND NEW.status <> 'CANCELLED' THEN
+    RAISE EXCEPTION 'Una factura anulada no puede volver a otro estado.';
+  END IF;
+
+  -- Evita regresiones de estado.
+  IF OLD.status = 'ISSUED' AND NEW.status = 'DRAFT' THEN
+    RAISE EXCEPTION 'No se permite volver de emitida a borrador.';
+  END IF;
+  IF OLD.status = 'PAID' AND NEW.status IN ('DRAFT', 'ISSUED') THEN
+    RAISE EXCEPTION 'No se permite revertir una factura cobrada.';
+  END IF;
+
+  -- Reglas de coherencia de cobro.
+  IF NEW.collected_total < OLD.collected_total THEN
+    RAISE EXCEPTION 'No se permite reducir el total cobrado.';
+  END IF;
+  IF NEW.status = 'PAID' AND NEW.payment_status <> 'PAID' THEN
+    RAISE EXCEPTION 'Estado PAID requiere payment_status=PAID.';
+  END IF;
+  IF NEW.payment_status = 'PAID' AND NEW.collected_total < NEW.grand_total THEN
+    RAISE EXCEPTION 'payment_status=PAID requiere collected_total >= grand_total.';
+  END IF;
+  IF NEW.payment_status = 'PARTIAL' AND (NEW.collected_total <= 0 OR NEW.collected_total >= NEW.grand_total) THEN
+    RAISE EXCEPTION 'payment_status=PARTIAL requiere 0 < collected_total < grand_total.';
+  END IF;
+  IF NEW.payment_status = 'PENDING' AND NEW.collected_total <> 0 THEN
+    RAISE EXCEPTION 'payment_status=PENDING requiere collected_total = 0.';
+  END IF;
+
+  -- Inmutabilidad reforzada fuera de borrador.
+  IF OLD.status <> 'DRAFT' THEN
+    IF NEW.series_id <> OLD.series_id
+      OR NEW.fiscal_year IS DISTINCT FROM OLD.fiscal_year
+      OR NEW.invoice_number IS DISTINCT FROM OLD.invoice_number
+      OR NEW.issue_date IS DISTINCT FROM OLD.issue_date
+      OR NEW.issued_at IS DISTINCT FROM OLD.issued_at
+      OR NEW.client_id <> OLD.client_id
+      OR NEW.issuer_name <> OLD.issuer_name
+      OR NEW.issuer_tax_id <> OLD.issuer_tax_id
+      OR NEW.issuer_fiscal_address <> OLD.issuer_fiscal_address
+      OR NEW.recipient_name <> OLD.recipient_name
+      OR NEW.recipient_tax_id <> OLD.recipient_tax_id
+      OR NEW.recipient_fiscal_address <> OLD.recipient_fiscal_address
+      OR NEW.taxable_base_total <> OLD.taxable_base_total
+      OR NEW.vat_total <> OLD.vat_total
+      OR NEW.irpf_total <> OLD.irpf_total
+      OR NEW.grand_total <> OLD.grand_total
+      OR NEW.record_hash IS DISTINCT FROM OLD.record_hash
+      OR NEW.previous_hash IS DISTINCT FROM OLD.previous_hash
+      OR NEW.verifactu_qr_payload IS DISTINCT FROM OLD.verifactu_qr_payload
+    THEN
+      RAISE EXCEPTION 'Factura emitida/pagada/anulada: datos fiscales e integridad inmutables.';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.billing_prevent_line_mutation_after_issue()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_invoice_id uuid := COALESCE(NEW.invoice_id, OLD.invoice_id);
+  inv_status text;
+BEGIN
+  SELECT status INTO inv_status
+  FROM public.billing_invoices
+  WHERE id = v_invoice_id;
+
+  IF inv_status IS NULL THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
+  IF inv_status <> 'DRAFT' THEN
+    RAISE EXCEPTION 'No se pueden modificar líneas de factura fuera de borrador.';
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tr_billing_prevent_line_mutation_after_issue ON public.billing_invoice_lines;
+CREATE TRIGGER tr_billing_prevent_line_mutation_after_issue
+  BEFORE INSERT OR UPDATE OR DELETE ON public.billing_invoice_lines
+  FOR EACH ROW EXECUTE FUNCTION public.billing_prevent_line_mutation_after_issue();
+
+CREATE OR REPLACE FUNCTION public.billing_prevent_audit_log_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Los logs de auditoría son inmutables.';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tr_billing_prevent_audit_log_update ON public.billing_audit_logs;
+CREATE TRIGGER tr_billing_prevent_audit_log_update
+  BEFORE UPDATE ON public.billing_audit_logs
+  FOR EACH ROW EXECUTE FUNCTION public.billing_prevent_audit_log_mutation();
+
+DROP TRIGGER IF EXISTS tr_billing_prevent_audit_log_delete ON public.billing_audit_logs;
+CREATE TRIGGER tr_billing_prevent_audit_log_delete
+  BEFORE DELETE ON public.billing_audit_logs
+  FOR EACH ROW EXECUTE FUNCTION public.billing_prevent_audit_log_mutation();
+
+CREATE OR REPLACE FUNCTION public.billing_emit_invoice(
+  p_invoice_id uuid,
+  p_actor_backoffice_user_id uuid,
+  p_issue_date date DEFAULT CURRENT_DATE
+)
+RETURNS public.billing_invoices
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  inv public.billing_invoices;
+  v_series_code text;
+  v_next_number int;
+  v_prev_hash text;
+  v_base_total numeric(14,2);
+  v_vat_total numeric(14,2);
+  v_irpf_total numeric(14,2);
+  v_grand_total numeric(14,2);
+  v_lines_payload jsonb;
+  v_payload text;
+  v_hash text;
+  v_qr jsonb;
+BEGIN
+  SELECT * INTO inv
+  FROM public.billing_invoices
+  WHERE id = p_invoice_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Factura no encontrada.';
+  END IF;
+  IF inv.status <> 'DRAFT' THEN
+    RAISE EXCEPTION 'Solo se puede emitir una factura en borrador.';
+  END IF;
+
+  SELECT COALESCE(sum(taxable_base), 0), COALESCE(sum(vat_amount), 0), COALESCE(sum(irpf_amount), 0)
+    INTO v_base_total, v_vat_total, v_irpf_total
+  FROM public.billing_invoice_lines
+  WHERE invoice_id = p_invoice_id;
+
+  IF v_base_total <= 0 THEN
+    RAISE EXCEPTION 'Factura sin líneas o con base imponible cero.';
+  END IF;
+
+  v_grand_total := round((v_base_total + v_vat_total - v_irpf_total)::numeric, 2);
+  inv.fiscal_year := extract(year from COALESCE(p_issue_date, CURRENT_DATE));
+  inv.issue_date := COALESCE(p_issue_date, CURRENT_DATE);
+
+  SELECT code INTO v_series_code
+  FROM public.billing_series
+  WHERE id = inv.series_id;
+  IF v_series_code IS NULL THEN
+    RAISE EXCEPTION 'Serie no encontrada.';
+  END IF;
+
+  SELECT COALESCE(max(invoice_number), 0) + 1
+    INTO v_next_number
+  FROM public.billing_invoices
+  WHERE series_id = inv.series_id
+    AND fiscal_year = inv.fiscal_year
+    AND status <> 'DRAFT';
+
+  SELECT record_hash INTO v_prev_hash
+  FROM public.billing_invoices
+  WHERE series_id = inv.series_id
+    AND fiscal_year = inv.fiscal_year
+    AND status <> 'DRAFT'
+  ORDER BY invoice_number DESC
+  LIMIT 1;
+
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'order', l.line_order,
+        'description', l.description,
+        'quantity', l.quantity,
+        'unitPrice', l.unit_price,
+        'vatRate', l.vat_rate,
+        'irpfRate', l.irpf_rate,
+        'taxableBase', l.taxable_base,
+        'vatAmount', l.vat_amount,
+        'irpfAmount', l.irpf_amount,
+        'lineTotal', l.line_total
+      )
+      ORDER BY l.line_order
+    ),
+    '[]'::jsonb
+  ) INTO v_lines_payload
+  FROM public.billing_invoice_lines l
+  WHERE l.invoice_id = p_invoice_id;
+
+  v_payload := jsonb_build_object(
+    'issuerTaxId', inv.issuer_tax_id,
+    'issuerName', inv.issuer_name,
+    'issuerFiscalAddress', inv.issuer_fiscal_address,
+    'recipientTaxId', inv.recipient_tax_id,
+    'recipientName', inv.recipient_name,
+    'recipientFiscalAddress', inv.recipient_fiscal_address,
+    'series', v_series_code,
+    'fiscalYear', inv.fiscal_year,
+    'invoiceNumber', v_next_number,
+    'issueDate', inv.issue_date,
+    'totals', jsonb_build_object(
+      'taxableBase', v_base_total,
+      'vatTotal', v_vat_total,
+      'irpfTotal', v_irpf_total,
+      'grandTotal', v_grand_total
+    ),
+    'lines', v_lines_payload,
+    'previousHash', COALESCE(v_prev_hash, '')
+  )::text;
+  v_hash := encode(digest(v_payload, 'sha256'), 'hex');
+
+  v_qr := jsonb_build_object(
+    'schema', 'ES_VERIFACTU_PREP',
+    'issuerTaxId', inv.issuer_tax_id,
+    'invoiceId', inv.id,
+    'series', v_series_code,
+    'number', v_next_number,
+    'fiscalYear', inv.fiscal_year,
+    'issueDate', inv.issue_date,
+    'amountTotal', v_grand_total,
+    'hash', v_hash
+  );
+
+  -- Contexto explícito para permitir DRAFT -> ISSUED en trigger de inmutabilidad.
+  PERFORM set_config('app.billing_emit_context', '1', true);
+
+  UPDATE public.billing_invoices
+    SET status = 'ISSUED',
+        payment_status = 'PENDING',
+        fiscal_year = inv.fiscal_year,
+        invoice_number = v_next_number,
+        issue_date = inv.issue_date,
+        issued_at = now(),
+        taxable_base_total = v_base_total,
+        vat_total = v_vat_total,
+        irpf_total = v_irpf_total,
+        grand_total = v_grand_total,
+        previous_hash = v_prev_hash,
+        record_hash = v_hash,
+        verifactu_qr_payload = v_qr,
+        updated_by_backoffice_user_id = p_actor_backoffice_user_id,
+        updated_at = now()
+  WHERE id = p_invoice_id;
+
+  INSERT INTO public.billing_audit_logs (entity_type, entity_id, event_type, event_payload, actor_backoffice_user_id)
+  VALUES (
+    'INVOICE',
+    p_invoice_id,
+    'ISSUED',
+    jsonb_build_object(
+      'series', v_series_code,
+      'number', v_next_number,
+      'fiscalYear', inv.fiscal_year,
+      'issueDate', inv.issue_date,
+      'taxableBase', v_base_total,
+      'vatTotal', v_vat_total,
+      'irpfTotal', v_irpf_total,
+      'grandTotal', v_grand_total,
+      'hash', v_hash,
+      'previousHash', v_prev_hash
+    ),
+    p_actor_backoffice_user_id
+  );
+
+  RETURN (SELECT i FROM public.billing_invoices i WHERE i.id = p_invoice_id);
+END;
+$$;
+
+DROP POLICY IF EXISTS "backoffice_authenticated_all_billing_series" ON public.billing_series;
+CREATE POLICY "backoffice_authenticated_all_billing_series"
+  ON public.billing_series FOR ALL TO authenticated
+  USING (public.is_backoffice_authenticated())
+  WITH CHECK (public.is_backoffice_authenticated());
+
+DROP POLICY IF EXISTS "backoffice_authenticated_all_billing_issuer_profile" ON public.billing_issuer_profile;
+CREATE POLICY "backoffice_authenticated_all_billing_issuer_profile"
+  ON public.billing_issuer_profile FOR ALL TO authenticated
+  USING (public.is_backoffice_authenticated())
+  WITH CHECK (public.is_backoffice_authenticated());
+
+DROP POLICY IF EXISTS "backoffice_authenticated_all_billing_invoices" ON public.billing_invoices;
+CREATE POLICY "backoffice_authenticated_all_billing_invoices"
+  ON public.billing_invoices FOR ALL TO authenticated
+  USING (public.is_backoffice_authenticated())
+  WITH CHECK (public.is_backoffice_authenticated());
+
+DROP POLICY IF EXISTS "backoffice_authenticated_all_billing_invoice_lines" ON public.billing_invoice_lines;
+CREATE POLICY "backoffice_authenticated_all_billing_invoice_lines"
+  ON public.billing_invoice_lines FOR ALL TO authenticated
+  USING (public.is_backoffice_authenticated())
+  WITH CHECK (public.is_backoffice_authenticated());
+
+DROP POLICY IF EXISTS "backoffice_authenticated_all_billing_receipts" ON public.billing_receipts;
+CREATE POLICY "backoffice_authenticated_all_billing_receipts"
+  ON public.billing_receipts FOR ALL TO authenticated
+  USING (public.is_backoffice_authenticated())
+  WITH CHECK (public.is_backoffice_authenticated());
+
+DROP POLICY IF EXISTS "backoffice_authenticated_all_billing_audit_logs" ON public.billing_audit_logs;
+CREATE POLICY "backoffice_authenticated_all_billing_audit_logs"
+  ON public.billing_audit_logs FOR ALL TO authenticated
+  USING (public.is_backoffice_authenticated())
+  WITH CHECK (public.is_backoffice_authenticated());
+
+DROP POLICY IF EXISTS "backoffice_authenticated_all_billing_runtime_settings" ON public.billing_runtime_settings;
+CREATE POLICY "backoffice_authenticated_all_billing_runtime_settings"
+  ON public.billing_runtime_settings FOR ALL TO authenticated
+  USING (public.is_backoffice_authenticated())
+  WITH CHECK (public.is_backoffice_authenticated());
+
+NOTIFY pgrst, 'reload schema';

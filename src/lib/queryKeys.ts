@@ -29,6 +29,9 @@ export const queryKeys = {
     ["workersTimeClockEvents", workerIdsKey, fromIsoDate, toIsoDate] as const,
   workerAgendaItems: (companyWorkerId: string, fromIsoDate: string, toIsoDate: string) =>
     ["workerAgendaItems", companyWorkerId, fromIsoDate, toIsoDate] as const,
+  billingIssuerProfile: ["billingIssuerProfile"] as const,
+  billingSeries: ["billingSeries"] as const,
+  billingInvoices: ["billingInvoices"] as const,
   workerExpenseSheets: (companyWorkerId: string) => ["workerExpenseSheets", companyWorkerId] as const,
   workerExpenseSheetsAdmin: ["workerExpenseSheets", "admin"] as const,
 };

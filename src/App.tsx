@@ -40,6 +40,7 @@ import WorkerAgenda from "./pages/admin/WorkerAgenda";
 import AdminWorkerAgenda from "./pages/admin/AdminWorkerAgenda";
 import WorkerExpenses from "./pages/admin/WorkerExpenses";
 import AdminWorkerExpenses from "./pages/admin/AdminWorkerExpenses";
+import AdminBilling from "./pages/admin/AdminBilling";
 import { ADMIN_ROUTE_SEG } from "@/constants/adminPaths";
 
 const queryClient = new QueryClient();
@@ -127,6 +128,14 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="MESSAGES">
                       <WorkerMessages />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="facturacion"
+                  element={
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]}>
+                      <AdminBilling />
                     </RoleRoute>
                   }
                 />

@@ -147,6 +147,7 @@ const AdminClients = () => {
           tradeName: values.tradeName,
           companyName: values.companyName,
           cif: values.cif,
+          postalAddress: values.postalAddress,
           fiscalAddress: values.fiscalAddress,
           clientKind: values.clientKind,
           linkedFinalClientId:
@@ -164,6 +165,7 @@ const AdminClients = () => {
           tradeName: values.tradeName,
           companyName: values.companyName,
           cif: values.cif,
+          postalAddress: values.postalAddress,
           fiscalAddress: values.fiscalAddress,
           clientKind: values.clientKind,
           linkedFinalClientId:

@@ -26,6 +26,18 @@ export interface WorkerExpenseSheetLineRecord {
   updatedAt: string;
 }
 
+export interface WorkerExpenseSheetAttachmentRecord {
+  id: string;
+  sheetId: string;
+  /** Día del periodo al que se asocia el justificante, o null si aplica a todo el periodo. */
+  expenseDate: string | null;
+  storagePath: string;
+  originalFilename: string;
+  mimeType: string | null;
+  fileSizeBytes: number | null;
+  createdAt: string;
+}
+
 export interface WorkerExpenseSheetRecord {
   id: string;
   companyWorkerId: string;
@@ -46,4 +58,5 @@ export interface WorkerExpenseSheetRecord {
   createdAt: string;
   updatedAt: string;
   lines: WorkerExpenseSheetLineRecord[];
+  attachments: WorkerExpenseSheetAttachmentRecord[];
 }

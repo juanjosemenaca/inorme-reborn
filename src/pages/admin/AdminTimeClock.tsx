@@ -1,11 +1,20 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Clock3, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, Clock3, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,7 +30,9 @@ import {
   updateTimeClockEventAsAdmin,
   type CreateTimeClockEventInput,
 } from "@/api/timeTrackingApi";
+import type { CompanyWorkerRecord } from "@/types/companyWorkers";
 import type { TimeClockEventKind } from "@/types/timeTracking";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 function monthRange(month: string): { from: string; to: string } {
@@ -48,22 +59,29 @@ function localInputToIso(local: string): string {
 
 const EVENT_KINDS: TimeClockEventKind[] = ["CLOCK_IN", "BREAK_START", "BREAK_END", "CLOCK_OUT", "ABSENCE"];
 
+/** Cadena en minúsculas para filtrar en el combobox (cmdk busca por `value`). */
+function workerSearchValue(w: CompanyWorkerRecord): string {
+  return [w.firstName, w.lastName, w.email, w.dni, w.mobile, w.city].join(" ").toLowerCase();
+}
+
 const AdminTimeClock = () => {
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const workersQuery = useCompanyWorkers();
-  const workers = useMemo(() => (workersQuery.data ?? []).filter((w) => w.active), [workersQuery.data]);
   const now = new Date();
   const initialMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [month, setMonth] = useState(initialMonth);
   const [workerId, setWorkerId] = useState<string>("");
+  const [workerComboOpen, setWorkerComboOpen] = useState(false);
   const [newKind, setNewKind] = useState<TimeClockEventKind>("CLOCK_IN");
   const [newAt, setNewAt] = useState("");
   const [newComment, setNewComment] = useState("");
   const [newAbsenceReason, setNewAbsenceReason] = useState("");
   const [expandedDayIso, setExpandedDayIso] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Record<string, { kind: TimeClockEventKind; at: string; comment: string; absenceReason: string }>>({});
+  const workers = useMemo(() => (workersQuery.data ?? []).filter((w) => w.active), [workersQuery.data]);
+  const selectedWorker = useMemo(() => workers.find((w) => w.id === workerId), [workers, workerId]);
   const { from, to } = useMemo(() => monthRange(month), [month]);
 
   useEffect(() => {
@@ -184,16 +202,50 @@ const AdminTimeClock = () => {
           <CardTitle className="text-base">{t("admin.timeClock.filters_title")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-[1fr_180px]">
-          <Select value={workerId} onValueChange={setWorkerId}>
-            <SelectTrigger>
-              <SelectValue placeholder={t("admin.timeClock.select_worker")} />
-            </SelectTrigger>
-            <SelectContent>
-              {workers.map((w) => (
-                <SelectItem key={w.id} value={w.id}>{`${w.firstName} ${w.lastName}`.trim()}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={workerComboOpen} onOpenChange={setWorkerComboOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                role="combobox"
+                aria-expanded={workerComboOpen}
+                className={cn("w-full justify-between font-normal", !workerId && "text-muted-foreground")}
+              >
+                {selectedWorker
+                  ? `${selectedWorker.firstName} ${selectedWorker.lastName}`.trim()
+                  : t("admin.timeClock.select_worker")}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-[min(calc(100vw-2rem),32rem)]" align="start">
+              <Command>
+                <CommandInput placeholder={t("admin.timeClock.worker_search_placeholder")} />
+                <CommandList>
+                  <CommandEmpty>{t("admin.timeClock.worker_search_empty")}</CommandEmpty>
+                  <CommandGroup>
+                    {workers.map((w) => (
+                      <CommandItem
+                        key={w.id}
+                        value={workerSearchValue(w)}
+                        onSelect={() => {
+                          setWorkerId(w.id);
+                          setWorkerComboOpen(false);
+                        }}
+                      >
+                        <Check
+                          className={cn("mr-2 h-4 w-4", workerId === w.id ? "opacity-100" : "opacity-0")}
+                        />
+                        <span className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+                          <span className="font-medium">{`${w.firstName} ${w.lastName}`.trim()}</span>
+                          <span className="text-xs text-muted-foreground sm:text-sm">{w.email}</span>
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
           <Input type="month" value={month} onChange={(e) => setMonth(e.target.value || initialMonth)} />
         </CardContent>
       </Card>
@@ -346,6 +398,7 @@ const AdminTimeClock = () => {
                                       <TableRow>
                                         <TableHead>{t("admin.timeClock.col_event_at")}</TableHead>
                                         <TableHead>{t("admin.timeClock.col_kind")}</TableHead>
+                                        <TableHead className="whitespace-nowrap">{t("admin.timeClock.col_clock_in_ip")}</TableHead>
                                         <TableHead>{t("admin.timeClock.col_comment")}</TableHead>
                                         <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
                                       </TableRow>
@@ -391,6 +444,17 @@ const AdminTimeClock = () => {
                                               <Badge variant="outline" className="mt-2">
                                                 {e.source}
                                               </Badge>
+                                            </TableCell>
+                                            <TableCell className="min-w-[140px] align-top text-xs text-muted-foreground tabular-nums">
+                                              {e.eventKind === "CLOCK_IN" ? (
+                                                e.clockInClientIp ? (
+                                                  <span title={t("admin.timeClock.clock_in_ip_hint")}>{e.clockInClientIp}</span>
+                                                ) : (
+                                                  "—"
+                                                )
+                                              ) : (
+                                                "—"
+                                              )}
                                             </TableCell>
                                             <TableCell className="min-w-[280px]">
                                               {d.kind === "ABSENCE" ? (

@@ -56,6 +56,7 @@ export interface ClientRow {
   trade_name: string;
   company_name: string;
   cif: string;
+  postal_address: string;
   fiscal_address: string;
   client_kind: DbClientKind;
   linked_final_client_id: string | null;
@@ -300,6 +301,8 @@ export interface WorkerTimeClockEventRow {
   comment: string;
   source: DbWorkerTimeClockSource;
   created_by_backoffice_user_id: string | null;
+  /** Solo CLOCK_IN; IP pública capturada en el cliente. */
+  clock_in_client_ip?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -343,6 +346,18 @@ export interface WorkerExpenseSheetRow {
   updated_at: string;
 }
 
+export interface WorkerExpenseSheetAttachmentRow {
+  id: string;
+  sheet_id: string;
+  expense_date: string | null;
+  storage_path: string;
+  original_filename: string;
+  mime_type: string | null;
+  file_size_bytes: number | null;
+  created_at: string;
+  created_by_backoffice_user_id: string | null;
+}
+
 export interface WorkerExpenseSheetLineRow {
   id: string;
   sheet_id: string;
@@ -357,6 +372,98 @@ export interface WorkerExpenseSheetLineRow {
   amount_other: string;
   created_at: string;
   updated_at: string;
+}
+
+export type DbBillingInvoiceStatus = "DRAFT" | "ISSUED" | "PAID" | "CANCELLED";
+export type DbBillingPaymentStatus = "PENDING" | "PARTIAL" | "PAID";
+export type DbBillingInvoiceKind = "NORMAL" | "RECTIFICATIVE";
+export type DbBillingLineType = "BILLABLE" | "BLOCK_TITLE" | "BLOCK_SUBTITLE" | "CONCEPT";
+
+export interface BillingSeriesRow {
+  id: string;
+  code: string;
+  label: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BillingInvoiceRow {
+  id: string;
+  series_id: string;
+  fiscal_year: number | null;
+  invoice_number: number | null;
+  status: DbBillingInvoiceStatus;
+  payment_status: DbBillingPaymentStatus;
+  invoice_kind: DbBillingInvoiceKind;
+  rectifies_invoice_id: string | null;
+  issue_date: string | null;
+  issued_at: string | null;
+  due_date: string | null;
+  notes: string;
+  client_id: string;
+  issuer_name: string;
+  issuer_tax_id: string;
+  issuer_fiscal_address: string;
+  issuer_bank_account_iban: string | null;
+  issuer_bank_account_swift: string | null;
+  issuer_bank_name: string | null;
+  recipient_name: string;
+  recipient_tax_id: string;
+  recipient_fiscal_address: string;
+  taxable_base_total: string;
+  vat_total: string;
+  irpf_total: string;
+  grand_total: string;
+  collected_total: string;
+  previous_hash: string | null;
+  record_hash: string | null;
+  verifactu_qr_payload: Record<string, unknown> | null;
+  verifactu_submission_status: "PENDING" | "SENT" | "ACCEPTED" | "REJECTED";
+  created_by_backoffice_user_id: string | null;
+  updated_by_backoffice_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BillingInvoiceLineRow {
+  id: string;
+  invoice_id: string;
+  line_order: number;
+  line_type: DbBillingLineType;
+  description: string;
+  quantity: string;
+  unit_price: string;
+  vat_rate: string;
+  irpf_rate: string;
+  taxable_base: string;
+  vat_amount: string;
+  irpf_amount: string;
+  line_total: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BillingReceiptRow {
+  id: string;
+  invoice_id: string;
+  receipt_date: string;
+  amount: string;
+  method: string;
+  reference: string | null;
+  notes: string;
+  created_by_backoffice_user_id: string | null;
+  created_at: string;
+}
+
+export interface BillingAuditLogRow {
+  id: string;
+  entity_type: string;
+  entity_id: string | null;
+  event_type: string;
+  event_payload: Record<string, unknown>;
+  actor_backoffice_user_id: string | null;
+  created_at: string;
 }
 
 /** Perfil backoffice (sin contraseña; Auth en `auth.users`). */

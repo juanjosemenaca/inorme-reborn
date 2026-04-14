@@ -6,11 +6,16 @@ import { generateExpenseSheetPdfBlob } from "@/lib/expenseSheetPdf";
 import { companyWorkerDisplayName } from "@/types/companyWorkers";
 import { requireSupabase } from "@/api/supabaseRequire";
 import { getErrorMessage } from "@/lib/errorMessage";
-import type { WorkerExpenseSheetLineRow, WorkerExpenseSheetRow } from "@/types/database";
+import type {
+  WorkerExpenseSheetAttachmentRow,
+  WorkerExpenseSheetLineRow,
+  WorkerExpenseSheetRow,
+} from "@/types/database";
 import type {
   WorkerExpenseCategoryKey,
   WorkerExpenseLineAmounts,
   WorkerExpensePeriodKind,
+  WorkerExpenseSheetAttachmentRecord,
   WorkerExpenseSheetLineRecord,
   WorkerExpenseSheetRecord,
   WorkerExpenseSheetStatus,
@@ -38,6 +43,21 @@ const DB_TO_KEY: Record<string, WorkerExpenseCategoryKey> = {
   amount_other: "other",
 };
 
+const MAX_EXPENSE_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+function attachmentRowToDomain(row: WorkerExpenseSheetAttachmentRow): WorkerExpenseSheetAttachmentRecord {
+  return {
+    id: row.id,
+    sheetId: row.sheet_id,
+    expenseDate: row.expense_date ? String(row.expense_date).slice(0, 10) : null,
+    storagePath: row.storage_path,
+    originalFilename: row.original_filename,
+    mimeType: row.mime_type,
+    fileSizeBytes: row.file_size_bytes,
+    createdAt: row.created_at,
+  };
+}
+
 function lineRowToDomain(row: WorkerExpenseSheetLineRow): WorkerExpenseSheetLineRecord {
   const amounts = {} as WorkerExpenseLineAmounts;
   for (const k of WORKER_EXPENSE_CATEGORY_KEYS) {
@@ -59,7 +79,8 @@ function lineRowToDomain(row: WorkerExpenseSheetLineRow): WorkerExpenseSheetLine
 
 function sheetRowToDomain(
   row: WorkerExpenseSheetRow,
-  lines: WorkerExpenseSheetLineRow[]
+  lines: WorkerExpenseSheetLineRow[],
+  attachments: WorkerExpenseSheetAttachmentRow[]
 ): WorkerExpenseSheetRecord {
   return {
     id: row.id,
@@ -80,7 +101,27 @@ function sheetRowToDomain(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lines: lines.map(lineRowToDomain),
+    attachments: attachments.map(attachmentRowToDomain),
   };
+}
+
+async function fetchAttachmentsBySheetIds(
+  sb: ReturnType<typeof requireSupabase>,
+  sheetIds: string[]
+): Promise<Map<string, WorkerExpenseSheetAttachmentRow[]>> {
+  const map = new Map<string, WorkerExpenseSheetAttachmentRow[]>();
+  if (sheetIds.length === 0) return map;
+  for (const id of sheetIds) map.set(id, []);
+  const { data, error } = await sb
+    .from("worker_expense_sheet_attachments")
+    .select("*")
+    .in("sheet_id", sheetIds)
+    .order("created_at", { ascending: true });
+  if (error) throwErr(error);
+  for (const row of (data ?? []) as WorkerExpenseSheetAttachmentRow[]) {
+    map.get(row.sheet_id)?.push(row);
+  }
+  return map;
 }
 
 type Profile = { id: string; role: "ADMIN" | "WORKER"; companyWorkerId: string | null };
@@ -165,7 +206,14 @@ export async function fetchWorkerExpenseSheetById(sheetId: string): Promise<Work
     .order("expense_date", { ascending: true });
   if (e2) throwErr(e2);
 
-  return sheetRowToDomain(row as WorkerExpenseSheetRow, (lineRows ?? []) as WorkerExpenseSheetLineRow[]);
+  const attMap = await fetchAttachmentsBySheetIds(sb, [sheetId]);
+  const attachments = attMap.get(sheetId) ?? [];
+
+  return sheetRowToDomain(
+    row as WorkerExpenseSheetRow,
+    (lineRows ?? []) as WorkerExpenseSheetLineRow[],
+    attachments
+  );
 }
 
 export async function fetchWorkerExpenseSheetsForWorker(
@@ -198,8 +246,10 @@ export async function fetchWorkerExpenseSheetsForWorker(
     bySheet.get(sid)?.push(ln as WorkerExpenseSheetLineRow);
   }
 
+  const attMap = await fetchAttachmentsBySheetIds(sb, ids);
+
   return (rows as WorkerExpenseSheetRow[]).map((r) =>
-    sheetRowToDomain(r, bySheet.get(r.id) ?? [])
+    sheetRowToDomain(r, bySheet.get(r.id) ?? [], attMap.get(r.id) ?? [])
   );
 }
 
@@ -230,8 +280,10 @@ export async function fetchAllWorkerExpenseSheets(): Promise<WorkerExpenseSheetR
     bySheet.get(sid)?.push(ln as WorkerExpenseSheetLineRow);
   }
 
+  const attMap = await fetchAttachmentsBySheetIds(sb, ids);
+
   return (rows as WorkerExpenseSheetRow[]).map((r) =>
-    sheetRowToDomain(r, bySheet.get(r.id) ?? [])
+    sheetRowToDomain(r, bySheet.get(r.id) ?? [], attMap.get(r.id) ?? [])
   );
 }
 
@@ -497,6 +549,126 @@ export async function approveExpenseSheet(sheetId: string): Promise<void> {
 export async function openExpenseSheetPdfDownload(sheet: WorkerExpenseSheetRecord): Promise<void> {
   if (!sheet.pdfStoragePath) throw new Error("No hay PDF disponible para esta hoja.");
   const url = await getProjectDocumentSignedUrl(sheet.pdfStoragePath, 3600);
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function sanitizeOriginalFilename(name: string): string {
+  const n = name.replace(/[/\\]/g, "_").trim().slice(0, 200);
+  return n || "archivo";
+}
+
+function extensionForUpload(file: File): string {
+  const fromName = file.name.toLowerCase();
+  const m = fromName.match(/(\.[a-z0-9]{1,8})$/);
+  if (m) return m[1];
+  const t = file.type.toLowerCase();
+  if (t === "application/pdf") return ".pdf";
+  if (t === "image/jpeg" || t === "image/jpg") return ".jpg";
+  if (t === "image/png") return ".png";
+  if (t === "image/webp") return ".webp";
+  if (t === "image/gif") return ".gif";
+  if (t === "image/heic") return ".heic";
+  return "";
+}
+
+function assertExpenseAttachmentFileAccepted(file: File): void {
+  if (file.size > MAX_EXPENSE_ATTACHMENT_BYTES) {
+    throw new Error("El archivo supera el tamaño máximo permitido (20 MB).");
+  }
+  const okType =
+    file.type === "application/pdf" ||
+    file.type.startsWith("image/") ||
+    file.type === "";
+  const lower = file.name.toLowerCase();
+  const okExt = /\.(pdf|jpe?g|png|gif|webp|heic)$/.test(lower);
+  if (!okType && !okExt) {
+    throw new Error("Formato no admitido. Usa PDF o imagen (JPEG, PNG…).");
+  }
+}
+
+/**
+ * Sube un justificante (ticket, factura, foto) asociado a la hoja.
+ * Solo en borrador o rechazada; opcionalmente ligado a un día del periodo.
+ */
+export async function uploadExpenseSheetAttachment(
+  sheetId: string,
+  file: File,
+  expenseDate: string | null
+): Promise<WorkerExpenseSheetAttachmentRecord> {
+  assertExpenseAttachmentFileAccepted(file);
+  const profile = await requireProfile();
+  const sheet = await fetchWorkerExpenseSheetById(sheetId);
+  if (!sheet) throw new Error("Hoja no encontrada.");
+  if (!canEditSheetAsWorker(profile, sheet.companyWorkerId)) {
+    throw new Error("No puedes adjuntar archivos a esta hoja.");
+  }
+  if (sheet.status !== "DRAFT" && sheet.status !== "REJECTED") {
+    throw new Error("Solo se pueden adjuntar archivos en borrador o en una hoja rechazada.");
+  }
+  const allowedDates = new Set(sheet.lines.map((l) => l.expenseDate));
+  if (expenseDate !== null && !allowedDates.has(expenseDate)) {
+    throw new Error("La fecha del justificante debe estar dentro del periodo de la hoja.");
+  }
+
+  const ext = extensionForUpload(file) || ".bin";
+  const objectName = `${crypto.randomUUID()}${ext}`;
+  const storagePath = `expense-sheets/${sheetId}/attachments/${objectName}`;
+
+  const sb = requireSupabase();
+  const { error: upErr } = await sb.storage.from(PROJECT_DOCUMENTS_BUCKET).upload(storagePath, file, {
+    contentType: file.type || undefined,
+    upsert: false,
+  });
+  if (upErr) throwErr(upErr);
+
+  const { data: row, error: insErr } = await sb
+    .from("worker_expense_sheet_attachments")
+    .insert({
+      sheet_id: sheetId,
+      expense_date: expenseDate,
+      storage_path: storagePath,
+      original_filename: sanitizeOriginalFilename(file.name),
+      mime_type: file.type || null,
+      file_size_bytes: file.size,
+      created_by_backoffice_user_id: profile.id,
+    })
+    .select("*")
+    .single();
+  if (insErr) {
+    await sb.storage.from(PROJECT_DOCUMENTS_BUCKET).remove([storagePath]).catch(() => undefined);
+    throwErr(insErr);
+  }
+  return attachmentRowToDomain(row as WorkerExpenseSheetAttachmentRow);
+}
+
+export async function deleteExpenseSheetAttachment(attachmentId: string): Promise<void> {
+  const profile = await requireProfile();
+  const sb = requireSupabase();
+  const { data: row, error } = await sb
+    .from("worker_expense_sheet_attachments")
+    .select("*")
+    .eq("id", attachmentId)
+    .maybeSingle();
+  if (error) throwErr(error);
+  if (!row) throw new Error("Adjunto no encontrado.");
+
+  const sheet = await fetchWorkerExpenseSheetById((row as WorkerExpenseSheetAttachmentRow).sheet_id);
+  if (!sheet) throw new Error("Hoja no encontrada.");
+  if (!canEditSheetAsWorker(profile, sheet.companyWorkerId)) {
+    throw new Error("No puedes eliminar este adjunto.");
+  }
+  if (sheet.status !== "DRAFT" && sheet.status !== "REJECTED") {
+    throw new Error("Solo se pueden eliminar adjuntos en borrador o en una hoja rechazada.");
+  }
+
+  const path = (row as WorkerExpenseSheetAttachmentRow).storage_path;
+  const { error: delErr } = await sb.from("worker_expense_sheet_attachments").delete().eq("id", attachmentId);
+  if (delErr) throwErr(delErr);
+  await sb.storage.from(PROJECT_DOCUMENTS_BUCKET).remove([path]).catch(() => undefined);
+}
+
+export async function openExpenseSheetAttachmentDownload(attachment: WorkerExpenseSheetAttachmentRecord): Promise<void> {
+  const url = await getProjectDocumentSignedUrl(attachment.storagePath, 3600);
   window.open(url, "_blank", "noopener,noreferrer");
 }
 

@@ -16,6 +16,8 @@ export interface TimeClockEventRecord {
   comment: string;
   source: TimeClockSource;
   createdByBackofficeUserId: string | null;
+  /** Solo rellenado en consultas admin; IP al fichar entrada (CLOCK_IN). */
+  clockInClientIp: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -31,9 +31,11 @@ import {
   approveExpenseSheet,
   computeSheetTotal,
   fetchWorkerExpenseSheetById,
+  openExpenseSheetAttachmentDownload,
   openExpenseSheetPdfDownload,
   rejectExpenseSheet,
 } from "@/api/workerExpenseSheetsApi";
+import { ExpenseSheetAttachmentsList } from "@/components/admin/ExpenseSheetAttachmentsBlock";
 import { companyWorkerDisplayName } from "@/types/companyWorkers";
 import type { WorkerExpenseSheetRecord } from "@/types/workerExpenses";
 import { WorkerExpenseSheetReadonlyGrid } from "@/components/admin/WorkerExpenseSheetReadonlyGrid";
@@ -70,6 +72,7 @@ const AdminWorkerExpenses = () => {
   const [rejectReason, setRejectReason] = useState("");
   const [filter, setFilter] = useState<"pending" | "all">("pending");
   const [pdfOpening, setPdfOpening] = useState(false);
+  const [attachmentOpenId, setAttachmentOpenId] = useState<string | null>(null);
 
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
 
@@ -310,6 +313,31 @@ const AdminWorkerExpenses = () => {
                 </div>
 
                 <WorkerExpenseSheetReadonlyGrid sheet={detailSheet} localeTag={localeTag} t={t} />
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">{t("admin.expenses.attachments_title")}</p>
+                  <p className="text-xs text-muted-foreground">{t("admin.expenses.attachments_admin_hint")}</p>
+                  <ExpenseSheetAttachmentsList
+                    attachments={detailSheet.attachments ?? []}
+                    localeTag={localeTag}
+                    t={t}
+                    onOpen={async (a) => {
+                      setAttachmentOpenId(a.id);
+                      try {
+                        await openExpenseSheetAttachmentDownload(a);
+                      } catch (e) {
+                        toast({
+                          title: t("admin.common.error"),
+                          description: e instanceof Error ? e.message : t("admin.expenses.pdf_open_error"),
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setAttachmentOpenId(null);
+                      }
+                    }}
+                    openPendingId={attachmentOpenId}
+                  />
+                </div>
 
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium">{t("admin.expenses.observations")}</p>

@@ -80,6 +80,7 @@ export type CreateClientInput = {
   tradeName: string;
   companyName: string;
   cif: string;
+  postalAddress: string;
   fiscalAddress: string;
   clientKind: ClientKind;
   linkedFinalClientId?: string | null;
@@ -104,6 +105,7 @@ export async function createClient(input: CreateClientInput): Promise<ClientReco
     tradeName: input.tradeName.trim(),
     companyName: input.companyName.trim(),
     cif: cifNorm,
+    postalAddress: input.postalAddress.trim(),
     fiscalAddress: input.fiscalAddress.trim(),
     clientKind: input.clientKind,
     linkedFinalClientId: resolveLinkedFinalForCreate(all, input.clientKind, input.linkedFinalClientId),
@@ -142,6 +144,7 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
     tradeName: input.tradeName !== undefined ? input.tradeName.trim() : current.tradeName,
     companyName: input.companyName !== undefined ? input.companyName.trim() : current.companyName,
     cif: nextCif,
+    postalAddress: input.postalAddress !== undefined ? input.postalAddress.trim() : current.postalAddress,
     fiscalAddress: input.fiscalAddress !== undefined ? input.fiscalAddress.trim() : current.fiscalAddress,
     clientKind: nextKind,
     linkedFinalClientId: nextLinked,
@@ -159,6 +162,7 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
       trade_name: patch.trade_name,
       company_name: patch.company_name,
       cif: patch.cif,
+      postal_address: patch.postal_address,
       fiscal_address: patch.fiscal_address,
       client_kind: patch.client_kind,
       linked_final_client_id: patch.linked_final_client_id,
