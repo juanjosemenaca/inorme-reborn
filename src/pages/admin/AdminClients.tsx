@@ -33,7 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useClients } from "@/hooks/useClients";
-import { createClient, updateClient, deleteClient } from "@/api/clientsApi";
+import { createClient, deleteClient, updateClient } from "@/api/clientsApi";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ClientKind, ClientRecord } from "@/types/clients";
 import { ClientFormDialog, type ClientFormValues } from "@/components/admin/ClientFormDialog";
@@ -158,6 +158,7 @@ const AdminClients = () => {
           contactEmail: values.contactEmail,
           websiteUrl: values.website?.trim() ?? "",
           notes: values.notes ?? "",
+          invoiceAddresseeLine: values.invoiceAddresseeLine,
           active: values.active,
         });
         toast({ title: t("admin.clients.toast_created") });
@@ -177,6 +178,7 @@ const AdminClients = () => {
           contactEmail: values.contactEmail,
           websiteUrl: values.website?.trim() ?? "",
           notes: values.notes ?? "",
+          invoiceAddresseeLine: values.invoiceAddresseeLine,
           active: values.active,
         });
         toast({ title: t("admin.clients.toast_updated") });

@@ -64,6 +64,44 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+const PDF_PAGE_H_MM = 297;
+
+/**
+ * Estima altura vertical (mm) de una fila de concepto antes de dibujarla (paginación).
+ * Conservador: usa splitTextToSize como aproximación al ajuste de línea del PDF.
+ */
+function estimateInvoiceLineRowHeightMm(
+  doc: import("jspdf").jsPDF,
+  line: BillingInvoiceLineRecord,
+  descMaxMm: number,
+  gapAfterLine: number
+): number {
+  if (line.lineType === "BLOCK_TITLE") {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    const raw = (line.description || "—").trim() || "—";
+    const lines = doc.splitTextToSize(raw.toUpperCase(), descMaxMm) as string[];
+    return lines.length * 6.5 + gapAfterLine + 1.2;
+  }
+  if (line.lineType === "BLOCK_SUBTITLE") {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    const lines = doc.splitTextToSize(line.description || "—", descMaxMm - 2) as string[];
+    return lines.length * 5.7 + gapAfterLine + 0.6;
+  }
+  if (line.lineType === "CONCEPT") {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    const lines = doc.splitTextToSize(line.description || "—", descMaxMm - 4) as string[];
+    return lines.length * 5.7 + gapAfterLine + 0.6;
+  }
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  const lines = doc.splitTextToSize(line.description || "—", descMaxMm) as string[];
+  const descH = Math.max(lines.length * 5.7, 6);
+  return descH + gapAfterLine;
+}
+
 /** Misma lógica de importes que en BD (líneas BILLABLE). */
 function derivedAmountsForLine(line: BillingInvoiceLineInput): Pick<
   BillingInvoiceLineRecord,
@@ -181,7 +219,9 @@ async function drawIssuerLogoTopRight(
     logoH = maxH;
     logoW = logoH * ar;
   }
-  doc.addImage(logoDataUrl, fmt, pageW - margin - logoW, margin, logoW, logoH);
+  /** Más arriba y separado del bloque de datos (y menor = más cerca del borde superior). */
+  const logoTopMm = 7;
+  doc.addImage(logoDataUrl, fmt, pageW - margin - logoW, logoTopMm, logoW, logoH);
 }
 
 function hrefFromWebsite(raw: string): string {
@@ -250,11 +290,13 @@ export async function generateBillingInvoicePdfBlob(
     y += bump(size);
   };
 
-  const metaSize = 8;
-  const sectionLabelSize = 8.5;
-  const sectionBodySize = 7.5;
+  const metaSize = 7;
+  const boxLabel = 7;
+  const boxBody = 6.3;
+  /** Interlineado más compacto dentro del recuadro. */
+  const bumpBox = (size: number) => size * 0.34 + (size <= 7 ? 1.35 : 1.65);
 
-  write(variant === "proforma" ? "FACTURA (proforma)" : "FACTURA", 18, true);
+  write(variant === "proforma" ? "FACTURA (proforma)" : "FACTURA", 15, true);
   const numberLabel =
     variant === "proforma"
       ? "Sin número (borrador — no válida fiscalmente)"
@@ -263,116 +305,254 @@ export async function generateBillingInvoicePdfBlob(
         : "BORRADOR";
   write(`Numero: ${numberLabel}`, metaSize, true);
 
+  const innerPad = 4;
+  const innerLeft = margin + innerPad;
+  const innerMaxW = pageW - margin - innerLeft - innerPad;
+  const yBoxTop = y;
+
   const issueFmt = formatInvoiceDateEs(invoice.issueDate);
   const dueFmt = formatInvoiceDateEs(invoice.dueDate);
   const facturaLine =
     variant === "proforma" ? `Fecha factura (prevista): ${issueFmt}` : `Fecha factura: ${issueFmt}`;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(8.2);
   doc.setTextColor(0, 0, 0);
-  doc.text(facturaLine, margin, y);
-  y += bump(10);
+  doc.text(facturaLine, innerLeft, y);
+  y += bumpBox(8.2);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.7);
-  doc.setTextColor(82, 82, 82);
-  doc.text(`Vencimiento: ${dueFmt}`, margin, y);
-  y += bump(6.7) + 1.2;
+  doc.setFontSize(6);
+  doc.setTextColor(88, 88, 88);
+  doc.text(`Vencimiento: ${dueFmt}`, innerLeft, y);
+  y += bumpBox(6) + 0.8;
   doc.setTextColor(0, 0, 0);
 
-  y += 2;
-  write("Emisor", sectionLabelSize, true);
-  write(invoice.issuerName, sectionBodySize);
-  write(`NIF: ${invoice.issuerTaxId}`, sectionBodySize);
-  write(invoice.issuerFiscalAddress, sectionBodySize);
+  y += 0.8;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(boxLabel);
+  doc.text("Emisor", innerLeft, y);
+  y += bumpBox(boxLabel);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(boxBody);
+  const issuerLines = doc.splitTextToSize(invoice.issuerName || "—", innerMaxW) as string[];
+  for (const ln of issuerLines) {
+    doc.text(ln, innerLeft, y);
+    y += bumpBox(boxBody);
+  }
+  doc.text(`NIF: ${invoice.issuerTaxId}`, innerLeft, y);
+  y += bumpBox(boxBody);
+  for (const ln of doc.splitTextToSize(invoice.issuerFiscalAddress, innerMaxW) as string[]) {
+    doc.text(ln, innerLeft, y);
+    y += bumpBox(boxBody);
+  }
 
-  const writeWeb = (label: string, raw: string | null | undefined) => {
+  const tel = invoice.issuerPhone?.trim();
+  const em = invoice.issuerEmail?.trim();
+  if (tel) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(boxBody);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Tel.: ${tel}`, innerLeft, y);
+    y += bumpBox(boxBody);
+  }
+  if (em) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(boxBody);
+    doc.setTextColor(0, 0, 0);
+    doc.text("Email: ", innerLeft, y);
+    const pw = doc.getTextWidth("Email: ");
+    doc.setTextColor(0, 0, 130);
+    const display = em.length > 72 ? `${em.slice(0, 69)}…` : em;
+    doc.textWithLink(display, innerLeft + pw, y, { url: `mailto:${em}` });
+    doc.setTextColor(0, 0, 0);
+    y += bumpBox(boxBody);
+  }
+
+  const writeWebBox = (label: string, raw: string | null | undefined) => {
     const t = raw?.trim();
     if (!t) return;
     const href = hrefFromWebsite(t);
     if (!href) return;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(sectionBodySize);
+    doc.setFontSize(boxBody);
     doc.setTextColor(0, 0, 130);
     const prefix = `${label}: `;
-    doc.text(prefix, margin, y);
+    doc.text(prefix, innerLeft, y);
     const pw = doc.getTextWidth(prefix);
-    const display = t.length > 85 ? `${t.slice(0, 82)}…` : t;
-    doc.textWithLink(display, margin + pw, y, { url: href });
+    const display = t.length > 80 ? `${t.slice(0, 77)}…` : t;
+    doc.textWithLink(display, innerLeft + pw, y, { url: href });
     doc.setTextColor(0, 0, 0);
-    y += bump(sectionBodySize);
+    y += bumpBox(boxBody);
   };
 
-  writeWeb("Web", invoice.issuerWebsiteUrl);
+  writeWebBox("Web", invoice.issuerWebsiteUrl);
 
   y += 1;
-  write("Cliente / Razón social", sectionLabelSize, true);
-  write(invoice.recipientName || "—", sectionBodySize);
-  write(`NIF/CIF: ${invoice.recipientTaxId}`, sectionBodySize);
-  write(invoice.recipientFiscalAddress, sectionBodySize);
-  writeWeb("Web", invoice.recipientWebsiteUrl);
-
-  y += 2;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(0, 0, 0);
-  doc.text("Concepto", margin, y);
-  doc.text("Cant.", 110, y, { align: "right" });
-  doc.text("Precio", 130, y, { align: "right" });
-  doc.text("IVA", 148, y, { align: "right" });
-  doc.text("IRPF", 164, y, { align: "right" });
-  doc.text("Total", 196, y, { align: "right" });
-  y += 5;
-
+  doc.setFontSize(boxLabel);
+  doc.text("Cliente / Razón social", innerLeft, y);
+  y += bumpBox(boxLabel);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(boxBody);
+  for (const ln of doc.splitTextToSize(invoice.recipientName || "—", innerMaxW) as string[]) {
+    doc.text(ln, innerLeft, y);
+    y += bumpBox(boxBody);
+  }
+  doc.text(`NIF/CIF: ${invoice.recipientTaxId}`, innerLeft, y);
+  y += bumpBox(boxBody);
+  for (const ln of doc.splitTextToSize(invoice.recipientFiscalAddress, innerMaxW) as string[]) {
+    doc.text(ln, innerLeft, y);
+    y += bumpBox(boxBody);
+  }
+  writeWebBox("Web", invoice.recipientWebsiteUrl);
+
+  const addressee = invoice.recipientAddresseeLine?.trim();
+  if (addressee) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(boxBody);
+    doc.setTextColor(0, 0, 0);
+    doc.text("Factura dirigida a:", innerLeft, y);
+    y += bumpBox(boxBody);
+    for (const ln of doc.splitTextToSize(addressee, innerMaxW) as string[]) {
+      doc.text(ln, innerLeft, y);
+      y += bumpBox(boxBody);
+    }
+  }
+
+  const boxPadTop = 3.2;
+  const boxPadBottom = 3.5;
+  const boxTop = yBoxTop - boxPadTop;
+  const boxH = y - yBoxTop + boxPadTop + boxPadBottom;
+  doc.setDrawColor(175, 175, 175);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(margin, boxTop, pageW - 2 * margin, boxH, 1.2, 1.2, "S");
+  /** Cursor justo debajo del marco + separación respecto a la tabla de conceptos. */
+  const gapAfterHeaderBox = 14;
+  y = boxTop + boxH + gapAfterHeaderBox;
+
+  /**
+   * Columnas numéricas: bordes derechos (mm). Evita solapamiento Precio/IVA.
+   * Concepto usa desde `margin` hasta `colQtyR - gapConcept`.
+   */
+  const gapConcept = 4;
+  /** Más hueco entre columnas de importes para textos largos tipo "1.234,56 (21%)". */
+  const colQtyR = 112;
+  const colPriceR = 128;
+  const colVatR = 150;
+  const colIrpfR = 170;
+  const colTotalR = pageW - margin;
+  const descMaxMm = colQtyR - margin - gapConcept;
+
+  /** Última coordenada Y segura para el cuerpo (evita cortes al no paginar). */
+  const maxContentY = PDF_PAGE_H_MM - margin;
+
+  const drawConceptTableHeader = (yHeader: number): number => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    doc.text("Concepto", margin, yHeader);
+    doc.text("Cant.", colQtyR, yHeader, { align: "right" });
+    doc.text("Precio", colPriceR, yHeader, { align: "right" });
+    doc.text("IVA", colVatR, yHeader, { align: "right" });
+    doc.text("IRPF", colIrpfR, yHeader, { align: "right" });
+    doc.text("Total", colTotalR, yHeader, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    return yHeader + 6;
+  };
+
+  y = drawConceptTableHeader(y);
+
+  const numFont = 7.4;
+  /** Más aire entre filas y entre tipos de línea para legibilidad en PDF multipágina. */
+  const gapAfterLine = 6.2;
+
+  const startConceptsContinuationPage = (): number => {
+    doc.addPage();
+    if (variant === "proforma") {
+      addProformaWatermark(doc);
+    }
+    return drawConceptTableHeader(margin);
+  };
+
+  /** Evita cortes si el texto enriquecido ocupa más líneas que splitTextToSize. */
+  const lineHeightPaginationFudgeMm = 8;
+
   for (const line of invoice.lines) {
+    const estH = estimateInvoiceLineRowHeightMm(doc, line, descMaxMm, gapAfterLine);
+    if (y + estH + lineHeightPaginationFudgeMm > maxContentY) {
+      y = startConceptsContinuationPage();
+    }
+
     if (line.lineType === "BLOCK_TITLE") {
-      const h = drawBillingRichLinePdf(doc, margin, y, 90, line.description || "—", {
+      const h = drawBillingRichLinePdf(doc, margin, y, descMaxMm, line.description || "—", {
         fontSize: 10,
-        lineHeightMm: 5.2,
+        lineHeightMm: 6.5,
         blockTitlePlain: true,
       });
-      y += h + 1.2;
+      y += h + gapAfterLine + 1;
       continue;
     }
     if (line.lineType === "BLOCK_SUBTITLE") {
-      const h = drawBillingRichLinePdf(doc, margin + 2, y, 88, line.description || "—", {
+      const h = drawBillingRichLinePdf(doc, margin + 2, y, descMaxMm - 2, line.description || "—", {
         fontSize: 9,
-        lineHeightMm: 4.6,
+        lineHeightMm: 5.7,
         defaultBold: true,
       });
-      y += h + 1;
+      y += h + gapAfterLine;
       continue;
     }
     if (line.lineType === "CONCEPT") {
-      const h = drawBillingRichLinePdf(doc, margin + 4, y, 86, line.description || "—", {
+      const h = drawBillingRichLinePdf(doc, margin + 4, y, descMaxMm - 4, line.description || "—", {
         fontSize: 8.5,
-        lineHeightMm: 4.4,
+        lineHeightMm: 5.7,
         defaultBold: true,
       });
-      y += h + 1;
+      y += h + gapAfterLine;
       continue;
     }
     const numY = y;
-    const descH = drawBillingRichLinePdf(doc, margin, y, 90, line.description || "—", { fontSize: 8.5, lineHeightMm: 4.6 });
+    const descH = drawBillingRichLinePdf(doc, margin, y, descMaxMm, line.description || "—", {
+      fontSize: 8.5,
+      lineHeightMm: 5.7,
+    });
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(numFont);
+    doc.text(String(line.quantity), colQtyR, numY, { align: "right" });
+    doc.text(money(line.unitPrice), colPriceR, numY, { align: "right" });
+    doc.text(`${money(line.vatAmount)} (${line.vatRate}%)`, colVatR, numY, { align: "right" });
+    doc.text(`${money(line.irpfAmount)} (${line.irpfRate}%)`, colIrpfR, numY, { align: "right" });
+    doc.text(money(line.lineTotal), colTotalR, numY, { align: "right" });
     doc.setFontSize(8.5);
-    doc.text(String(line.quantity), 110, numY, { align: "right" });
-    doc.text(money(line.unitPrice), 130, numY, { align: "right" });
-    doc.text(`${money(line.vatAmount)} (${line.vatRate}%)`, 148, numY, { align: "right" });
-    doc.text(`${money(line.irpfAmount)} (${line.irpfRate}%)`, 164, numY, { align: "right" });
-    doc.text(money(line.lineTotal), 196, numY, { align: "right" });
-    y += Math.max(descH, 4.8);
+    y += Math.max(descH, 6) + gapAfterLine;
   }
 
-  y += 4;
+  /** Separador + totales + hash / nota proforma deben caber en la página o pasan a una nueva. */
+  const reserveAfterConceptsMm =
+    6 +
+    6 +
+    28 +
+    2 +
+    (variant === "issued" && invoice.recordHash ? 6 : 0) +
+    (variant === "proforma" ? 14 : 0);
+  if (y + reserveAfterConceptsMm > maxContentY) {
+    doc.addPage();
+    if (variant === "proforma") {
+      addProformaWatermark(doc);
+    }
+    y = margin;
+  }
+
+  y += 6;
   doc.setDrawColor(180);
   doc.line(margin, y, pageW - margin, y);
-  y += 5;
+  y += 6;
   writeRight(`Base imponible: ${money(invoice.taxableBaseTotal)} EUR`, pageW - margin, 10, true);
+  y += 0.6;
   writeRight(`IVA: ${money(invoice.vatTotal)} EUR`, pageW - margin, 10, true);
+  y += 0.6;
   writeRight(`IRPF: ${money(invoice.irpfTotal)} EUR`, pageW - margin, 10, true);
+  y += 0.8;
   writeRight(`TOTAL: ${money(invoice.grandTotal)} EUR`, pageW - margin, 12, true);
 
   y += 2;
@@ -398,7 +578,20 @@ export async function generateBillingInvoicePdfBlob(
     doc.setFont("helvetica", "normal");
   }
 
+  const bankRowCount =
+    (invoice.issuerBankName ? 1 : 0) +
+    (invoice.issuerBankAccountIban ? 1 : 0) +
+    (invoice.issuerBankAccountSwift ? 1 : 0);
+
   if (invoice.issuerBankAccountIban || invoice.issuerBankAccountSwift || invoice.issuerBankName) {
+    const bankBlockMm = 4 + bankRowCount * 3.7 + 4;
+    if (y + bankBlockMm > maxContentY) {
+      doc.addPage();
+      if (variant === "proforma") {
+        addProformaWatermark(doc);
+      }
+      y = margin;
+    }
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
     doc.text("Datos de abono", margin, y);
@@ -419,18 +612,24 @@ export async function generateBillingInvoicePdfBlob(
     }
   }
 
+  /** QR y leyenda en la primera hoja (esquina superior derecha), no en la última si hay varias páginas. */
+  const firstPage = 1;
   if (variant === "issued" && qrDataUrl) {
+    doc.setPage(firstPage);
     doc.addImage(qrDataUrl, "PNG", 160, 20, 34, 34);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.text("QR VeriFactu-ready", 177, 56, { align: "center" });
   } else if (variant === "proforma") {
+    doc.setPage(firstPage);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(120, 120, 120);
     doc.text("Sin código QR (se genera al emitir)", 160, 38, { maxWidth: 40 });
     doc.setTextColor(0, 0, 0);
   }
+
+  doc.setPage(doc.getNumberOfPages());
 
   const privacyFooter = resolvePdfPrivacyFooterText(invoice);
   if (privacyFooter) {

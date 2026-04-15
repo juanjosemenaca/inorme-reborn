@@ -28,7 +28,7 @@ import {
   type UserRole,
   type WorkerModuleKey,
 } from "@/types/backoffice";
-import type { ClientContactPerson, ClientKind, ClientRecord } from "@/types/clients";
+import type { ClientContactPerson, ClientContactPurpose, ClientKind, ClientRecord } from "@/types/clients";
 import type { AutonomoVia, CompanyWorkerEmploymentType, CompanyWorkerRecord } from "@/types/companyWorkers";
 import type { ProviderRecord } from "@/types/providers";
 import type {
@@ -146,7 +146,7 @@ type ContactPersonRowCore = Pick<
   "id" | "first_name" | "last_name" | "email" | "mobile" | "position" | "description"
 >;
 
-function contactPersonRowCoreToDomain(row: ContactPersonRowCore): ClientContactPerson {
+function contactPersonRowCoreToDomain(row: ContactPersonRowCore): Omit<ClientContactPerson, "contactPurpose"> {
   return {
     id: row.id,
     firstName: row.first_name,
@@ -159,11 +159,18 @@ function contactPersonRowCoreToDomain(row: ContactPersonRowCore): ClientContactP
 }
 
 export function clientContactRowToDomain(row: ClientContactPersonRow): ClientContactPerson {
-  return contactPersonRowCoreToDomain(row);
+  const purpose = (row.contact_purpose as ClientContactPurpose | undefined) ?? "GENERAL";
+  return {
+    ...contactPersonRowCoreToDomain(row),
+    contactPurpose: purpose === "INVOICE" ? "INVOICE" : "GENERAL",
+  };
 }
 
 export function providerContactRowToDomain(row: ProviderContactPersonRow): ClientContactPerson {
-  return contactPersonRowCoreToDomain(row);
+  return {
+    ...contactPersonRowCoreToDomain(row),
+    contactPurpose: "GENERAL",
+  };
 }
 
 export function clientContactToClientInsert(
@@ -179,6 +186,7 @@ export function clientContactToClientInsert(
     mobile: c.mobile,
     position: c.position,
     description: c.description,
+    contact_purpose: c.contactPurpose === "INVOICE" ? "INVOICE" : "GENERAL",
   };
 }
 
@@ -216,6 +224,7 @@ export function clientRowToDomain(row: ClientRow, contacts: ClientContactPersonR
     contactEmail: row.contact_email,
     websiteUrl: row.website_url?.trim() ?? "",
     notes: row.notes,
+    invoiceAddresseeLine: row.invoice_addressee_line?.trim() ?? "",
     active: row.active,
     contacts: contacts.map(clientContactRowToDomain),
     createdAt: row.created_at,
@@ -240,6 +249,7 @@ export function clientRecordToRowInsert(record: Omit<ClientRecord, "contacts" | 
     contact_email: record.contactEmail,
     website_url: record.websiteUrl?.trim() ?? "",
     notes: record.notes,
+    invoice_addressee_line: record.invoiceAddresseeLine?.trim() || null,
     active: record.active,
   };
 }

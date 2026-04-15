@@ -89,6 +89,7 @@ export type CreateClientInput = {
   contactEmail: string;
   websiteUrl?: string;
   notes: string;
+  invoiceAddresseeLine?: string;
   active: boolean;
 };
 
@@ -115,6 +116,7 @@ export async function createClient(input: CreateClientInput): Promise<ClientReco
     contactEmail: input.contactEmail.trim().toLowerCase(),
     websiteUrl: input.websiteUrl?.trim() ?? "",
     notes: input.notes.trim(),
+    invoiceAddresseeLine: input.invoiceAddresseeLine?.trim() ?? "",
     active: input.active,
   });
   delete (row as { id?: string }).id;
@@ -158,6 +160,10 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
         : current.contactEmail,
     websiteUrl: input.websiteUrl !== undefined ? input.websiteUrl.trim() : current.websiteUrl,
     notes: input.notes !== undefined ? input.notes.trim() : current.notes,
+    invoiceAddresseeLine:
+      input.invoiceAddresseeLine !== undefined
+        ? input.invoiceAddresseeLine.trim()
+        : current.invoiceAddresseeLine,
     active: input.active !== undefined ? input.active : current.active,
   });
   const { data: updated, error } = await sb
@@ -174,6 +180,7 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
       contact_email: patch.contact_email,
       website_url: patch.website_url,
       notes: patch.notes,
+      invoice_addressee_line: patch.invoice_addressee_line,
       active: patch.active,
     })
     .eq("id", id)
@@ -214,6 +221,7 @@ export async function addContact(clientId: string, input: CreateContactInput): P
     mobile: input.mobile.trim(),
     position: input.position.trim(),
     description: input.description.trim(),
+    contactPurpose: input.contactPurpose ?? "GENERAL",
   });
   delete (payload as { id?: string }).id;
   const { data: row, error } = await sb.from("client_contact_persons").insert(payload).select("*").single();
@@ -238,6 +246,15 @@ export async function updateContact(
   if (e0) throw e0;
   if (!existing) throw new Error("Contacto no encontrado.");
   const cur = clientContactRowToDomain(existing as ClientContactPersonRow);
+  const existingRow = existing as ClientContactPersonRow;
+  const purposeNext =
+    input.contactPurpose !== undefined
+      ? input.contactPurpose === "INVOICE"
+        ? "INVOICE"
+        : "GENERAL"
+      : existingRow.contact_purpose === "INVOICE"
+        ? "INVOICE"
+        : "GENERAL";
   const next = {
     first_name: input.firstName !== undefined ? input.firstName.trim() : cur.firstName,
     last_name: input.lastName !== undefined ? input.lastName.trim() : cur.lastName,
@@ -245,6 +262,7 @@ export async function updateContact(
     mobile: input.mobile !== undefined ? input.mobile.trim() : cur.mobile,
     position: input.position !== undefined ? input.position.trim() : cur.position,
     description: input.description !== undefined ? input.description.trim() : cur.description,
+    contact_purpose: purposeNext,
   };
   const { data: row, error } = await sb
     .from("client_contact_persons")

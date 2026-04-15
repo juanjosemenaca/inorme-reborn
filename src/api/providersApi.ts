@@ -138,6 +138,7 @@ export async function addProviderContact(
     mobile: input.mobile.trim(),
     position: input.position.trim(),
     description: input.description.trim(),
+    contactPurpose: input.contactPurpose ?? "GENERAL",
   };
   const payload = clientContactToProviderInsert(providerId, contact);
   delete (payload as { id?: string }).id;

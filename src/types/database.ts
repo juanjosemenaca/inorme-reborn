@@ -65,6 +65,8 @@ export interface ClientRow {
   /** Sitio web público (opcional). */
   website_url: string;
   notes: string;
+  /** Destinatarios de facturación (texto libre). */
+  invoice_addressee_line?: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -79,6 +81,7 @@ export interface ClientContactPersonRow {
   mobile: string;
   position: string;
   description: string;
+  contact_purpose: string;
 }
 
 export interface ProviderContactPersonRow {
@@ -435,10 +438,13 @@ export interface BillingInvoiceRow {
   issuer_logo_storage_path: string | null;
   issuer_website_url: string | null;
   issuer_privacy_footer: string | null;
+  issuer_email: string | null;
+  issuer_phone: string | null;
   recipient_name: string;
   recipient_tax_id: string;
   recipient_fiscal_address: string;
   recipient_website_url: string | null;
+  recipient_addressee_line?: string | null;
   taxable_base_total: string;
   vat_total: string;
   irpf_total: string;

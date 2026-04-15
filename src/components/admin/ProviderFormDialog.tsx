@@ -1,5 +1,6 @@
+import { Copy } from "lucide-react";
 import { useEffect, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import type { ProviderRecord } from "@/types/providers";
@@ -24,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { optionalEmail } from "@/lib/zodOptional";
+import { mergeTradeAndCompanyName } from "@/lib/tradeCompanyName";
 
 const schema = z
   .object({
@@ -66,6 +68,8 @@ export function ProviderFormDialog({ open, onOpenChange, mode, initial, onSubmit
     },
   });
 
+  const companyNameWatched = useWatch({ control: form.control, name: "companyName" });
+
   useEffect(() => {
     if (!open) return;
     if (mode === "edit" && initial) {
@@ -104,28 +108,19 @@ export function ProviderFormDialog({ open, onOpenChange, mode, initial, onSubmit
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            Mismos datos de alta que un cliente: fiscal, contacto y personas de contacto aparte.
+            Mismos datos de alta que un cliente: fiscal, contacto y personas de contacto aparte. Si solo indicas
+            nombre comercial o razón social, al guardar se replicará en el otro; rellena ambos solo si difieren.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit((v) => onSubmit(v))}
+            onSubmit={form.handleSubmit((v) => {
+              const names = mergeTradeAndCompanyName(v.tradeName, v.companyName);
+              onSubmit({ ...v, tradeName: names.tradeName, companyName: names.companyName });
+            })}
             className="space-y-4"
           >
             <div className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="tradeName"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Nombre comercial</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Marca o nombre comercial" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <FormField
                 control={form.control}
                 name="companyName"
@@ -134,6 +129,36 @@ export function ProviderFormDialog({ open, onOpenChange, mode, initial, onSubmit
                     <FormLabel>Razón social / nombre empresa</FormLabel>
                     <FormControl>
                       <Input placeholder="Razón social completa" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tradeName"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <FormLabel>Nombre comercial</FormLabel>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs shrink-0"
+                        disabled={!companyNameWatched?.trim()}
+                        onClick={() => {
+                          const rs = form.getValues("companyName").trim();
+                          if (!rs) return;
+                          form.setValue("tradeName", rs, { shouldDirty: true, shouldValidate: true });
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" aria-hidden />
+                        Copiar desde razón social
+                      </Button>
+                    </div>
+                    <FormControl>
+                      <Input placeholder="Marca o nombre comercial" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

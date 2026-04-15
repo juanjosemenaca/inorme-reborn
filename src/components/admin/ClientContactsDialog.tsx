@@ -45,6 +45,10 @@ export function ClientContactsDialog({ client, open, onOpenChange }: Props) {
 
   if (!client) return null;
 
+  const generalContacts = client.contacts.filter(
+    (p) => (p.contactPurpose ?? "GENERAL") === "GENERAL"
+  );
+
   const openCreate = () => {
     setFormMode("create");
     setEditing(null);
@@ -60,10 +64,13 @@ export function ClientContactsDialog({ client, open, onOpenChange }: Props) {
   const handleSubmit = async (values: ContactPersonFormValues) => {
     try {
       if (formMode === "create") {
-        await addContact(client.id, values);
+        await addContact(client.id, { ...values, contactPurpose: "GENERAL" });
         toast({ title: "Contacto añadido" });
       } else if (editing) {
-        await updateContact(client.id, editing.id, values);
+        await updateContact(client.id, editing.id, {
+          ...values,
+          contactPurpose: editing.contactPurpose ?? "GENERAL",
+        });
         toast({ title: "Contacto actualizado" });
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.clients });
@@ -103,21 +110,25 @@ export function ClientContactsDialog({ client, open, onOpenChange }: Props) {
               Contactos — {client.tradeName}
             </DialogTitle>
             <DialogDescription>
-              Personas de contacto vinculadas a este cliente (empresa).
+              Personas de contacto del cliente. Los destinatarios de facturación se indican en la ficha del
+              cliente (campo de texto).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Personas de contacto
+            </p>
             <div className="flex justify-end">
               <Button size="sm" className="gap-1" onClick={openCreate}>
                 <Plus className="h-4 w-4" />
                 Añadir contacto
               </Button>
             </div>
-            {client.contacts.length === 0 ? (
+            {generalContacts.length === 0 ? (
               <p className="text-sm text-muted-foreground py-6 text-center">No hay contactos.</p>
             ) : (
               <ul className="divide-y rounded-md border">
-                {client.contacts.map((p) => (
+                {generalContacts.map((p) => (
                   <li key={p.id} className="flex items-start justify-between gap-2 p-3 text-sm">
                     <div>
                       <div className="font-medium">{contactDisplayName(p)}</div>

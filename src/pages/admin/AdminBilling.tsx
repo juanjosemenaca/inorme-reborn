@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BadgeEuro, Ban, CheckCircle2, Copy, FileSearch, FileText, Loader2, Plus, Receipt, Save, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,15 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { useClients } from "@/hooks/useClients";
@@ -43,6 +52,7 @@ import {
 } from "@/api/billingApi";
 import { openBillingInvoicePdfDownload, openBillingInvoiceProformaDownload } from "@/lib/billingInvoicePdf";
 import { isInormeInformaticaOrganizacionIssuer } from "@/lib/billingPrivacyFooter";
+import { parseInvoiceAddresseeOptions } from "@/lib/invoiceAddresseeOptions";
 import type { ClientRecord } from "@/types/clients";
 import type {
   BillingInvoiceLineInput,
@@ -51,20 +61,53 @@ import type {
   BillingSeriesRecord,
 } from "@/types/billing";
 
+type BillingTab = "issuers" | "series" | "drafts" | "issued";
+
+type DraftLeaveIntent =
+  | { type: "close" }
+  | { type: "select"; id: string }
+  | { type: "tab"; next: BillingTab };
+
+function normInvoiceAddressee(a: string | null | undefined): string | null {
+  const t = (a ?? "").trim();
+  return t === "" ? null : t;
+}
+
+/** Compara el borrador en pantalla con la última versión guardada en servidor. */
+function isDraftDirtyComparedToSaved(
+  inv: BillingInvoiceRecord,
+  draftIssuerId: string,
+  draftSeriesId: string,
+  draftDueDate: string,
+  draftNotes: string,
+  draftRecipientAddresseeLine: string,
+  draftLines: BillingInvoiceLineInput[]
+): boolean {
+  if ((draftDueDate || "") !== (inv.dueDate ?? "")) return true;
+  if ((draftNotes ?? "") !== (inv.notes ?? "")) return true;
+  if (normInvoiceAddressee(draftRecipientAddresseeLine) !== normInvoiceAddressee(inv.recipientAddresseeLine)) {
+    return true;
+  }
+  if (draftIssuerId !== inv.issuerId) return true;
+  if (draftSeriesId !== inv.seriesId) return true;
+  if (draftLines.length !== inv.lines.length) return true;
+  for (let i = 0; i < draftLines.length; i++) {
+    const a = draftLines[i];
+    const b = inv.lines[i];
+    const ltA = a.lineType ?? "BILLABLE";
+    const ltB = b.lineType ?? "BILLABLE";
+    if (ltA !== ltB) return true;
+    if ((a.description ?? "") !== (b.description ?? "")) return true;
+    if (Number(a.quantity) !== Number(b.quantity)) return true;
+    if (Number(a.unitPrice) !== Number(b.unitPrice)) return true;
+    if (Number(a.vatRate) !== Number(b.vatRate)) return true;
+    if (Number(a.irpfRate) !== Number(b.irpfRate)) return true;
+  }
+  return false;
+}
+
 function emptyLine(): BillingInvoiceLineInput {
   return { lineType: "BILLABLE", description: "", quantity: 1, unitPrice: 0, vatRate: 21, irpfRate: 0 };
-}
-
-function emptyConceptLine(): BillingInvoiceLineInput {
-  return { lineType: "CONCEPT", description: "", quantity: 0, unitPrice: 0, vatRate: 21, irpfRate: 0 };
-}
-
-function emptyBlockTitleLine(): BillingInvoiceLineInput {
-  return { lineType: "BLOCK_TITLE", description: "", quantity: 0, unitPrice: 0, vatRate: 21, irpfRate: 0 };
-}
-
-function emptyBlockSubtitleLine(): BillingInvoiceLineInput {
-  return { lineType: "BLOCK_SUBTITLE", description: "", quantity: 0, unitPrice: 0, vatRate: 21, irpfRate: 0 };
 }
 
 /** Cabecera emisor/fechas como en pantalla (puede no estar guardada aún). */
@@ -74,9 +117,10 @@ function mergeProformaHeaderFromForm(
   issuerList: BillingIssuerRecord[],
   draftDueDate: string,
   draftNotes: string,
+  draftRecipientAddresseeLine: string,
   allSeries: BillingSeriesRecord[],
   draftSeriesIdForHeader: string,
-  clientList: Pick<ClientRecord, "id" | "websiteUrl">[]
+  clientList: Pick<ClientRecord, "id" | "websiteUrl" | "invoiceAddresseeLine">[]
 ): BillingInvoiceRecord {
   const issuer = issuerList.find((i) => i.id === draftIssuerId);
   const client = clientList.find((c) => c.id === inv.clientId);
@@ -89,6 +133,7 @@ function mergeProformaHeaderFromForm(
     seriesCode: ser?.code ?? inv.seriesCode,
     dueDate: draftDueDate || null,
     notes: draftNotes,
+    recipientAddresseeLine: normInvoiceAddressee(draftRecipientAddresseeLine),
     issuerLogoStoragePath: issuer?.logoStoragePath ?? inv.issuerLogoStoragePath,
     issuerWebsiteUrl: issuer?.websiteUrl ?? inv.issuerWebsiteUrl,
     issuerPrivacyFooter: issuer
@@ -107,6 +152,8 @@ function mergeProformaHeaderFromForm(
           issuerBankAccountIban: issuer.bankAccountIban,
           issuerBankAccountSwift: issuer.bankAccountSwift,
           issuerBankName: issuer.bankName,
+          issuerEmail: issuer.email?.trim() || null,
+          issuerPhone: issuer.phone?.trim() || null,
         }
       : {}),
   };
@@ -139,7 +186,7 @@ const AdminBilling = () => {
   const [newClientId, setNewClientId] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [newNotes, setNewNotes] = useState("");
-  const [billingTab, setBillingTab] = useState<"issuers" | "series" | "drafts" | "issued">("drafts");
+  const [billingTab, setBillingTab] = useState<BillingTab>("drafts");
   const [issuedSearch, setIssuedSearch] = useState("");
   const [issuedClientIdFilter, setIssuedClientIdFilter] = useState("all");
   const [issuedIssuerIdFilter, setIssuedIssuerIdFilter] = useState("all");
@@ -174,9 +221,14 @@ const AdminBilling = () => {
 
   const [draftDueDate, setDraftDueDate] = useState("");
   const [draftNotes, setDraftNotes] = useState("");
+  /** Línea elegida para «Factura dirigida a» en PDF (coincide con snapshot en borrador). */
+  const [draftRecipientAddresseeLine, setDraftRecipientAddresseeLine] = useState("");
   const [draftIssuerId, setDraftIssuerId] = useState("");
   const [draftSeriesId, setDraftSeriesId] = useState("");
   const [draftLines, setDraftLines] = useState<BillingInvoiceLineInput[]>([]);
+  const afterDraftSaveNavRef = useRef<null | { type: "select"; id: string } | { type: "tab"; next: BillingTab }>(null);
+  const [draftLeaveDialogOpen, setDraftLeaveDialogOpen] = useState(false);
+  const [pendingDraftLeave, setPendingDraftLeave] = useState<DraftLeaveIntent | null>(null);
 
   const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [receiptAmount, setReceiptAmount] = useState("");
@@ -199,6 +251,15 @@ const AdminBilling = () => {
   );
   const draftInvoices = useMemo(() => invoices.filter((i) => i.status === "DRAFT"), [invoices]);
   const issuedInvoices = useMemo(() => invoices.filter((i) => i.status !== "DRAFT"), [invoices]);
+  const draftClientForAddressee = useMemo(
+    () => (selectedInvoice ? clients.find((c) => c.id === selectedInvoice.clientId) : undefined),
+    [clients, selectedInvoice]
+  );
+  const invoiceAddresseeSelectOptions = useMemo(
+    () => parseInvoiceAddresseeOptions(draftClientForAddressee?.invoiceAddresseeLine),
+    [draftClientForAddressee?.invoiceAddresseeLine]
+  );
+
   const issuedInvoicesFiltered = useMemo(() => {
     const q = issuedSearch.trim().toLowerCase();
     return issuedInvoices.filter((inv) => {
@@ -217,6 +278,42 @@ const AdminBilling = () => {
       return hay.includes(q);
     });
   }, [issuedInvoices, issuedSearch, issuedClientIdFilter, issuedIssuerIdFilter, issuedFromDate, issuedToDate]);
+
+  const isDraftDirty = useMemo(() => {
+    if (!selectedInvoice || selectedInvoice.status !== "DRAFT") return false;
+    return isDraftDirtyComparedToSaved(
+      selectedInvoice,
+      draftIssuerId,
+      draftSeriesId,
+      draftDueDate,
+      draftNotes,
+      draftRecipientAddresseeLine,
+      draftLines
+    );
+  }, [
+    selectedInvoice,
+    draftIssuerId,
+    draftSeriesId,
+    draftDueDate,
+    draftNotes,
+    draftRecipientAddresseeLine,
+    draftLines,
+  ]);
+
+  const applyDraftLeave = (intent: DraftLeaveIntent) => {
+    if (intent.type === "close") setSelectedInvoiceId(null);
+    else if (intent.type === "select") setSelectedInvoiceId(intent.id);
+    else setBillingTab(intent.next);
+  };
+
+  const tryDraftLeave = (intent: DraftLeaveIntent) => {
+    if (!selectedInvoice || selectedInvoice.status !== "DRAFT" || !isDraftDirty) {
+      applyDraftLeave(intent);
+      return;
+    }
+    setPendingDraftLeave(intent);
+    setDraftLeaveDialogOpen(true);
+  };
 
   useEffect(() => {
     if (!newClientId && clients.length > 0) setNewClientId(clients[0].id);
@@ -294,11 +391,13 @@ const AdminBilling = () => {
     if (!selectedInvoice) {
       setDraftDueDate("");
       setDraftNotes("");
+      setDraftRecipientAddresseeLine("");
       setDraftLines([]);
       return;
     }
     setDraftDueDate(selectedInvoice.dueDate ?? "");
     setDraftNotes(selectedInvoice.notes ?? "");
+    setDraftRecipientAddresseeLine(selectedInvoice.recipientAddresseeLine ?? "");
     setDraftLines(
       selectedInvoice.lines.map((line) => ({
         lineType: line.lineType ?? "BILLABLE",
@@ -495,20 +594,27 @@ const AdminBilling = () => {
         notes: draftNotes,
         issuerId: draftIssuerId || selectedInvoice.issuerId,
         seriesId: draftSeriesId || selectedInvoice.seriesId,
+        recipientAddresseeLine: normInvoiceAddressee(draftRecipientAddresseeLine),
       });
       await replaceBillingInvoiceLines(selectedInvoice.id, draftLines);
     },
     onSuccess: async () => {
       await invalidateAll();
-      setSelectedInvoiceId(null);
+      const nav = afterDraftSaveNavRef.current;
+      afterDraftSaveNavRef.current = null;
+      if (nav?.type === "select") setSelectedInvoiceId(nav.id);
+      else if (nav?.type === "tab") setBillingTab(nav.next);
+      else setSelectedInvoiceId(null);
       toast({ title: t("admin.billing.toast_draft_saved") });
     },
-    onError: (e) =>
+    onError: (e) => {
+      afterDraftSaveNavRef.current = null;
       toast({
         title: t("admin.common.error"),
         description: e instanceof Error ? e.message : "",
         variant: "destructive",
-      }),
+      });
+    },
   });
 
   const emitMutation = useMutation({
@@ -519,6 +625,7 @@ const AdminBilling = () => {
         notes: draftNotes,
         issuerId: draftIssuerId || selectedInvoice.issuerId,
         seriesId: draftSeriesId || selectedInvoice.seriesId,
+        recipientAddresseeLine: normInvoiceAddressee(draftRecipientAddresseeLine),
       });
       await replaceBillingInvoiceLines(selectedInvoice.id, draftLines);
       await emitBillingInvoice(selectedInvoice.id);
@@ -654,7 +761,57 @@ const AdminBilling = () => {
   const seriesById = useMemo(() => new Map(series.map((s) => [s.id, s] as const)), [series]);
 
   return (
-    <div className="space-y-6">
+    <>
+      <AlertDialog
+        open={draftLeaveDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDraftLeaveDialogOpen(false);
+            setPendingDraftLeave(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.billing.draft_unsaved_title")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("admin.billing.draft_unsaved_desc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2">
+            <AlertDialogCancel type="button">{t("admin.billing.draft_unsaved_stay")}</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                const intent = pendingDraftLeave;
+                setDraftLeaveDialogOpen(false);
+                setPendingDraftLeave(null);
+                if (intent) applyDraftLeave(intent);
+              }}
+            >
+              {t("admin.billing.draft_unsaved_discard")}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                const intent = pendingDraftLeave;
+                setDraftLeaveDialogOpen(false);
+                setPendingDraftLeave(null);
+                if (!selectedInvoice) return;
+                if (intent?.type === "select") afterDraftSaveNavRef.current = { type: "select", id: intent.id };
+                else if (intent?.type === "tab") afterDraftSaveNavRef.current = { type: "tab", next: intent.next };
+                else afterDraftSaveNavRef.current = null;
+                saveDraftMutation.mutate();
+              }}
+              disabled={saveDraftMutation.isPending}
+            >
+              {saveDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t("admin.billing.draft_unsaved_save")}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <BadgeEuro className="h-6 w-6 text-primary" />
@@ -663,7 +820,10 @@ const AdminBilling = () => {
         <p className="text-sm text-muted-foreground mt-1">{t("admin.billing.subtitle")}</p>
       </div>
 
-      <Tabs value={billingTab} onValueChange={(v) => setBillingTab(v as "issuers" | "series" | "drafts" | "issued")}>
+      <Tabs
+        value={billingTab}
+        onValueChange={(v) => tryDraftLeave({ type: "tab", next: v as BillingTab })}
+      >
         <TabsList className="w-full justify-start">
           <TabsTrigger value="issuers">{t("admin.billing.tab_issuers")}</TabsTrigger>
           <TabsTrigger value="series">{t("admin.billing.tab_series")}</TabsTrigger>
@@ -1070,7 +1230,7 @@ const AdminBilling = () => {
                         <TableHead>{t("admin.billing.col_issuer")}</TableHead>
                         <TableHead>{t("admin.billing.col_invoice")}</TableHead>
                         <TableHead>{t("admin.billing.col_client")}</TableHead>
-                        <TableHead>{t("admin.billing.col_due_date")}</TableHead>
+                        <TableHead>{t("admin.billing.col_notes")}</TableHead>
                         <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1080,10 +1240,17 @@ const AdminBilling = () => {
                           <TableCell className="font-medium">{inv.issuerCode}</TableCell>
                           <TableCell className="font-medium">{`${inv.seriesCode}-BORRADOR`}</TableCell>
                           <TableCell>{inv.recipientName || "—"}</TableCell>
-                          <TableCell>{inv.dueDate ?? "—"}</TableCell>
+                          <TableCell className="max-w-[min(28rem,45vw)]">
+                            <span
+                              className="line-clamp-2 text-sm"
+                              title={inv.notes?.trim() ? inv.notes.trim() : undefined}
+                            >
+                              {inv.notes?.trim() ? inv.notes.trim() : "—"}
+                            </span>
+                          </TableCell>
                           <TableCell className="text-right">
                             <div className="inline-flex flex-wrap items-center justify-end gap-1">
-                              <Button type="button" size="sm" variant="outline" onClick={() => setSelectedInvoiceId(inv.id)}>
+                              <Button type="button" size="sm" variant="outline" onClick={() => tryDraftLeave({ type: "select", id: inv.id })}>
                                 {t("admin.billing.action_open")}
                               </Button>
                               <Button
@@ -1309,7 +1476,7 @@ const AdminBilling = () => {
                               {inv.grandTotal.toLocaleString(localeTag, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                             </TableCell>
                             <TableCell className="text-right">
-                              <Button type="button" size="sm" variant="outline" onClick={() => setSelectedInvoiceId(inv.id)}>
+                              <Button type="button" size="sm" variant="outline" onClick={() => tryDraftLeave({ type: "select", id: inv.id })}>
                                 {t("admin.billing.action_open")}
                               </Button>
                             </TableCell>
@@ -1338,7 +1505,7 @@ const AdminBilling = () => {
                 {selectedInvoice.recipientName} · {selectedInvoice.recipientTaxId}
               </CardDescription>
             </div>
-            <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => setSelectedInvoiceId(null)}>
+            <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => tryDraftLeave({ type: "close" })}>
               <X className="h-4 w-4 mr-1" />
               {t("admin.common.close")}
             </Button>
@@ -1450,6 +1617,33 @@ const AdminBilling = () => {
                 <Label>{t("admin.billing.col_notes")}</Label>
                 <Textarea rows={2} value={draftNotes} onChange={(e) => setDraftNotes(e.target.value)} disabled={!editable} />
               </div>
+              {editable && invoiceAddresseeSelectOptions.length > 0 ? (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>{t("admin.billing.invoice_addressee_label")}</Label>
+                  <p className="text-xs text-muted-foreground">{t("admin.billing.invoice_addressee_hint")}</p>
+                  <Select
+                    value={draftRecipientAddresseeLine ? draftRecipientAddresseeLine : "__none__"}
+                    onValueChange={(v) => setDraftRecipientAddresseeLine(v === "__none__" ? "" : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{t("admin.billing.invoice_addressee_none")}</SelectItem>
+                      {invoiceAddresseeSelectOptions.map((opt) => (
+                        <SelectItem key={opt} value={opt}>
+                          {opt.length > 96 ? `${opt.slice(0, 93)}…` : opt}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : !editable && selectedInvoice.recipientAddresseeLine?.trim() ? (
+                <div className="space-y-1 sm:col-span-2 text-sm">
+                  <span className="text-muted-foreground">{t("admin.billing.invoice_addressee_label")}: </span>
+                  <span>{selectedInvoice.recipientAddresseeLine.trim()}</span>
+                </div>
+              ) : null}
             </div>
 
             {editable ? (
@@ -1580,18 +1774,6 @@ const AdminBilling = () => {
                     <Plus className="h-4 w-4 mr-2" />
                     {t("admin.billing.action_add_line")}
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => setDraftLines((prev) => [...prev, emptyConceptLine()])}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    {t("admin.billing.action_add_concept_line")}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setDraftLines((prev) => [...prev, emptyBlockTitleLine()])}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    {t("admin.billing.action_add_block_title_line")}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setDraftLines((prev) => [...prev, emptyBlockSubtitleLine()])}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    {t("admin.billing.action_add_block_subtitle_line")}
-                  </Button>
                   <Button type="button" variant="outline" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending}>
                     {saveDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                     {t("admin.billing.action_save_draft")}
@@ -1607,17 +1789,29 @@ const AdminBilling = () => {
                         issuers,
                         draftDueDate,
                         draftNotes,
+                        draftRecipientAddresseeLine,
                         series,
                         draftSeriesId || selectedInvoice.seriesId,
                         clients
                       );
-                      void openBillingInvoiceProformaDownload(header, draftLines).catch((e) =>
-                        toast({
-                          title: t("admin.common.error"),
-                          description: e instanceof Error ? e.message : "",
-                          variant: "destructive",
-                        })
-                      );
+                      toast({
+                        title: t("admin.billing.pdf_proforma_loading_title"),
+                        description: t("admin.billing.pdf_proforma_loading_desc"),
+                      });
+                      void openBillingInvoiceProformaDownload(header, draftLines)
+                        .then(() =>
+                          toast({
+                            title: t("admin.billing.pdf_proforma_ready_title"),
+                            description: t("admin.billing.pdf_proforma_ready_desc"),
+                          })
+                        )
+                        .catch((e) =>
+                          toast({
+                            title: t("admin.common.error"),
+                            description: e instanceof Error ? e.message : "",
+                            variant: "destructive",
+                          })
+                        );
                     }}
                   >
                     <FileSearch className="h-4 w-4 mr-2" />
@@ -1657,13 +1851,24 @@ const AdminBilling = () => {
                     type="button"
                     variant="outline"
                     onClick={() => {
-                      void openBillingInvoicePdfDownload(selectedInvoice).catch((e) =>
-                        toast({
-                          title: t("admin.common.error"),
-                          description: e instanceof Error ? e.message : "",
-                          variant: "destructive",
-                        })
-                      );
+                      toast({
+                        title: t("admin.billing.pdf_invoice_loading_title"),
+                        description: t("admin.billing.pdf_invoice_loading_desc"),
+                      });
+                      void openBillingInvoicePdfDownload(selectedInvoice)
+                        .then(() =>
+                          toast({
+                            title: t("admin.billing.pdf_invoice_ready_title"),
+                            description: t("admin.billing.pdf_invoice_ready_desc"),
+                          })
+                        )
+                        .catch((e) =>
+                          toast({
+                            title: t("admin.common.error"),
+                            description: e instanceof Error ? e.message : "",
+                            variant: "destructive",
+                          })
+                        );
                     }}
                   >
                     <FileText className="h-4 w-4 mr-2" />
@@ -1736,6 +1941,7 @@ const AdminBilling = () => {
         </Card>
       ) : null}
     </div>
+    </>
   );
 };
 

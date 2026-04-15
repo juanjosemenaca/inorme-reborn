@@ -6,6 +6,9 @@ export const CLIENT_KIND_LABELS: Record<ClientKind, string> = {
   INTERMEDIARIO: "Cliente intermediario",
 };
 
+/** Contacto habitual vs persona a la que van dirigidas las facturas (solo clientes). */
+export type ClientContactPurpose = "GENERAL" | "INVOICE";
+
 /** Persona de contacto vinculada a un cliente */
 export interface ClientContactPerson {
   id: string;
@@ -17,6 +20,8 @@ export interface ClientContactPerson {
   position: string;
   /** Descripción del rol o notas sobre la persona */
   description: string;
+  /** GENERAL: interlocutor; INVOICE: destinatario de facturación. */
+  contactPurpose: ClientContactPurpose;
 }
 
 /** Cliente corporativo persistido (demo en localStorage) */
@@ -45,6 +50,8 @@ export interface ClientRecord {
   websiteUrl: string;
   /** Notas internas opcionales */
   notes: string;
+  /** Destinatarios de facturación (texto libre; varios separados por `;`). */
+  invoiceAddresseeLine: string;
   active: boolean;
   contacts: ClientContactPerson[];
   createdAt: string;

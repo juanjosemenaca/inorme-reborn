@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { Copy } from "lucide-react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -32,6 +33,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { optionalEmail } from "@/lib/zodOptional";
+import { mergeTradeAndCompanyName } from "@/lib/tradeCompanyName";
 
 const kindEnum = z.enum(["FINAL", "INTERMEDIARIO"]);
 
@@ -52,6 +54,8 @@ const schema = z
     contactEmail: optionalEmail,
     website: z.string().optional(),
     notes: z.string().optional(),
+    /** Destinatarios de facturación (texto libre; varios separados por ;). */
+    invoiceAddresseeLine: z.string(),
     active: z.boolean(),
   })
   .refine((d) => d.tradeName.trim().length > 0 || d.companyName.trim().length > 0, {
@@ -108,6 +112,7 @@ export function ClientFormDialog({
       contactEmail: "",
       website: "",
       notes: "",
+      invoiceAddresseeLine: "",
       active: true,
     },
   });
@@ -118,6 +123,7 @@ export function ClientFormDialog({
     name: "fiscalAddressSameAsPostal",
   });
   const postalAddress = useWatch({ control: form.control, name: "postalAddress" });
+  const companyNameWatched = useWatch({ control: form.control, name: "companyName" });
 
   useEffect(() => {
     if (clientKind === "FINAL") {
@@ -148,6 +154,7 @@ export function ClientFormDialog({
         contactEmail: initial.contactEmail,
         website: initial.websiteUrl ?? "",
         notes: initial.notes ?? "",
+        invoiceAddresseeLine: initial.invoiceAddresseeLine ?? "",
         active: initial.active,
       });
     } else {
@@ -164,6 +171,7 @@ export function ClientFormDialog({
         contactEmail: "",
         website: "",
         notes: "",
+        invoiceAddresseeLine: "",
         active: true,
       });
     }
@@ -180,15 +188,20 @@ export function ClientFormDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            Datos fiscales y de contacto general. Las personas de contacto se gestionan aparte.
+            Datos fiscales y de contacto general. Las personas de contacto se gestionan aparte. Si solo indicas
+            nombre comercial o razón social, al guardar se replicará en el otro; rellena ambos solo si difieren.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit((v) => {
+              const names = mergeTradeAndCompanyName(v.tradeName, v.companyName);
               const normalized: ClientFormValues = {
                 ...v,
+                tradeName: names.tradeName,
+                companyName: names.companyName,
                 fiscalAddress: v.fiscalAddressSameAsPostal ? v.postalAddress : v.fiscalAddress,
+                invoiceAddresseeLine: v.invoiceAddresseeLine.trim(),
               };
               onSubmit(normalized);
             })}
@@ -197,12 +210,12 @@ export function ClientFormDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
-                name="tradeName"
+                name="companyName"
                 render={({ field }) => (
                   <FormItem className="sm:col-span-2">
-                    <FormLabel>Nombre comercial</FormLabel>
+                    <FormLabel>Nombre empresa / razón social</FormLabel>
                     <FormControl>
-                      <Input placeholder="Marca o nombre comercial" {...field} />
+                      <Input placeholder="Razón social completa" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -210,12 +223,29 @@ export function ClientFormDialog({
               />
               <FormField
                 control={form.control}
-                name="companyName"
+                name="tradeName"
                 render={({ field }) => (
                   <FormItem className="sm:col-span-2">
-                    <FormLabel>Nombre empresa / razón social</FormLabel>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <FormLabel>Nombre comercial</FormLabel>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs shrink-0"
+                        disabled={!companyNameWatched?.trim()}
+                        onClick={() => {
+                          const rs = form.getValues("companyName").trim();
+                          if (!rs) return;
+                          form.setValue("tradeName", rs, { shouldDirty: true, shouldValidate: true });
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" aria-hidden />
+                        Copiar desde razón social
+                      </Button>
+                    </div>
                     <FormControl>
-                      <Input placeholder="Razón social completa" {...field} />
+                      <Input placeholder="Marca o nombre comercial" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -347,6 +377,23 @@ export function ClientFormDialog({
                         disabled={fiscalAddressSameAsPostal}
                         {...field}
                       />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="invoiceAddresseeLine"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>Destinatarios de facturación</FormLabel>
+                    <p className="text-xs text-muted-foreground mb-1.5">
+                      Personas o departamentos a los que van dirigidas las facturas. Si indicas varios, sepáralos
+                      con punto y coma (;). En cada factura podrás elegir cuál mostrar en el PDF. Opcional.
+                    </p>
+                    <FormControl>
+                      <Input placeholder="Ej. D. Juan Pérez — Administración; Dña. Ana García" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -74,11 +74,17 @@ export interface BillingInvoiceRecord {
   issuerWebsiteUrl: string | null;
   /** Pie PDF RGPD para emisores distintos de INORME (snapshot); INORME usa texto fijo en generación. */
   issuerPrivacyFooter: string | null;
+  /** Email de contacto del emisor (snapshot). */
+  issuerEmail: string | null;
+  /** Teléfono de contacto del emisor (snapshot). */
+  issuerPhone: string | null;
   recipientName: string;
   recipientTaxId: string;
   recipientFiscalAddress: string;
   /** Web del cliente en el PDF (snapshot). */
   recipientWebsiteUrl: string | null;
+  /** Destinatario de factura elegido para el PDF (línea; snapshot). */
+  recipientAddresseeLine: string | null;
   taxableBaseTotal: number;
   vatTotal: number;
   irpfTotal: number;

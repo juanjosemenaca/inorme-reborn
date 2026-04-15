@@ -121,10 +121,13 @@ function invoiceRowToDomain(
     issuerLogoStoragePath: row.issuer_logo_storage_path,
     issuerWebsiteUrl: row.issuer_website_url,
     issuerPrivacyFooter: row.issuer_privacy_footer,
+    issuerEmail: row.issuer_email,
+    issuerPhone: row.issuer_phone,
     recipientName: row.recipient_name,
     recipientTaxId: row.recipient_tax_id,
     recipientFiscalAddress: row.recipient_fiscal_address,
     recipientWebsiteUrl: row.recipient_website_url,
+    recipientAddresseeLine: row.recipient_addressee_line?.trim() ? row.recipient_addressee_line.trim() : null,
     taxableBaseTotal: parseMoney(row.taxable_base_total),
     vatTotal: parseMoney(row.vat_total),
     irpfTotal: parseMoney(row.irpf_total),
@@ -204,6 +207,24 @@ async function syncDraftInvoicesIssuerPrivacyFooter(
   const { error } = await sb
     .from("billing_invoices")
     .update({ issuer_privacy_footer: footer, updated_at: new Date().toISOString() })
+    .eq("issuer_id", issuerId)
+    .eq("status", "DRAFT");
+  if (error) throwErr(error);
+}
+
+async function syncDraftInvoicesIssuerContact(
+  issuerId: string,
+  email: string | null,
+  phone: string | null
+): Promise<void> {
+  const sb = requireSupabase();
+  const { error } = await sb
+    .from("billing_invoices")
+    .update({
+      issuer_email: email?.trim() || null,
+      issuer_phone: phone?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
     .eq("issuer_id", issuerId)
     .eq("status", "DRAFT");
   if (error) throwErr(error);
@@ -393,6 +414,7 @@ export async function updateBillingIssuer(
   const row = data as BillingIssuerRow;
   await syncDraftInvoicesIssuerWebsite(issuerId, row.website_url?.trim() ? row.website_url.trim() : null);
   await syncDraftInvoicesIssuerPrivacyFooter(issuerId, row.tax_id, row.privacy_footer_text);
+  await syncDraftInvoicesIssuerContact(issuerId, row.email, row.phone);
   return issuerRowToDomain(row);
 }
 
@@ -505,6 +527,8 @@ async function loadIssuerSnapshot(
   logoStoragePath: string | null;
   websiteUrl: string | null;
   privacyFooterText: string | null;
+  email: string | null;
+  phone: string | null;
 }> {
   const sb = requireSupabase();
   const { data, error } = await sb.from("billing_issuers").select("*").eq("id", issuerId).maybeSingle();
@@ -514,6 +538,8 @@ async function loadIssuerSnapshot(
   if (opts.requireActive && !row.active) throw new Error("El emisor está inactivo. Actívalo o elige otro.");
   const web = row.website_url?.trim();
   const pf = row.privacy_footer_text?.trim();
+  const em = row.email?.trim();
+  const ph = row.phone?.trim();
   return {
     legalName: row.legal_name,
     taxId: row.tax_id,
@@ -524,6 +550,8 @@ async function loadIssuerSnapshot(
     logoStoragePath: row.logo_storage_path,
     websiteUrl: web ? web : null,
     privacyFooterText: pf ? pf : null,
+    email: em ? em : null,
+    phone: ph ? ph : null,
   };
 }
 
@@ -532,6 +560,7 @@ async function resolveClientSnapshot(clientId: string): Promise<{
   taxId: string;
   fiscalAddress: string;
   websiteUrl: string | null;
+  invoiceAddresseeLine: string | null;
 }> {
   const sb = requireSupabase();
   const { data, error } = await sb.from("clients").select("*").eq("id", clientId).maybeSingle();
@@ -541,11 +570,13 @@ async function resolveClientSnapshot(clientId: string): Promise<{
   const name = (client.company_name || client.trade_name || "").trim();
   const fiscalAddress = (client.fiscal_address || client.postal_address || "").trim();
   const w = client.website_url?.trim();
+  const addressee = client.invoice_addressee_line?.trim();
   return {
     name,
     taxId: (client.cif || "").trim(),
     fiscalAddress,
     websiteUrl: w ? w : null,
+    invoiceAddresseeLine: addressee ? addressee : null,
   };
 }
 
@@ -586,10 +617,13 @@ export async function createBillingInvoiceDraft(input: BillingInvoiceDraftInput)
         taxId: issuer.taxId,
         privacyFooterText: issuer.privacyFooterText,
       }),
+      issuer_email: issuer.email,
+      issuer_phone: issuer.phone,
       recipient_name: recipient.name,
       recipient_tax_id: recipient.taxId,
       recipient_fiscal_address: recipient.fiscalAddress,
       recipient_website_url: recipient.websiteUrl,
+      recipient_addressee_line: null,
       created_by_backoffice_user_id: profile.id,
       updated_by_backoffice_user_id: profile.id,
     })
@@ -672,10 +706,13 @@ export async function duplicateBillingInvoiceDraft(sourceInvoiceId: string): Pro
       issuer_logo_storage_path: srcRow.issuer_logo_storage_path,
       issuer_website_url: srcRow.issuer_website_url,
       issuer_privacy_footer: srcRow.issuer_privacy_footer,
+      issuer_email: srcRow.issuer_email,
+      issuer_phone: srcRow.issuer_phone,
       recipient_name: srcRow.recipient_name,
       recipient_tax_id: srcRow.recipient_tax_id,
       recipient_fiscal_address: srcRow.recipient_fiscal_address,
       recipient_website_url: srcRow.recipient_website_url,
+      recipient_addressee_line: srcRow.recipient_addressee_line,
       taxable_base_total: 0,
       vat_total: 0,
       irpf_total: 0,
@@ -737,7 +774,13 @@ export async function deleteBillingInvoiceDraft(invoiceId: string): Promise<void
 
 export async function updateBillingInvoiceDraftHeader(
   invoiceId: string,
-  patch: { dueDate?: string | null; notes?: string; issuerId?: string; seriesId?: string }
+  patch: {
+    dueDate?: string | null;
+    notes?: string;
+    issuerId?: string;
+    seriesId?: string;
+    recipientAddresseeLine?: string | null;
+  }
 ): Promise<void> {
   const profile = await requireProfile();
   const sb = requireSupabase();
@@ -785,8 +828,17 @@ export async function updateBillingInvoiceDraftHeader(
         taxId: snap.taxId,
         privacyFooterText: snap.privacyFooterText,
       }),
+      issuer_email: snap.email,
+      issuer_phone: snap.phone,
     };
   }
+
+  const nextAddressee =
+    patch.recipientAddresseeLine !== undefined
+      ? patch.recipientAddresseeLine?.trim()
+        ? patch.recipientAddresseeLine.trim()
+        : null
+      : row.recipient_addressee_line ?? null;
 
   const { error: upErr } = await sb
     .from("billing_invoices")
@@ -795,6 +847,7 @@ export async function updateBillingInvoiceDraftHeader(
       series_id: finalSeriesId,
       due_date: patch.dueDate ?? row.due_date,
       notes: patch.notes !== undefined ? patch.notes.trim() : row.notes,
+      recipient_addressee_line: nextAddressee,
       updated_by_backoffice_user_id: profile.id,
       updated_at: new Date().toISOString(),
     })
