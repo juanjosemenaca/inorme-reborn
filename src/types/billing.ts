@@ -119,6 +119,8 @@ export interface BillingInvoiceDraftInput {
   notes?: string;
   invoiceKind?: BillingInvoiceKind;
   rectifiesInvoiceId?: string | null;
+  /** Si se indica, se copian las líneas de esa factura (mismo cliente; no anuladas). */
+  copyLinesFromInvoiceId?: string | null;
   /** Rectificativas pueden mantener el emisor aunque esté inactivo en catálogo. */
   allowInactiveIssuer?: boolean;
 }

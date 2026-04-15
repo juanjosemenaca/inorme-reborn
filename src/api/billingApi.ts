@@ -632,13 +632,47 @@ export async function createBillingInvoiceDraft(input: BillingInvoiceDraftInput)
     .single();
   if (error) throwErr(error);
 
-  await appendAudit("INVOICE", (row as BillingInvoiceRow).id, "DRAFT_CREATED", { clientId: input.clientId }, profile.id);
+  const newRow = row as BillingInvoiceRow;
+  const newId = newRow.id;
+
+  await appendAudit("INVOICE", newId, "DRAFT_CREATED", { clientId: input.clientId }, profile.id);
+
+  const copyFrom = input.copyLinesFromInvoiceId?.trim();
+  if (copyFrom) {
+    const { data: src, error: srcErr } = await sb.from("billing_invoices").select("*").eq("id", copyFrom).maybeSingle();
+    if (srcErr) throwErr(srcErr);
+    if (!src) throw new Error("Factura origen no encontrada.");
+    const srcInv = src as BillingInvoiceRow;
+    if (srcInv.client_id !== input.clientId) {
+      throw new Error("La factura origen no corresponde al cliente seleccionado.");
+    }
+    if (srcInv.status === "CANCELLED") {
+      throw new Error("No se pueden copiar líneas de una factura anulada.");
+    }
+    const { data: lineRows, error: lineErr } = await sb
+      .from("billing_invoice_lines")
+      .select("*")
+      .eq("invoice_id", copyFrom)
+      .order("line_order", { ascending: true });
+    if (lineErr) throwErr(lineErr);
+    const lineInputs = ((lineRows ?? []) as BillingInvoiceLineRow[]).map(lineRowToDraftInput);
+    await replaceBillingInvoiceLines(newId, lineInputs);
+    await appendAudit("INVOICE", newId, "DRAFT_LINES_COPIED_FROM", { fromInvoiceId: copyFrom }, profile.id);
+  }
 
   const seriesRows = await fetchBillingSeries();
   const issuers = await fetchBillingIssuers();
-  const series = seriesRows.find((s) => s.id === (row as BillingInvoiceRow).series_id);
-  const issuerCode = issuers.find((i) => i.id === (row as BillingInvoiceRow).issuer_id)?.code ?? "?";
-  return invoiceRowToDomain(row as BillingInvoiceRow, series?.code ?? "?", issuerCode, []);
+  const series = seriesRows.find((s) => s.id === newRow.series_id);
+  const issuerCode = issuers.find((i) => i.id === newRow.issuer_id)?.code ?? "?";
+
+  const { data: newLines, error: nlErr } = await sb
+    .from("billing_invoice_lines")
+    .select("*")
+    .eq("invoice_id", newId)
+    .order("line_order", { ascending: true });
+  if (nlErr) throwErr(nlErr);
+
+  return invoiceRowToDomain(newRow, series?.code ?? "?", issuerCode, (newLines ?? []) as BillingInvoiceLineRow[]);
 }
 
 export async function createRectificativeDraftFromInvoice(originalInvoiceId: string, seriesId: string): Promise<BillingInvoiceRecord> {

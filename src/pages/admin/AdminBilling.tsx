@@ -105,6 +105,24 @@ function addCalendarMonthsYmd(isoYmd: string, monthsToAdd: number): string {
   return `${y}-${m}-${d}`;
 }
 
+const NEW_DRAFT_COPY_LINES_NONE = "__none__";
+
+/** Etiqueta compacta para elegir factura origen (mismo cliente). */
+function formatInvoiceCopySourceLabel(inv: BillingInvoiceRecord, localeTag: string, draftLabel: string): string {
+  const ref =
+    inv.invoiceNumber != null && inv.fiscalYear != null
+      ? `${inv.seriesCode}-${inv.fiscalYear}/${String(inv.invoiceNumber).padStart(4, "0")}`
+      : inv.status === "DRAFT"
+        ? `${inv.seriesCode} · ${draftLabel}`
+        : inv.seriesCode;
+  const dateRaw = inv.issueDate || inv.issuedAt?.slice(0, 10) || inv.createdAt.slice(0, 10);
+  const dateLabel = dateRaw
+    ? new Date(`${dateRaw}T12:00:00`).toLocaleDateString(localeTag, { day: "2-digit", month: "short", year: "numeric" })
+    : "—";
+  const money = new Intl.NumberFormat(localeTag, { style: "currency", currency: "EUR" }).format(inv.grandTotal);
+  return `${ref} · ${dateLabel} · ${money}`;
+}
+
 /** Compara el borrador en pantalla con la última versión guardada en servidor. */
 function isDraftDirtyComparedToSaved(
   inv: BillingInvoiceRecord,
@@ -224,6 +242,8 @@ const AdminBilling = () => {
   const [newInvoiceDate, setNewInvoiceDate] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [newNotes, setNewNotes] = useState("");
+  /** Factura existente (mismo cliente) de la que copiar líneas al crear el borrador; `NEW_DRAFT_COPY_LINES_NONE` = empezar de cero. */
+  const [newCopyLinesFromInvoiceId, setNewCopyLinesFromInvoiceId] = useState(NEW_DRAFT_COPY_LINES_NONE);
   const [billingTab, setBillingTab] = useState<BillingTab>("drafts");
   const [issuedSearch, setIssuedSearch] = useState("");
   const [issuedClientIdFilter, setIssuedClientIdFilter] = useState("all");
@@ -291,6 +311,18 @@ const AdminBilling = () => {
   );
   const draftInvoices = useMemo(() => invoices.filter((i) => i.status === "DRAFT"), [invoices]);
   const issuedInvoices = useMemo(() => invoices.filter((i) => i.status !== "DRAFT"), [invoices]);
+  /** Facturas del cliente con al menos una línea (emitidas, cobradas o borradores), para reutilizar conceptos/importes. */
+  const invoicesForNewDraftLineCopy = useMemo(() => {
+    if (!newClientId) return [];
+    const list = invoices.filter(
+      (inv) => inv.clientId === newClientId && inv.status !== "CANCELLED" && inv.lines.length > 0
+    );
+    return list.sort((a, b) => {
+      const ta = (a.issueDate || a.issuedAt?.slice(0, 10) || a.createdAt).slice(0, 10);
+      const tb = (b.issueDate || b.issuedAt?.slice(0, 10) || b.createdAt).slice(0, 10);
+      return tb.localeCompare(ta);
+    });
+  }, [invoices, newClientId]);
   const draftClientForAddressee = useMemo(
     () => (selectedInvoice ? clients.find((c) => c.id === selectedInvoice.clientId) : undefined),
     [clients, selectedInvoice]
@@ -395,7 +427,12 @@ const AdminBilling = () => {
     const inv = new Date().toISOString().slice(0, 10);
     setNewInvoiceDate(inv);
     setNewDueDate(addCalendarMonthsYmd(inv, 2));
+    setNewCopyLinesFromInvoiceId(NEW_DRAFT_COPY_LINES_NONE);
   }, [newDraftFormOpen]);
+
+  useEffect(() => {
+    setNewCopyLinesFromInvoiceId(NEW_DRAFT_COPY_LINES_NONE);
+  }, [newClientId]);
 
   useEffect(() => {
     if (selectedInvoice?.status === "DRAFT") {
@@ -633,6 +670,8 @@ const AdminBilling = () => {
         issueDate: newInvoiceDate.trim() || null,
         dueDate: newDueDate || null,
         notes: newNotes,
+        copyLinesFromInvoiceId:
+          newCopyLinesFromInvoiceId !== NEW_DRAFT_COPY_LINES_NONE ? newCopyLinesFromInvoiceId : null,
       }),
     onSuccess: async (created) => {
       await invalidateAll();
@@ -1496,6 +1535,27 @@ const AdminBilling = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>{t("admin.billing.new_draft_copy_lines_label")}</Label>
+                  <p className="text-xs text-muted-foreground">{t("admin.billing.new_draft_copy_lines_hint")}</p>
+                  {invoicesForNewDraftLineCopy.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">{t("admin.billing.new_draft_copy_lines_empty")}</p>
+                  ) : (
+                    <Select value={newCopyLinesFromInvoiceId} onValueChange={setNewCopyLinesFromInvoiceId}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NEW_DRAFT_COPY_LINES_NONE}>{t("admin.billing.new_draft_copy_lines_none")}</SelectItem>
+                        {invoicesForNewDraftLineCopy.map((inv) => (
+                          <SelectItem key={inv.id} value={inv.id}>
+                            {formatInvoiceCopySourceLabel(inv, localeTag, t("admin.billing.copy_source_draft_marker"))}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t("admin.billing.invoice_date_field")}</Label>
