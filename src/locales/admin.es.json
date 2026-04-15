@@ -1125,6 +1125,7 @@
     "pdf_invoice_loading_desc": "Preparando la factura…",
     "pdf_invoice_ready_title": "PDF listo",
     "pdf_invoice_ready_desc": "Se ha abierto en una nueva pestaña.",
+    "pdf_error_missing_traceability": "No se puede generar el PDF: faltan datos de trazabilidad de la emisión (código QR). Recarga la página o vuelve a abrir la factura desde el listado.",
     "action_pdf": "PDF + QR",
     "action_pdf_proforma": "PDF proforma",
     "action_duplicate_draft": "Duplicar borrador",

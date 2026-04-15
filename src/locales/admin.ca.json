@@ -1125,6 +1125,7 @@
     "pdf_invoice_loading_desc": "S'està preparant la factura…",
     "pdf_invoice_ready_title": "PDF llest",
     "pdf_invoice_ready_desc": "S'ha obert en una pestanya nova.",
+    "pdf_error_missing_traceability": "No es pot generar el PDF: falten les dades de traçabilitat de l'emissió (codi QR). Torna a carregar la pàgina o torna a obrir la factura des del llistat.",
     "action_pdf": "PDF + QR",
     "action_pdf_proforma": "PDF proforma",
     "action_duplicate_draft": "Duplicar esborrany",

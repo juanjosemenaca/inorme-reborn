@@ -66,6 +66,7 @@ import {
   uploadBillingIssuerLogo,
 } from "@/api/billingApi";
 import {
+  BillingPdfMissingTraceabilityError,
   computeDraftBillableTotals,
   openBillingInvoicePdfDownload,
   openBillingInvoiceProformaDownload,
@@ -2297,7 +2298,12 @@ const AdminBilling = () => {
                           .catch((e) =>
                             toast({
                               title: t("admin.common.error"),
-                              description: e instanceof Error ? e.message : "",
+                              description:
+                                e instanceof BillingPdfMissingTraceabilityError
+                                  ? t("admin.billing.pdf_error_missing_traceability")
+                                  : e instanceof Error
+                                    ? e.message
+                                    : "",
                               variant: "destructive",
                             })
                           );

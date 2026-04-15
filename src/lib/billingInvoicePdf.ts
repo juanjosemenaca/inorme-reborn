@@ -223,18 +223,23 @@ export function buildProformaInvoiceSnapshot(
 
 export type BillingInvoicePdfVariant = "issued" | "proforma";
 
-async function buildQrDataUrl(invoice: BillingInvoiceRecord): Promise<string> {
-  const payload =
-    invoice.verifactuQrPayload ??
-    ({
-      schema: "ES_VERIFACTU_PREP",
-      issuerTaxId: invoice.issuerTaxId,
-      invoiceNumber: invoice.invoiceNumber,
-      fiscalYear: invoice.fiscalYear,
-      issueDate: invoice.issueDate,
-      amountTotal: invoice.grandTotal,
-    } as Record<string, unknown>);
-  return toDataURL(JSON.stringify(payload), { margin: 1, width: 180 });
+/**
+ * Payload guardado en emisión (`billing_emit_invoice`). Esquema interno `ES_VERIFACTU_PREP`:
+ * preparado para encadenar huella y evolucionar; no equivale al formato oficial AEAT hasta alinearlo.
+ */
+function hasVerifiableQrPayload(invoice: BillingInvoiceRecord): boolean {
+  const p = invoice.verifactuQrPayload;
+  if (p == null || typeof p !== "object") return false;
+  const hash = (p as Record<string, unknown>).hash;
+  return typeof hash === "string" && /^[a-f0-9]{64}$/i.test(hash.trim());
+}
+
+async function buildIssuedInvoiceQrDataUrl(invoice: BillingInvoiceRecord): Promise<string> {
+  const p = invoice.verifactuQrPayload;
+  if (p == null) {
+    throw new Error("Falta verifactuQrPayload");
+  }
+  return toDataURL(JSON.stringify(p), { margin: 1, width: 180 });
 }
 
 function getImagePixelSizeFromDataUrl(dataUrl: string): Promise<{ width: number; height: number }> {
@@ -288,13 +293,32 @@ function addProformaWatermark(doc: JsPdfDoc): void {
   doc.restoreGraphicsState();
 }
 
+/** Factura emitida sin `verifactu_qr_payload` + hash en BD (datos incompletos o caché obsoleto). */
+export class BillingPdfMissingTraceabilityError extends Error {
+  constructor() {
+    super("BILLING_PDF_MISSING_TRACEABILITY");
+    this.name = "BillingPdfMissingTraceabilityError";
+  }
+}
+
 export async function generateBillingInvoicePdfBlob(
   invoice: BillingInvoiceRecord,
   options?: { variant?: BillingInvoicePdfVariant; logoDataUrl?: string | null }
 ): Promise<Blob> {
   const variant = options?.variant ?? "issued";
+  if (variant === "issued" && invoice.status !== "DRAFT" && !hasVerifiableQrPayload(invoice)) {
+    throw new BillingPdfMissingTraceabilityError();
+  }
+
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
-  const qrDataUrl = variant === "proforma" ? null : await buildQrDataUrl(invoice);
+  let qrDataUrl: string | null = null;
+  if (variant === "proforma") {
+    qrDataUrl = null;
+  } else if (invoice.status === "DRAFT") {
+    qrDataUrl = null;
+  } else {
+    qrDataUrl = await buildIssuedInvoiceQrDataUrl(invoice);
+  }
 
   const resolvedLogoDataUrl =
     options?.logoDataUrl !== undefined ? options.logoDataUrl : await fetchBillingIssuerLogoDataUrl(invoice.issuerLogoStoragePath);
@@ -488,7 +512,7 @@ export async function generateBillingInvoicePdfBlob(
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.2);
     doc.setTextColor(72, 72, 72);
-    doc.text("VeriFactu-ready", qrX + headerQrMm / 2, qrY + headerQrMm + 2.4, { align: "center" });
+    doc.text("Huella en emisión", qrX + headerQrMm / 2, qrY + headerQrMm + 2.4, { align: "center" });
     doc.setTextColor(0, 0, 0);
   } else if (variant === "proforma") {
     const stubW = 40;

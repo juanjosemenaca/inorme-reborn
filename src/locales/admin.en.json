@@ -1125,6 +1125,7 @@
     "pdf_invoice_loading_desc": "Preparing the invoice…",
     "pdf_invoice_ready_title": "PDF ready",
     "pdf_invoice_ready_desc": "Opened in a new tab.",
+    "pdf_error_missing_traceability": "Cannot generate the PDF: emission traceability data (QR) is missing. Reload the page or open the invoice again from the list.",
     "action_pdf": "PDF + QR",
     "action_pdf_proforma": "Proforma PDF",
     "action_duplicate_draft": "Duplicate draft",
