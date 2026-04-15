@@ -503,16 +503,20 @@ export async function generateBillingInvoicePdfBlob(
   /** QR dentro del recuadro (franja derecha), centrado verticalmente; leyenda bajo el código. */
   if (variant === "issued" && qrDataUrl && headerQrMm > 0) {
     const qrX = pageW - margin - innerPad - headerQrMm;
-    const captionH = 3.2;
+    /** Dos líneas bajo el QR: huella + referencia a evolución VeriFactu. */
+    const captionH = 6.8;
     let qrY = boxTop + Math.max(innerPad, (boxH - headerQrMm - captionH) / 2);
     if (qrY + headerQrMm + captionH > boxTop + boxH - 1.5) {
       qrY = Math.max(boxTop + innerPad, boxTop + boxH - headerQrMm - captionH - 2);
     }
     doc.addImage(qrDataUrl, "PNG", qrX, qrY, headerQrMm, headerQrMm);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.2);
+    doc.setFontSize(5.6);
     doc.setTextColor(72, 72, 72);
-    doc.text("Huella en emisión", qrX + headerQrMm / 2, qrY + headerQrMm + 2.4, { align: "center" });
+    const capX = qrX + headerQrMm / 2;
+    const capY0 = qrY + headerQrMm + 2.1;
+    doc.text("Huella en emisión", capX, capY0, { align: "center" });
+    doc.text("Futuro VeriFactu", capX, capY0 + 3.05, { align: "center" });
     doc.setTextColor(0, 0, 0);
   } else if (variant === "proforma") {
     const stubW = 40;
