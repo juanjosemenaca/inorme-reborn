@@ -1,7 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeEuro, Ban, CheckCircle2, Copy, FileSearch, FileText, Loader2, Plus, Receipt, Save, Trash2, X } from "lucide-react";
+import {
+  BadgeEuro,
+  Ban,
+  CheckCircle2,
+  ChevronDown,
+  Copy,
+  FileSearch,
+  FileText,
+  Loader2,
+  Plus,
+  Receipt,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +67,12 @@ import {
 } from "@/api/billingApi";
 import { openBillingInvoicePdfDownload, openBillingInvoiceProformaDownload } from "@/lib/billingInvoicePdf";
 import { isInormeInformaticaOrganizacionIssuer } from "@/lib/billingPrivacyFooter";
+import {
+  draftGroupYearMonth,
+  formatInvoiceMonthHeading,
+  groupInvoicesByIssuerAndMonth,
+  issuedGroupYearMonth,
+} from "@/lib/billingInvoiceGroups";
 import { parseInvoiceAddresseeOptions } from "@/lib/invoiceAddresseeOptions";
 import type { ClientRecord } from "@/types/clients";
 import type {
@@ -278,6 +299,16 @@ const AdminBilling = () => {
       return hay.includes(q);
     });
   }, [issuedInvoices, issuedSearch, issuedClientIdFilter, issuedIssuerIdFilter, issuedFromDate, issuedToDate]);
+
+  const issuerOrderForGrouping = useMemo(() => issuers.map((i) => ({ id: i.id, code: i.code })), [issuers]);
+  const draftGrouped = useMemo(
+    () => groupInvoicesByIssuerAndMonth(draftInvoices, draftGroupYearMonth, issuerOrderForGrouping),
+    [draftInvoices, issuerOrderForGrouping]
+  );
+  const issuedGrouped = useMemo(
+    () => groupInvoicesByIssuerAndMonth(issuedInvoicesFiltered, issuedGroupYearMonth, issuerOrderForGrouping),
+    [issuedInvoicesFiltered, issuerOrderForGrouping]
+  );
 
   const isDraftDirty = useMemo(() => {
     if (!selectedInvoice || selectedInvoice.status !== "DRAFT") return false;
@@ -1199,7 +1230,10 @@ const AdminBilling = () => {
         <TabsContent value="drafts" className="space-y-4">
           <Card>
             <CardHeader className="pb-2 flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
-              <CardTitle className="text-base">{t("admin.billing.drafts_title")}</CardTitle>
+              <div className="space-y-1">
+                <CardTitle className="text-base">{t("admin.billing.drafts_title")}</CardTitle>
+                <CardDescription>{t("admin.billing.drafts_group_hint")}</CardDescription>
+              </div>
               <div className="flex shrink-0 gap-2">
                 {newDraftFormOpen ? (
                   <Button type="button" variant="ghost" size="sm" onClick={() => setNewDraftFormOpen(false)}>
@@ -1223,74 +1257,107 @@ const AdminBilling = () => {
               ) : draftInvoices.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4">{t("admin.billing.empty")}</p>
               ) : (
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t("admin.billing.col_issuer")}</TableHead>
-                        <TableHead>{t("admin.billing.col_invoice")}</TableHead>
-                        <TableHead>{t("admin.billing.col_client")}</TableHead>
-                        <TableHead>{t("admin.billing.col_notes")}</TableHead>
-                        <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {draftInvoices.map((inv) => (
-                        <TableRow key={inv.id}>
-                          <TableCell className="font-medium">{inv.issuerCode}</TableCell>
-                          <TableCell className="font-medium">{`${inv.seriesCode}-BORRADOR`}</TableCell>
-                          <TableCell>{inv.recipientName || "—"}</TableCell>
-                          <TableCell className="max-w-[min(28rem,45vw)]">
-                            <span
-                              className="line-clamp-2 text-sm"
-                              title={inv.notes?.trim() ? inv.notes.trim() : undefined}
-                            >
-                              {inv.notes?.trim() ? inv.notes.trim() : "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="inline-flex flex-wrap items-center justify-end gap-1">
-                              <Button type="button" size="sm" variant="outline" onClick={() => tryDraftLeave({ type: "select", id: inv.id })}>
-                                {t("admin.billing.action_open")}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => duplicateDraftMutation.mutate(inv.id)}
-                                disabled={duplicateDraftMutation.isPending}
-                                title={t("admin.billing.action_duplicate_draft")}
-                              >
-                                {duplicateDraftMutation.isPending ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Copy className="h-3.5 w-3.5" />
-                                )}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                                onClick={() => {
-                                  if (!window.confirm(t("admin.billing.delete_draft_confirm"))) return;
-                                  deleteDraftMutation.mutate(inv.id);
-                                }}
-                                disabled={deleteDraftMutation.isPending}
-                                title={t("admin.billing.action_delete_draft")}
-                              >
-                                {deleteDraftMutation.isPending ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                )}
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                <div className="space-y-3">
+                  {draftGrouped.map((ig, igIdx) => {
+                    const issuerHeading = issuerLabelById.get(ig.issuerId) ?? ig.issuerCode;
+                    const totalInIssuer = ig.monthBuckets.reduce((n, mb) => n + mb.items.length, 0);
+                    return (
+                      <Collapsible key={ig.issuerId} defaultOpen={igIdx === 0} className="rounded-md border bg-card text-card-foreground shadow-sm">
+                        <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/50 [&[data-state=open]]:bg-muted/30 [&[data-state=open]>svg]:rotate-180">
+                          <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                          <span className="min-w-0 flex-1 truncate">{issuerHeading}</span>
+                          <Badge variant="secondary">{totalInIssuer}</Badge>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="space-y-4 border-t px-2 py-3 sm:px-3">
+                            {ig.monthBuckets.map((mb) => (
+                              <div key={mb.key} className="space-y-2">
+                                <div className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {formatInvoiceMonthHeading(localeTag, mb.year, mb.month, t("admin.billing.group_month_unknown"))}
+                                  <span className="ml-1 font-normal normal-case text-muted-foreground">
+                                    ({mb.items.length}{" "}
+                                    {mb.items.length === 1 ? t("admin.billing.group_items_one") : t("admin.billing.group_items_many")})
+                                  </span>
+                                </div>
+                                <div className="rounded-md border overflow-x-auto">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>{t("admin.billing.col_invoice")}</TableHead>
+                                        <TableHead>{t("admin.billing.col_client")}</TableHead>
+                                        <TableHead>{t("admin.billing.col_notes")}</TableHead>
+                                        <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {mb.items.map((inv) => (
+                                        <TableRow key={inv.id}>
+                                          <TableCell className="font-medium">{`${inv.seriesCode}-BORRADOR`}</TableCell>
+                                          <TableCell>{inv.recipientName || "—"}</TableCell>
+                                          <TableCell className="max-w-[min(28rem,45vw)]">
+                                            <span
+                                              className="line-clamp-2 text-sm"
+                                              title={inv.notes?.trim() ? inv.notes.trim() : undefined}
+                                            >
+                                              {inv.notes?.trim() ? inv.notes.trim() : "—"}
+                                            </span>
+                                          </TableCell>
+                                          <TableCell className="text-right">
+                                            <div className="inline-flex flex-wrap items-center justify-end gap-1">
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => tryDraftLeave({ type: "select", id: inv.id })}
+                                              >
+                                                {t("admin.billing.action_open")}
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={() => duplicateDraftMutation.mutate(inv.id)}
+                                                disabled={duplicateDraftMutation.isPending}
+                                                title={t("admin.billing.action_duplicate_draft")}
+                                              >
+                                                {duplicateDraftMutation.isPending ? (
+                                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                  <Copy className="h-3.5 w-3.5" />
+                                                )}
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                                                onClick={() => {
+                                                  if (!window.confirm(t("admin.billing.delete_draft_confirm"))) return;
+                                                  deleteDraftMutation.mutate(inv.id);
+                                                }}
+                                                disabled={deleteDraftMutation.isPending}
+                                                title={t("admin.billing.action_delete_draft")}
+                                              >
+                                                {deleteDraftMutation.isPending ? (
+                                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                  <Trash2 className="h-3.5 w-3.5" />
+                                                )}
+                                              </Button>
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -1435,8 +1502,9 @@ const AdminBilling = () => {
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 space-y-1">
               <CardTitle className="text-base">{t("admin.billing.issued_title")}</CardTitle>
+              <CardDescription>{t("admin.billing.issued_group_hint")}</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -1447,44 +1515,84 @@ const AdminBilling = () => {
               ) : issuedInvoicesFiltered.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4">{t("admin.billing.empty")}</p>
               ) : (
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t("admin.billing.col_issuer")}</TableHead>
-                        <TableHead>{t("admin.billing.col_invoice")}</TableHead>
-                        <TableHead>{t("admin.billing.col_status")}</TableHead>
-                        <TableHead>{t("admin.billing.col_client")}</TableHead>
-                        <TableHead>{t("admin.billing.col_issue_date")}</TableHead>
-                        <TableHead className="text-right">{t("admin.billing.col_total")}</TableHead>
-                        <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {issuedInvoicesFiltered.map((inv) => {
-                        const number = `${inv.seriesCode}-${inv.fiscalYear}/${String(inv.invoiceNumber).padStart(4, "0")}`;
-                        return (
-                          <TableRow key={inv.id}>
-                            <TableCell className="font-medium">{inv.issuerCode}</TableCell>
-                            <TableCell className="font-medium">{number}</TableCell>
-                            <TableCell>
-                              <Badge variant={variantByStatus(inv.status)}>{inv.status}</Badge>
-                            </TableCell>
-                            <TableCell>{inv.recipientName || "—"}</TableCell>
-                            <TableCell>{inv.issueDate ?? "—"}</TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {inv.grandTotal.toLocaleString(localeTag, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button type="button" size="sm" variant="outline" onClick={() => tryDraftLeave({ type: "select", id: inv.id })}>
-                                {t("admin.billing.action_open")}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                <div className="space-y-3">
+                  {issuedGrouped.map((ig, igIdx) => {
+                    const issuerHeading = issuerLabelById.get(ig.issuerId) ?? ig.issuerCode;
+                    const totalInIssuer = ig.monthBuckets.reduce((n, mb) => n + mb.items.length, 0);
+                    return (
+                      <Collapsible key={ig.issuerId} defaultOpen={igIdx === 0} className="rounded-md border bg-card text-card-foreground shadow-sm">
+                        <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/50 [&[data-state=open]]:bg-muted/30 [&[data-state=open]>svg]:rotate-180">
+                          <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                          <span className="min-w-0 flex-1 truncate">{issuerHeading}</span>
+                          <Badge variant="secondary">{totalInIssuer}</Badge>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="space-y-4 border-t px-2 py-3 sm:px-3">
+                            {ig.monthBuckets.map((mb) => (
+                              <div key={mb.key} className="space-y-2">
+                                <div className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {formatInvoiceMonthHeading(localeTag, mb.year, mb.month, t("admin.billing.group_month_unknown"))}
+                                  <span className="ml-1 font-normal normal-case text-muted-foreground">
+                                    ({mb.items.length}{" "}
+                                    {mb.items.length === 1 ? t("admin.billing.group_items_one") : t("admin.billing.group_items_many")})
+                                  </span>
+                                </div>
+                                <div className="rounded-md border overflow-x-auto">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>{t("admin.billing.col_invoice")}</TableHead>
+                                        <TableHead>{t("admin.billing.col_status")}</TableHead>
+                                        <TableHead>{t("admin.billing.col_client")}</TableHead>
+                                        <TableHead>{t("admin.billing.col_issue_date")}</TableHead>
+                                        <TableHead className="text-right">{t("admin.billing.col_total")}</TableHead>
+                                        <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {mb.items.map((inv) => {
+                                        const number =
+                                          inv.invoiceNumber != null && inv.fiscalYear != null
+                                            ? `${inv.seriesCode}-${inv.fiscalYear}/${String(inv.invoiceNumber).padStart(4, "0")}`
+                                            : `${inv.seriesCode}-?`;
+                                        return (
+                                          <TableRow key={inv.id}>
+                                            <TableCell className="font-medium">{number}</TableCell>
+                                            <TableCell>
+                                              <Badge variant={variantByStatus(inv.status)}>{inv.status}</Badge>
+                                            </TableCell>
+                                            <TableCell>{inv.recipientName || "—"}</TableCell>
+                                            <TableCell>{inv.issueDate ?? "—"}</TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                              {inv.grandTotal.toLocaleString(localeTag, {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              })}{" "}
+                                              €
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => tryDraftLeave({ type: "select", id: inv.id })}
+                                              >
+                                                {t("admin.billing.action_open")}
+                                              </Button>
+                                            </TableCell>
+                                          </TableRow>
+                                        );
+                                      })}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
