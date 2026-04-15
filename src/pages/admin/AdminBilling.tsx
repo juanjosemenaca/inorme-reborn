@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -65,7 +65,11 @@ import {
   updateBillingInvoiceDraftHeader,
   uploadBillingIssuerLogo,
 } from "@/api/billingApi";
-import { openBillingInvoicePdfDownload, openBillingInvoiceProformaDownload } from "@/lib/billingInvoicePdf";
+import {
+  computeDraftBillableTotals,
+  openBillingInvoicePdfDownload,
+  openBillingInvoiceProformaDownload,
+} from "@/lib/billingInvoicePdf";
 import { isInormeInformaticaOrganizacionIssuer } from "@/lib/billingPrivacyFooter";
 import {
   draftGroupYearMonth,
@@ -360,6 +364,8 @@ const AdminBilling = () => {
     () => groupInvoicesByIssuerAndMonth(issuedInvoicesFiltered, issuedGroupYearMonth, issuerOrderForGrouping),
     [issuedInvoicesFiltered, issuerOrderForGrouping]
   );
+
+  const draftBillableTotalsPreview = useMemo(() => computeDraftBillableTotals(draftLines), [draftLines]);
 
   const isDraftDirty = useMemo(() => {
     if (!selectedInvoice || selectedInvoice.status !== "DRAFT") return false;
@@ -2067,6 +2073,55 @@ const AdminBilling = () => {
                     </TableRow>
                   ))}
                 </TableBody>
+                {editable ? (
+                  <TableFooter>
+                    <TableRow className="bg-muted/40 border-t-2 border-border">
+                      <TableCell colSpan={2} className="text-muted-foreground align-top py-3 text-sm font-medium">
+                        {t("admin.billing.draft_totals_preview_title")}
+                      </TableCell>
+                      <TableCell colSpan={4} className="text-right align-top py-3">
+                        <div className="inline-flex flex-col gap-1 text-sm tabular-nums sm:min-w-[16rem]">
+                          <div className="flex justify-end gap-6">
+                            <span className="text-muted-foreground font-normal">{t("admin.billing.draft_totals_base")}</span>
+                            <span className="min-w-[7.5rem]">
+                              {draftBillableTotalsPreview.taxableBaseTotal.toLocaleString(localeTag, {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex justify-end gap-6">
+                            <span className="text-muted-foreground font-normal">{t("admin.billing.draft_totals_vat")}</span>
+                            <span className="min-w-[7.5rem]">
+                              {draftBillableTotalsPreview.vatTotal.toLocaleString(localeTag, {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex justify-end gap-6">
+                            <span className="text-muted-foreground font-normal">{t("admin.billing.draft_totals_irpf")}</span>
+                            <span className="min-w-[7.5rem]">
+                              {draftBillableTotalsPreview.irpfTotal.toLocaleString(localeTag, {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex justify-end gap-6 border-t border-border/80 pt-1 mt-0.5 font-semibold text-foreground">
+                            <span>{t("admin.billing.draft_totals_grand")}</span>
+                            <span className="min-w-[7.5rem]">
+                              {draftBillableTotalsPreview.grandTotal.toLocaleString(localeTag, {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
+                ) : null}
               </Table>
             </div>
 

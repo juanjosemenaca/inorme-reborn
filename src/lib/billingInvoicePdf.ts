@@ -117,6 +117,30 @@ function derivedAmountsForLine(line: BillingInvoiceLineInput): Pick<
   return { taxableBase, vatAmount, irpfAmount, lineTotal };
 }
 
+/** Totales facturables desde el borrador en pantalla (misma regla que BD / PDF proforma). */
+export function computeDraftBillableTotals(draftLines: BillingInvoiceLineInput[]): {
+  taxableBaseTotal: number;
+  vatTotal: number;
+  irpfTotal: number;
+  grandTotal: number;
+} {
+  let taxableBaseTotal = 0;
+  let vatTotal = 0;
+  let irpfTotal = 0;
+  for (const line of draftLines) {
+    if (line.lineType !== "BILLABLE") continue;
+    const d = derivedAmountsForLine(line);
+    taxableBaseTotal += d.taxableBase;
+    vatTotal += d.vatAmount;
+    irpfTotal += d.irpfAmount;
+  }
+  taxableBaseTotal = round2(taxableBaseTotal);
+  vatTotal = round2(vatTotal);
+  irpfTotal = round2(irpfTotal);
+  const grandTotal = round2(taxableBaseTotal + vatTotal - irpfTotal);
+  return { taxableBaseTotal, vatTotal, irpfTotal, grandTotal };
+}
+
 /**
  * Vista previa no fiscal: totales recalculados desde las líneas del formulario,
  * sin hash ni QR (se añaden al emitir).
@@ -141,19 +165,7 @@ export function buildProformaInvoiceSnapshot(
     };
   });
 
-  let taxableBaseTotal = 0;
-  let vatTotal = 0;
-  let irpfTotal = 0;
-  for (const line of lines) {
-    if (line.lineType !== "BILLABLE") continue;
-    taxableBaseTotal += line.taxableBase;
-    vatTotal += line.vatAmount;
-    irpfTotal += line.irpfAmount;
-  }
-  taxableBaseTotal = round2(taxableBaseTotal);
-  vatTotal = round2(vatTotal);
-  irpfTotal = round2(irpfTotal);
-  const grandTotal = round2(taxableBaseTotal + vatTotal - irpfTotal);
+  const { taxableBaseTotal, vatTotal, irpfTotal, grandTotal } = computeDraftBillableTotals(draftLines);
 
   /** Si la cabecera trae fecha (p. ej. histórica en borrador), úsala; si no, hoy. */
   const previewIssueDate = base.issueDate?.trim() || new Date().toISOString().slice(0, 10);
