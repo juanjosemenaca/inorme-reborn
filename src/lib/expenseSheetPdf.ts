@@ -1,6 +1,7 @@
 import type { WorkerExpenseCategoryKey, WorkerExpenseLineAmounts } from "@/types/workerExpenses";
 import { WORKER_EXPENSE_CATEGORY_KEYS } from "@/types/workerExpenses";
 import type { WorkerExpenseSheetRecord } from "@/types/workerExpenses";
+import { jsPDF } from "jspdf";
 
 function computeLineTotal(amounts: WorkerExpenseLineAmounts): number {
   let t = 0;
@@ -41,9 +42,7 @@ export async function generateExpenseSheetPdfBlob(
   sheet: WorkerExpenseSheetRecord,
   meta: ExpenseSheetPdfMeta
 ): Promise<Blob> {
-  const mod = await import("jspdf");
-  const JsPDF = mod.jsPDF ?? mod.default;
-  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "landscape", compress: true });
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape", compress: true });
 
   const pageW = 297;
   const pageH = 210;

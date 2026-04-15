@@ -2,12 +2,17 @@ import { fetchBillingIssuerLogoDataUrl } from "@/api/billingApi";
 import { resolvePdfPrivacyFooterText } from "@/lib/billingPrivacyFooter";
 import { drawBillingRichLinePdf } from "@/lib/billingRichTextPdf";
 import type { BillingInvoiceLineInput, BillingInvoiceLineRecord, BillingInvoiceRecord } from "@/types/billing";
+import { jsPDF } from "jspdf";
+import { toDataURL } from "qrcode";
+
+/** Tipo instancia (evita import() dinámico: tras un deploy el chunk antiguo puede 404 en producción). */
+type JsPdfDoc = InstanceType<typeof jsPDF>;
 
 /**
  * Dibuja el aviso legal al pie de la última hoja. Si el cuerpo ya ocupa hasta abajo, añade una hoja y coloca el texto al pie de esa hoja.
  */
 function drawBillingPdfPrivacyFooter(
-  doc: import("jspdf").jsPDF,
+  doc: JsPdfDoc,
   contentBottomY: number,
   pageW: number,
   margin: number,
@@ -71,7 +76,7 @@ const PDF_PAGE_H_MM = 297;
  * Conservador: usa splitTextToSize como aproximación al ajuste de línea del PDF.
  */
 function estimateInvoiceLineRowHeightMm(
-  doc: import("jspdf").jsPDF,
+  doc: JsPdfDoc,
   line: BillingInvoiceLineRecord,
   descMaxMm: number,
   gapAfterLine: number
@@ -219,7 +224,6 @@ export function buildProformaInvoiceSnapshot(
 export type BillingInvoicePdfVariant = "issued" | "proforma";
 
 async function buildQrDataUrl(invoice: BillingInvoiceRecord): Promise<string> {
-  const { toDataURL } = await import("qrcode");
   const payload =
     invoice.verifactuQrPayload ??
     ({
@@ -245,7 +249,7 @@ function getImagePixelSizeFromDataUrl(dataUrl: string): Promise<{ width: number;
 
 /** Dibuja el logo en la esquina superior derecha sin deformar (mantiene proporción dentro de un máximo). */
 async function drawIssuerLogoTopRight(
-  doc: import("jspdf").jsPDF,
+  doc: JsPdfDoc,
   logoDataUrl: string,
   pageW: number,
   margin: number
@@ -273,7 +277,7 @@ function hrefFromWebsite(raw: string): string {
   return /^https?:\/\//i.test(t) ? t : `https://${t}`;
 }
 
-function addProformaWatermark(doc: import("jspdf").jsPDF): void {
+function addProformaWatermark(doc: JsPdfDoc): void {
   const pageW = 210;
   const pageH = 297;
   doc.saveGraphicsState();
@@ -289,9 +293,7 @@ export async function generateBillingInvoicePdfBlob(
   options?: { variant?: BillingInvoicePdfVariant; logoDataUrl?: string | null }
 ): Promise<Blob> {
   const variant = options?.variant ?? "issued";
-  const mod = await import("jspdf");
-  const JsPDF = mod.jsPDF ?? mod.default;
-  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
   const qrDataUrl = variant === "proforma" ? null : await buildQrDataUrl(invoice);
 
   const resolvedLogoDataUrl =

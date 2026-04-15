@@ -12,6 +12,7 @@ import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
 import { useWorkersTimeClockEvents } from "@/hooks/useTimeTracking";
 import { computeDailyTimeSummaries } from "@/api/timeTrackingApi";
 import { getErrorMessage } from "@/lib/errorMessage";
+import { jsPDF } from "jspdf";
 
 type PeriodPreset = "LAST_30" | "THIS_MONTH" | "THIS_YEAR" | "CUSTOM";
 
@@ -110,9 +111,7 @@ const AdminTimeClockReports = () => {
     if (!dateRangeValid || pdfExporting) return;
     setPdfExporting(true);
     try {
-      const mod = await import("jspdf");
-      const JsPDF = mod.jsPDF ?? mod.default;
-      const doc = new JsPDF({ unit: "mm", format: "a4", compress: true });
+      const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
       const pageMaxY = 285;
       const marginX = 14;
       const maxWidth = 182;
