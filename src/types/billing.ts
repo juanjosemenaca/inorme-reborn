@@ -113,6 +113,8 @@ export interface BillingInvoiceDraftInput {
   issuerId: string;
   seriesId: string;
   clientId: string;
+  /** Fecha de factura prevista (borrador). */
+  issueDate?: string | null;
   dueDate?: string | null;
   notes?: string;
   invoiceKind?: BillingInvoiceKind;

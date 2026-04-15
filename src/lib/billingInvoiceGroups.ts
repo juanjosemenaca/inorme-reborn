@@ -7,10 +7,15 @@ export type BillingInvoiceMonthBucket = {
   items: BillingInvoiceRecord[];
 };
 
+export type BillingInvoiceYearBucket = {
+  year: number;
+  monthBuckets: BillingInvoiceMonthBucket[];
+};
+
 export type BillingInvoiceIssuerBucket = {
   issuerId: string;
   issuerCode: string;
-  monthBuckets: BillingInvoiceMonthBucket[];
+  yearBuckets: BillingInvoiceYearBucket[];
 };
 
 function parseYmd(raw: string | null | undefined): { y: number; m: number } | null {
@@ -27,8 +32,13 @@ function fromIsoInstant(iso: string): { y: number; m: number } {
   return { y: d.getFullYear(), m: d.getMonth() + 1 };
 }
 
-/** Borradores: mes/año por fecha de creación. */
+/**
+ * Borradores: si hay fecha de factura forzada (prevista), agrupa por ese mes/año;
+ * si no, por mes/año de creación del borrador.
+ */
 export function draftGroupYearMonth(inv: BillingInvoiceRecord): { y: number; m: number } {
+  const fromPlanned = parseYmd(inv.issueDate);
+  if (fromPlanned) return fromPlanned;
   return fromIsoInstant(inv.createdAt);
 }
 
@@ -42,9 +52,18 @@ export function issuedGroupYearMonth(inv: BillingInvoiceRecord): { y: number; m:
   return fromIsoInstant(inv.createdAt);
 }
 
+/** Orden dentro del mes: fecha de factura (forzada o emitida), luego actualización. */
 function sortInvoicesInBucket(a: BillingInvoiceRecord, b: BillingInvoiceRecord): number {
-  const da = a.issueDate ?? a.issuedAt?.slice(0, 10) ?? a.updatedAt.slice(0, 10);
-  const db = b.issueDate ?? b.issuedAt?.slice(0, 10) ?? b.updatedAt.slice(0, 10);
+  const da =
+    a.issueDate ??
+    (a.status === "DRAFT" ? a.createdAt.slice(0, 10) : null) ??
+    a.issuedAt?.slice(0, 10) ??
+    a.updatedAt.slice(0, 10);
+  const db =
+    b.issueDate ??
+    (b.status === "DRAFT" ? b.createdAt.slice(0, 10) : null) ??
+    b.issuedAt?.slice(0, 10) ??
+    b.updatedAt.slice(0, 10);
   const c = db.localeCompare(da);
   if (c !== 0) return c;
   const na = a.invoiceNumber ?? 0;
@@ -54,7 +73,7 @@ function sortInvoicesInBucket(a: BillingInvoiceRecord, b: BillingInvoiceRecord):
 }
 
 /**
- * Agrupa facturas por emisor y luego por año-mes (orden emisores según `issuerOrder`, meses de más reciente a más antiguo).
+ * Agrupa facturas por emisor → año → mes (emisores según `issuerOrder`; años y meses de más reciente a más antiguo).
  */
 export function groupInvoicesByIssuerAndMonth(
   items: BillingInvoiceRecord[],
@@ -75,24 +94,36 @@ export function groupInvoicesByIssuerAndMonth(
 
   const buckets: BillingInvoiceIssuerBucket[] = [];
   for (const [issuerId, months] of byIssuer) {
-    const monthBuckets: BillingInvoiceMonthBucket[] = [];
+    const flatMonthBuckets: BillingInvoiceMonthBucket[] = [];
     const sortedMonthKeys = [...months.keys()].sort((a, b) => b.localeCompare(a));
     for (const key of sortedMonthKeys) {
       const arr = months.get(key)!;
       arr.sort(sortInvoicesInBucket);
       const [ys, ms] = key.split("-");
-      monthBuckets.push({
+      flatMonthBuckets.push({
         key,
         year: Number(ys),
         month: Number(ms),
         items: arr,
       });
     }
-    const first = monthBuckets[0]?.items[0];
+
+    const byYear = new Map<number, BillingInvoiceMonthBucket[]>();
+    for (const mb of flatMonthBuckets) {
+      if (!byYear.has(mb.year)) byYear.set(mb.year, []);
+      byYear.get(mb.year)!.push(mb);
+    }
+    const sortedYears = [...byYear.keys()].sort((a, b) => b - a);
+    const yearBuckets: BillingInvoiceYearBucket[] = sortedYears.map((year) => ({
+      year,
+      monthBuckets: byYear.get(year)!,
+    }));
+
+    const first = flatMonthBuckets[0]?.items[0];
     buckets.push({
       issuerId,
       issuerCode: first?.issuerCode ?? issuerOrder.find((x) => x.id === issuerId)?.code ?? "—",
-      monthBuckets,
+      yearBuckets,
     });
   }
 
@@ -110,5 +141,13 @@ export function formatInvoiceMonthHeading(locale: string, year: number, month: n
   if (!year || !month) return unknownLabel;
   const d = new Date(year, month - 1, 1);
   const s = d.toLocaleDateString(locale, { month: "long", year: "numeric" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Solo nombre del mes (bajo un año ya visible). */
+export function formatInvoiceMonthOnly(locale: string, month: number, unknownLabel: string): string {
+  if (!month) return unknownLabel;
+  const d = new Date(2000, month - 1, 1);
+  const s = d.toLocaleDateString(locale, { month: "long" });
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

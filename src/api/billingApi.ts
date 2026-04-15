@@ -602,6 +602,7 @@ export async function createBillingInvoiceDraft(input: BillingInvoiceDraftInput)
       payment_status: "PENDING",
       invoice_kind: input.invoiceKind ?? "NORMAL",
       rectifies_invoice_id: input.rectifiesInvoiceId ?? null,
+      issue_date: input.issueDate?.trim() ? input.issueDate.trim() : null,
       due_date: input.dueDate ?? null,
       notes: input.notes?.trim() ?? "",
       client_id: input.clientId,
@@ -713,6 +714,7 @@ export async function duplicateBillingInvoiceDraft(sourceInvoiceId: string): Pro
       recipient_fiscal_address: srcRow.recipient_fiscal_address,
       recipient_website_url: srcRow.recipient_website_url,
       recipient_addressee_line: srcRow.recipient_addressee_line,
+      issue_date: srcRow.issue_date,
       taxable_base_total: 0,
       vat_total: 0,
       irpf_total: 0,
@@ -776,6 +778,8 @@ export async function updateBillingInvoiceDraftHeader(
   invoiceId: string,
   patch: {
     dueDate?: string | null;
+    /** Fecha de factura prevista (solo borrador). Vacío borra el valor; al emitir sin forzar se usa la fecha del momento. */
+    issueDate?: string | null;
     notes?: string;
     issuerId?: string;
     seriesId?: string;
@@ -840,12 +844,19 @@ export async function updateBillingInvoiceDraftHeader(
         : null
       : row.recipient_addressee_line ?? null;
 
+  let nextIssueDate: string | null | undefined = undefined;
+  if (patch.issueDate !== undefined) {
+    const t = patch.issueDate?.trim();
+    nextIssueDate = t ? t : null;
+  }
+
   const { error: upErr } = await sb
     .from("billing_invoices")
     .update({
       ...issuerPatch,
       series_id: finalSeriesId,
       due_date: patch.dueDate ?? row.due_date,
+      ...(nextIssueDate !== undefined ? { issue_date: nextIssueDate } : {}),
       notes: patch.notes !== undefined ? patch.notes.trim() : row.notes,
       recipient_addressee_line: nextAddressee,
       updated_by_backoffice_user_id: profile.id,

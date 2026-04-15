@@ -155,7 +155,8 @@ export function buildProformaInvoiceSnapshot(
   irpfTotal = round2(irpfTotal);
   const grandTotal = round2(taxableBaseTotal + vatTotal - irpfTotal);
 
-  const previewIssueDate = new Date().toISOString().slice(0, 10);
+  /** Si la cabecera trae fecha (p. ej. histórica en borrador), úsala; si no, hoy. */
+  const previewIssueDate = base.issueDate?.trim() || new Date().toISOString().slice(0, 10);
 
   return {
     ...base,
@@ -307,7 +308,11 @@ export async function generateBillingInvoicePdfBlob(
 
   const innerPad = 4;
   const innerLeft = margin + innerPad;
-  const innerMaxW = pageW - margin - innerLeft - innerPad;
+  /** Franja derecha del recuadro para QR emitido (texto del cuadro no la invade). */
+  const headerQrMm = variant === "issued" && qrDataUrl ? 28 : 0;
+  const headerQrTextGap = 4;
+  const headerReserveQr = headerQrMm > 0 ? headerQrMm + headerQrTextGap : 0;
+  const innerMaxW = Math.max(36, pageW - margin - innerLeft - innerPad - headerReserveQr);
   const yBoxTop = y;
 
   const issueFmt = formatInvoiceDateEs(invoice.issueDate);
@@ -317,13 +322,13 @@ export async function generateBillingInvoicePdfBlob(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.2);
   doc.setTextColor(0, 0, 0);
-  doc.text(facturaLine, innerLeft, y);
+  doc.text(facturaLine, innerLeft, y, { maxWidth: innerMaxW });
   y += bumpBox(8.2);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6);
   doc.setTextColor(88, 88, 88);
-  doc.text(`Vencimiento: ${dueFmt}`, innerLeft, y);
+  doc.text(`Vencimiento: ${dueFmt}`, innerLeft, y, { maxWidth: innerMaxW });
   y += bumpBox(6) + 0.8;
   doc.setTextColor(0, 0, 0);
 
@@ -426,6 +431,32 @@ export async function generateBillingInvoicePdfBlob(
   doc.setDrawColor(175, 175, 175);
   doc.setLineWidth(0.25);
   doc.roundedRect(margin, boxTop, pageW - 2 * margin, boxH, 1.2, 1.2, "S");
+
+  /** QR dentro del recuadro (franja derecha), centrado verticalmente; leyenda bajo el código. */
+  if (variant === "issued" && qrDataUrl && headerQrMm > 0) {
+    const qrX = pageW - margin - innerPad - headerQrMm;
+    const captionH = 3.2;
+    let qrY = boxTop + Math.max(innerPad, (boxH - headerQrMm - captionH) / 2);
+    if (qrY + headerQrMm + captionH > boxTop + boxH - 1.5) {
+      qrY = Math.max(boxTop + innerPad, boxTop + boxH - headerQrMm - captionH - 2);
+    }
+    doc.addImage(qrDataUrl, "PNG", qrX, qrY, headerQrMm, headerQrMm);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.2);
+    doc.setTextColor(72, 72, 72);
+    doc.text("VeriFactu-ready", qrX + headerQrMm / 2, qrY + headerQrMm + 2.4, { align: "center" });
+    doc.setTextColor(0, 0, 0);
+  } else if (variant === "proforma") {
+    const stubW = 40;
+    const qrX = pageW - margin - innerPad - stubW;
+    const qrY = boxTop + Math.max(innerPad, (boxH - 10) / 2);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 120, 120);
+    doc.text("Sin código QR (se genera al emitir)", qrX + stubW / 2, qrY + 2, { align: "center", maxWidth: stubW });
+    doc.setTextColor(0, 0, 0);
+  }
+
   /** Cursor justo debajo del marco + separación respecto a la tabla de conceptos. */
   const gapAfterHeaderBox = 14;
   y = boxTop + boxH + gapAfterHeaderBox;
@@ -610,23 +641,6 @@ export async function generateBillingInvoicePdfBlob(
       doc.text(`SWIFT/BIC: ${invoice.issuerBankAccountSwift}`, margin, y);
       y += 3.7;
     }
-  }
-
-  /** QR y leyenda en la primera hoja (esquina superior derecha), no en la última si hay varias páginas. */
-  const firstPage = 1;
-  if (variant === "issued" && qrDataUrl) {
-    doc.setPage(firstPage);
-    doc.addImage(qrDataUrl, "PNG", 160, 20, 34, 34);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.text("QR VeriFactu-ready", 177, 56, { align: "center" });
-  } else if (variant === "proforma") {
-    doc.setPage(firstPage);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.setTextColor(120, 120, 120);
-    doc.text("Sin código QR (se genera al emitir)", 160, 38, { maxWidth: 40 });
-    doc.setTextColor(0, 0, 0);
   }
 
   doc.setPage(doc.getNumberOfPages());

@@ -69,7 +69,7 @@ import { openBillingInvoicePdfDownload, openBillingInvoiceProformaDownload } fro
 import { isInormeInformaticaOrganizacionIssuer } from "@/lib/billingPrivacyFooter";
 import {
   draftGroupYearMonth,
-  formatInvoiceMonthHeading,
+  formatInvoiceMonthOnly,
   groupInvoicesByIssuerAndMonth,
   issuedGroupYearMonth,
 } from "@/lib/billingInvoiceGroups";
@@ -94,17 +94,30 @@ function normInvoiceAddressee(a: string | null | undefined): string | null {
   return t === "" ? null : t;
 }
 
+/** `isoYmd` = YYYY-MM-DD → misma fecha tras sumar meses naturales (p. ej. vencimiento +2 meses). */
+function addCalendarMonthsYmd(isoYmd: string, monthsToAdd: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoYmd)) return "";
+  const [ys, ms, ds] = isoYmd.split("-").map(Number);
+  const dt = new Date(ys, ms - 1 + monthsToAdd, ds);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 /** Compara el borrador en pantalla con la última versión guardada en servidor. */
 function isDraftDirtyComparedToSaved(
   inv: BillingInvoiceRecord,
   draftIssuerId: string,
   draftSeriesId: string,
   draftDueDate: string,
+  draftIssueDate: string,
   draftNotes: string,
   draftRecipientAddresseeLine: string,
   draftLines: BillingInvoiceLineInput[]
 ): boolean {
   if ((draftDueDate || "") !== (inv.dueDate ?? "")) return true;
+  if ((draftIssueDate || "") !== (inv.issueDate ?? "")) return true;
   if ((draftNotes ?? "") !== (inv.notes ?? "")) return true;
   if (normInvoiceAddressee(draftRecipientAddresseeLine) !== normInvoiceAddressee(inv.recipientAddresseeLine)) {
     return true;
@@ -137,6 +150,7 @@ function mergeProformaHeaderFromForm(
   draftIssuerId: string,
   issuerList: BillingIssuerRecord[],
   draftDueDate: string,
+  draftIssueDate: string,
   draftNotes: string,
   draftRecipientAddresseeLine: string,
   allSeries: BillingSeriesRecord[],
@@ -148,11 +162,13 @@ function mergeProformaHeaderFromForm(
   const sid = draftSeriesIdForHeader || inv.seriesId;
   const ser = allSeries.find((s) => s.id === sid);
   const clientWeb = client?.websiteUrl?.trim();
+  const plannedIssue = draftIssueDate.trim();
   return {
     ...inv,
     seriesId: sid,
     seriesCode: ser?.code ?? inv.seriesCode,
     dueDate: draftDueDate || null,
+    issueDate: plannedIssue ? plannedIssue : inv.issueDate ?? null,
     notes: draftNotes,
     recipientAddresseeLine: normInvoiceAddressee(draftRecipientAddresseeLine),
     issuerLogoStoragePath: issuer?.logoStoragePath ?? inv.issuerLogoStoragePath,
@@ -205,6 +221,7 @@ const AdminBilling = () => {
   const [newSeriesCode, setNewSeriesCode] = useState("");
   const [newSeriesLabel, setNewSeriesLabel] = useState("");
   const [newClientId, setNewClientId] = useState("");
+  const [newInvoiceDate, setNewInvoiceDate] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [billingTab, setBillingTab] = useState<BillingTab>("drafts");
@@ -241,6 +258,8 @@ const AdminBilling = () => {
   const editable = selectedInvoice?.status === "DRAFT";
 
   const [draftDueDate, setDraftDueDate] = useState("");
+  /** Fecha de factura forzada (borrador). Vacío = al emitir se usará la fecha del momento. */
+  const [draftIssueDate, setDraftIssueDate] = useState("");
   const [draftNotes, setDraftNotes] = useState("");
   /** Línea elegida para «Factura dirigida a» en PDF (coincide con snapshot en borrador). */
   const [draftRecipientAddresseeLine, setDraftRecipientAddresseeLine] = useState("");
@@ -317,6 +336,7 @@ const AdminBilling = () => {
       draftIssuerId,
       draftSeriesId,
       draftDueDate,
+      draftIssueDate,
       draftNotes,
       draftRecipientAddresseeLine,
       draftLines
@@ -326,6 +346,7 @@ const AdminBilling = () => {
     draftIssuerId,
     draftSeriesId,
     draftDueDate,
+    draftIssueDate,
     draftNotes,
     draftRecipientAddresseeLine,
     draftLines,
@@ -367,6 +388,14 @@ const AdminBilling = () => {
   useEffect(() => {
     if (!newIssuerId && activeIssuers.length > 0) setNewIssuerId(activeIssuers[0].id);
   }, [activeIssuers, newIssuerId]);
+
+  /** Al abrir «Nueva factura (borrador)»: fecha factura = hoy, vencimiento = +2 meses (editable). */
+  useEffect(() => {
+    if (!newDraftFormOpen) return;
+    const inv = new Date().toISOString().slice(0, 10);
+    setNewInvoiceDate(inv);
+    setNewDueDate(addCalendarMonthsYmd(inv, 2));
+  }, [newDraftFormOpen]);
 
   useEffect(() => {
     if (selectedInvoice?.status === "DRAFT") {
@@ -421,12 +450,14 @@ const AdminBilling = () => {
   useEffect(() => {
     if (!selectedInvoice) {
       setDraftDueDate("");
+      setDraftIssueDate("");
       setDraftNotes("");
       setDraftRecipientAddresseeLine("");
       setDraftLines([]);
       return;
     }
     setDraftDueDate(selectedInvoice.dueDate ?? "");
+    setDraftIssueDate(selectedInvoice.issueDate ?? "");
     setDraftNotes(selectedInvoice.notes ?? "");
     setDraftRecipientAddresseeLine(selectedInvoice.recipientAddresseeLine ?? "");
     setDraftLines(
@@ -599,6 +630,7 @@ const AdminBilling = () => {
         issuerId: newIssuerId,
         seriesId: newSeriesId,
         clientId: newClientId,
+        issueDate: newInvoiceDate.trim() || null,
         dueDate: newDueDate || null,
         notes: newNotes,
       }),
@@ -622,6 +654,7 @@ const AdminBilling = () => {
       if (!selectedInvoice) throw new Error("Factura no encontrada.");
       await updateBillingInvoiceDraftHeader(selectedInvoice.id, {
         dueDate: draftDueDate || null,
+        issueDate: draftIssueDate.trim() || null,
         notes: draftNotes,
         issuerId: draftIssuerId || selectedInvoice.issuerId,
         seriesId: draftSeriesId || selectedInvoice.seriesId,
@@ -653,13 +686,14 @@ const AdminBilling = () => {
       if (!selectedInvoice) throw new Error("Factura no encontrada.");
       await updateBillingInvoiceDraftHeader(selectedInvoice.id, {
         dueDate: draftDueDate || null,
+        issueDate: draftIssueDate.trim() || null,
         notes: draftNotes,
         issuerId: draftIssuerId || selectedInvoice.issuerId,
         seriesId: draftSeriesId || selectedInvoice.seriesId,
         recipientAddresseeLine: normInvoiceAddressee(draftRecipientAddresseeLine),
       });
       await replaceBillingInvoiceLines(selectedInvoice.id, draftLines);
-      await emitBillingInvoice(selectedInvoice.id);
+      await emitBillingInvoice(selectedInvoice.id, draftIssueDate.trim() || undefined);
     },
     onSuccess: async () => {
       await invalidateAll();
@@ -1260,7 +1294,10 @@ const AdminBilling = () => {
                 <div className="space-y-3">
                   {draftGrouped.map((ig, igIdx) => {
                     const issuerHeading = issuerLabelById.get(ig.issuerId) ?? ig.issuerCode;
-                    const totalInIssuer = ig.monthBuckets.reduce((n, mb) => n + mb.items.length, 0);
+                    const totalInIssuer = ig.yearBuckets.reduce(
+                      (n, yb) => n + yb.monthBuckets.reduce((m, mb) => m + mb.items.length, 0),
+                      0
+                    );
                     return (
                       <Collapsible key={ig.issuerId} defaultOpen={igIdx === 0} className="rounded-md border bg-card text-card-foreground shadow-sm">
                         <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/50 [&[data-state=open]]:bg-muted/30 [&[data-state=open]>svg]:rotate-180">
@@ -1269,90 +1306,129 @@ const AdminBilling = () => {
                           <Badge variant="secondary">{totalInIssuer}</Badge>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="space-y-4 border-t px-2 py-3 sm:px-3">
-                            {ig.monthBuckets.map((mb) => (
-                              <div key={mb.key} className="space-y-2">
-                                <div className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                  {formatInvoiceMonthHeading(localeTag, mb.year, mb.month, t("admin.billing.group_month_unknown"))}
-                                  <span className="ml-1 font-normal normal-case text-muted-foreground">
-                                    ({mb.items.length}{" "}
-                                    {mb.items.length === 1 ? t("admin.billing.group_items_one") : t("admin.billing.group_items_many")})
-                                  </span>
-                                </div>
-                                <div className="rounded-md border overflow-x-auto">
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead>{t("admin.billing.col_invoice")}</TableHead>
-                                        <TableHead>{t("admin.billing.col_client")}</TableHead>
-                                        <TableHead>{t("admin.billing.col_notes")}</TableHead>
-                                        <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {mb.items.map((inv) => (
-                                        <TableRow key={inv.id}>
-                                          <TableCell className="font-medium">{`${inv.seriesCode}-BORRADOR`}</TableCell>
-                                          <TableCell>{inv.recipientName || "—"}</TableCell>
-                                          <TableCell className="max-w-[min(28rem,45vw)]">
-                                            <span
-                                              className="line-clamp-2 text-sm"
-                                              title={inv.notes?.trim() ? inv.notes.trim() : undefined}
-                                            >
-                                              {inv.notes?.trim() ? inv.notes.trim() : "—"}
-                                            </span>
-                                          </TableCell>
-                                          <TableCell className="text-right">
-                                            <div className="inline-flex flex-wrap items-center justify-end gap-1">
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => tryDraftLeave({ type: "select", id: inv.id })}
-                                              >
-                                                {t("admin.billing.action_open")}
-                                              </Button>
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="secondary"
-                                                onClick={() => duplicateDraftMutation.mutate(inv.id)}
-                                                disabled={duplicateDraftMutation.isPending}
-                                                title={t("admin.billing.action_duplicate_draft")}
-                                              >
-                                                {duplicateDraftMutation.isPending ? (
-                                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                ) : (
-                                                  <Copy className="h-3.5 w-3.5" />
-                                                )}
-                                              </Button>
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                                                onClick={() => {
-                                                  if (!window.confirm(t("admin.billing.delete_draft_confirm"))) return;
-                                                  deleteDraftMutation.mutate(inv.id);
-                                                }}
-                                                disabled={deleteDraftMutation.isPending}
-                                                title={t("admin.billing.action_delete_draft")}
-                                              >
-                                                {deleteDraftMutation.isPending ? (
-                                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                ) : (
-                                                  <Trash2 className="h-3.5 w-3.5" />
-                                                )}
-                                              </Button>
-                                            </div>
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              </div>
-                            ))}
+                          <div className="space-y-2 border-t px-2 py-3 sm:px-3">
+                            {ig.yearBuckets.map((yb, yIdx) => {
+                              const countYear = yb.monthBuckets.reduce((m, mb) => m + mb.items.length, 0);
+                              const yearLabel =
+                                yb.year > 0 ? String(yb.year) : t("admin.billing.group_year_unknown");
+                              return (
+                                <Collapsible
+                                  key={`${ig.issuerId}-y${yb.year}`}
+                                  defaultOpen={yIdx === 0}
+                                  className="rounded-md border border-border/70 bg-muted/15"
+                                >
+                                  <CollapsibleTrigger className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm font-semibold tabular-nums text-foreground hover:bg-muted/40 [&[data-state=open]]:bg-muted/30 [&[data-state=open]>svg]:rotate-180">
+                                    <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
+                                    <span className="min-w-0 flex-1 truncate">{yearLabel}</span>
+                                    <Badge variant="secondary" className="font-normal">
+                                      {countYear}
+                                    </Badge>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <div className="space-y-2 border-t px-1.5 py-2">
+                                      {yb.monthBuckets.map((mb, mbIdx) => {
+                                        const monthLabel = formatInvoiceMonthOnly(
+                                          localeTag,
+                                          mb.month,
+                                          t("admin.billing.group_month_unknown")
+                                        );
+                                        return (
+                                          <Collapsible
+                                            key={`${ig.issuerId}-${mb.key}`}
+                                            defaultOpen={yIdx === 0 && mbIdx === 0}
+                                            className="rounded-md border border-border/80 bg-muted/25"
+                                          >
+                                            <CollapsibleTrigger className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted/50 [&[data-state=open]]:bg-muted/40 [&[data-state=open]>svg]:rotate-180">
+                                              <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
+                                              <span className="min-w-0 flex-1 truncate normal-case">{monthLabel}</span>
+                                              <Badge variant="outline" className="font-normal normal-case">
+                                                {mb.items.length}
+                                              </Badge>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent>
+                                              <div className="border-t px-1 pb-2 pt-1">
+                                                <div className="rounded-md border bg-background overflow-x-auto">
+                                                  <Table>
+                                                    <TableHeader>
+                                                      <TableRow>
+                                                        <TableHead>{t("admin.billing.col_invoice")}</TableHead>
+                                                        <TableHead>{t("admin.billing.col_client")}</TableHead>
+                                                        <TableHead>{t("admin.billing.col_notes")}</TableHead>
+                                                        <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
+                                                      </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                      {mb.items.map((inv) => (
+                                                        <TableRow key={inv.id}>
+                                                          <TableCell className="font-medium">{`${inv.seriesCode}-BORRADOR`}</TableCell>
+                                                          <TableCell>{inv.recipientName || "—"}</TableCell>
+                                                          <TableCell className="max-w-[min(28rem,45vw)]">
+                                                            <span
+                                                              className="line-clamp-2 text-sm"
+                                                              title={inv.notes?.trim() ? inv.notes.trim() : undefined}
+                                                            >
+                                                              {inv.notes?.trim() ? inv.notes.trim() : "—"}
+                                                            </span>
+                                                          </TableCell>
+                                                          <TableCell className="text-right">
+                                                            <div className="inline-flex flex-wrap items-center justify-end gap-1">
+                                                              <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => tryDraftLeave({ type: "select", id: inv.id })}
+                                                              >
+                                                                {t("admin.billing.action_open")}
+                                                              </Button>
+                                                              <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="secondary"
+                                                                onClick={() => duplicateDraftMutation.mutate(inv.id)}
+                                                                disabled={duplicateDraftMutation.isPending}
+                                                                title={t("admin.billing.action_duplicate_draft")}
+                                                              >
+                                                                {duplicateDraftMutation.isPending ? (
+                                                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                ) : (
+                                                                  <Copy className="h-3.5 w-3.5" />
+                                                                )}
+                                                              </Button>
+                                                              <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                                                                onClick={() => {
+                                                                  if (!window.confirm(t("admin.billing.delete_draft_confirm"))) return;
+                                                                  deleteDraftMutation.mutate(inv.id);
+                                                                }}
+                                                                disabled={deleteDraftMutation.isPending}
+                                                                title={t("admin.billing.action_delete_draft")}
+                                                              >
+                                                                {deleteDraftMutation.isPending ? (
+                                                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                ) : (
+                                                                  <Trash2 className="h-3.5 w-3.5" />
+                                                                )}
+                                                              </Button>
+                                                            </div>
+                                                          </TableCell>
+                                                        </TableRow>
+                                                      ))}
+                                                    </TableBody>
+                                                  </Table>
+                                                </div>
+                                              </div>
+                                            </CollapsibleContent>
+                                          </Collapsible>
+                                        );
+                                      })}
+                                    </div>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              );
+                            })}
                           </div>
                         </CollapsibleContent>
                       </Collapsible>
@@ -1422,7 +1498,20 @@ const AdminBilling = () => {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
+                  <Label>{t("admin.billing.invoice_date_field")}</Label>
+                  <Input
+                    type="date"
+                    value={newInvoiceDate}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setNewInvoiceDate(v);
+                      if (v) setNewDueDate(addCalendarMonthsYmd(v, 2));
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
                   <Label>{t("admin.billing.col_due_date")}</Label>
+                  <p className="text-xs text-muted-foreground">{t("admin.billing.new_draft_due_hint")}</p>
                   <Input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
@@ -1518,7 +1607,10 @@ const AdminBilling = () => {
                 <div className="space-y-3">
                   {issuedGrouped.map((ig, igIdx) => {
                     const issuerHeading = issuerLabelById.get(ig.issuerId) ?? ig.issuerCode;
-                    const totalInIssuer = ig.monthBuckets.reduce((n, mb) => n + mb.items.length, 0);
+                    const totalInIssuer = ig.yearBuckets.reduce(
+                      (n, yb) => n + yb.monthBuckets.reduce((m, mb) => m + mb.items.length, 0),
+                      0
+                    );
                     return (
                       <Collapsible key={ig.issuerId} defaultOpen={igIdx === 0} className="rounded-md border bg-card text-card-foreground shadow-sm">
                         <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/50 [&[data-state=open]]:bg-muted/30 [&[data-state=open]>svg]:rotate-180">
@@ -1527,67 +1619,106 @@ const AdminBilling = () => {
                           <Badge variant="secondary">{totalInIssuer}</Badge>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="space-y-4 border-t px-2 py-3 sm:px-3">
-                            {ig.monthBuckets.map((mb) => (
-                              <div key={mb.key} className="space-y-2">
-                                <div className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                  {formatInvoiceMonthHeading(localeTag, mb.year, mb.month, t("admin.billing.group_month_unknown"))}
-                                  <span className="ml-1 font-normal normal-case text-muted-foreground">
-                                    ({mb.items.length}{" "}
-                                    {mb.items.length === 1 ? t("admin.billing.group_items_one") : t("admin.billing.group_items_many")})
-                                  </span>
-                                </div>
-                                <div className="rounded-md border overflow-x-auto">
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead>{t("admin.billing.col_invoice")}</TableHead>
-                                        <TableHead>{t("admin.billing.col_status")}</TableHead>
-                                        <TableHead>{t("admin.billing.col_client")}</TableHead>
-                                        <TableHead>{t("admin.billing.col_issue_date")}</TableHead>
-                                        <TableHead className="text-right">{t("admin.billing.col_total")}</TableHead>
-                                        <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {mb.items.map((inv) => {
-                                        const number =
-                                          inv.invoiceNumber != null && inv.fiscalYear != null
-                                            ? `${inv.seriesCode}-${inv.fiscalYear}/${String(inv.invoiceNumber).padStart(4, "0")}`
-                                            : `${inv.seriesCode}-?`;
+                          <div className="space-y-2 border-t px-2 py-3 sm:px-3">
+                            {ig.yearBuckets.map((yb, yIdx) => {
+                              const countYear = yb.monthBuckets.reduce((m, mb) => m + mb.items.length, 0);
+                              const yearLabel =
+                                yb.year > 0 ? String(yb.year) : t("admin.billing.group_year_unknown");
+                              return (
+                                <Collapsible
+                                  key={`${ig.issuerId}-y${yb.year}`}
+                                  defaultOpen={yIdx === 0}
+                                  className="rounded-md border border-border/70 bg-muted/15"
+                                >
+                                  <CollapsibleTrigger className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm font-semibold tabular-nums text-foreground hover:bg-muted/40 [&[data-state=open]]:bg-muted/30 [&[data-state=open]>svg]:rotate-180">
+                                    <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
+                                    <span className="min-w-0 flex-1 truncate">{yearLabel}</span>
+                                    <Badge variant="secondary" className="font-normal">
+                                      {countYear}
+                                    </Badge>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <div className="space-y-2 border-t px-1.5 py-2">
+                                      {yb.monthBuckets.map((mb, mbIdx) => {
+                                        const monthLabel = formatInvoiceMonthOnly(
+                                          localeTag,
+                                          mb.month,
+                                          t("admin.billing.group_month_unknown")
+                                        );
                                         return (
-                                          <TableRow key={inv.id}>
-                                            <TableCell className="font-medium">{number}</TableCell>
-                                            <TableCell>
-                                              <Badge variant={variantByStatus(inv.status)}>{inv.status}</Badge>
-                                            </TableCell>
-                                            <TableCell>{inv.recipientName || "—"}</TableCell>
-                                            <TableCell>{inv.issueDate ?? "—"}</TableCell>
-                                            <TableCell className="text-right tabular-nums">
-                                              {inv.grandTotal.toLocaleString(localeTag, {
-                                                minimumFractionDigits: 2,
-                                                maximumFractionDigits: 2,
-                                              })}{" "}
-                                              €
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => tryDraftLeave({ type: "select", id: inv.id })}
-                                              >
-                                                {t("admin.billing.action_open")}
-                                              </Button>
-                                            </TableCell>
-                                          </TableRow>
+                                          <Collapsible
+                                            key={`${ig.issuerId}-${mb.key}`}
+                                            defaultOpen={yIdx === 0 && mbIdx === 0}
+                                            className="rounded-md border border-border/80 bg-muted/25"
+                                          >
+                                            <CollapsibleTrigger className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted/50 [&[data-state=open]]:bg-muted/40 [&[data-state=open]>svg]:rotate-180">
+                                              <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
+                                              <span className="min-w-0 flex-1 truncate normal-case">{monthLabel}</span>
+                                              <Badge variant="outline" className="font-normal normal-case">
+                                                {mb.items.length}
+                                              </Badge>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent>
+                                              <div className="border-t px-1 pb-2 pt-1">
+                                                <div className="rounded-md border bg-background overflow-x-auto">
+                                                  <Table>
+                                                    <TableHeader>
+                                                      <TableRow>
+                                                        <TableHead>{t("admin.billing.col_invoice")}</TableHead>
+                                                        <TableHead>{t("admin.billing.col_status")}</TableHead>
+                                                        <TableHead>{t("admin.billing.col_client")}</TableHead>
+                                                        <TableHead>{t("admin.billing.col_issue_date")}</TableHead>
+                                                        <TableHead className="text-right">{t("admin.billing.col_total")}</TableHead>
+                                                        <TableHead className="text-right">{t("admin.common.actions")}</TableHead>
+                                                      </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                      {mb.items.map((inv) => {
+                                                        const number =
+                                                          inv.invoiceNumber != null && inv.fiscalYear != null
+                                                            ? `${inv.seriesCode}-${inv.fiscalYear}/${String(inv.invoiceNumber).padStart(4, "0")}`
+                                                            : `${inv.seriesCode}-?`;
+                                                        return (
+                                                          <TableRow key={inv.id}>
+                                                            <TableCell className="font-medium">{number}</TableCell>
+                                                            <TableCell>
+                                                              <Badge variant={variantByStatus(inv.status)}>{inv.status}</Badge>
+                                                            </TableCell>
+                                                            <TableCell>{inv.recipientName || "—"}</TableCell>
+                                                            <TableCell>{inv.issueDate ?? "—"}</TableCell>
+                                                            <TableCell className="text-right tabular-nums">
+                                                              {inv.grandTotal.toLocaleString(localeTag, {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 2,
+                                                              })}{" "}
+                                                              €
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                              <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => tryDraftLeave({ type: "select", id: inv.id })}
+                                                              >
+                                                                {t("admin.billing.action_open")}
+                                                              </Button>
+                                                            </TableCell>
+                                                          </TableRow>
+                                                        );
+                                                      })}
+                                                    </TableBody>
+                                                  </Table>
+                                                </div>
+                                              </div>
+                                            </CollapsibleContent>
+                                          </Collapsible>
                                         );
                                       })}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              </div>
-                            ))}
+                                    </div>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              );
+                            })}
                           </div>
                         </CollapsibleContent>
                       </Collapsible>
@@ -1696,15 +1827,19 @@ const AdminBilling = () => {
               <div className="space-y-2 sm:col-span-1">
                 <div className="space-y-1.5">
                   <Label>{t("admin.billing.invoice_date_field")}</Label>
-                  <Input
-                    value={selectedInvoice.issueDate ?? ""}
-                    disabled
-                    placeholder="—"
-                    className="font-medium"
-                  />
-                  {editable && !selectedInvoice.issueDate ? (
-                    <p className="text-xs text-muted-foreground">{t("admin.billing.invoice_date_hint_draft")}</p>
-                  ) : null}
+                  {editable ? (
+                    <>
+                      <Input
+                        type="date"
+                        value={draftIssueDate}
+                        onChange={(e) => setDraftIssueDate(e.target.value)}
+                        className="h-9 max-w-[220px] text-sm font-medium"
+                      />
+                      <p className="text-xs text-muted-foreground">{t("admin.billing.invoice_date_hint_draft")}</p>
+                    </>
+                  ) : (
+                    <Input value={selectedInvoice.issueDate ?? ""} disabled placeholder="—" className="font-medium" />
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs font-normal text-muted-foreground">{t("admin.billing.col_due_date")}</Label>
@@ -1896,6 +2031,7 @@ const AdminBilling = () => {
                         draftIssuerId || selectedInvoice.issuerId,
                         issuers,
                         draftDueDate,
+                        draftIssueDate,
                         draftNotes,
                         draftRecipientAddresseeLine,
                         series,
@@ -1954,50 +2090,35 @@ const AdminBilling = () => {
                   </Button>
                 </>
               ) : (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      toast({
-                        title: t("admin.billing.pdf_invoice_loading_title"),
-                        description: t("admin.billing.pdf_invoice_loading_desc"),
-                      });
-                      void openBillingInvoicePdfDownload(selectedInvoice)
-                        .then(() =>
-                          toast({
-                            title: t("admin.billing.pdf_invoice_ready_title"),
-                            description: t("admin.billing.pdf_invoice_ready_desc"),
-                          })
-                        )
-                        .catch((e) =>
-                          toast({
-                            title: t("admin.common.error"),
-                            description: e instanceof Error ? e.message : "",
-                            variant: "destructive",
-                          })
-                        );
-                    }}
-                  >
-                    <FileText className="h-4 w-4 mr-2" />
-                    {t("admin.billing.action_pdf")}
-                  </Button>
-                  <div className="flex flex-wrap items-end gap-2">
-                    <div className="space-y-1.5 min-w-[200px]">
-                      <Label className="text-xs">{t("admin.billing.rectificative_series")}</Label>
-                      <Select value={rectificativeSeriesId} onValueChange={setRectificativeSeriesId}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {seriesForRectificative.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>
-                              {s.code} · {s.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                <div className="flex w-full flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        toast({
+                          title: t("admin.billing.pdf_invoice_loading_title"),
+                          description: t("admin.billing.pdf_invoice_loading_desc"),
+                        });
+                        void openBillingInvoicePdfDownload(selectedInvoice)
+                          .then(() =>
+                            toast({
+                              title: t("admin.billing.pdf_invoice_ready_title"),
+                              description: t("admin.billing.pdf_invoice_ready_desc"),
+                            })
+                          )
+                          .catch((e) =>
+                            toast({
+                              title: t("admin.common.error"),
+                              description: e instanceof Error ? e.message : "",
+                              variant: "destructive",
+                            })
+                          );
+                      }}
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      {t("admin.billing.action_pdf")}
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -2007,18 +2128,33 @@ const AdminBilling = () => {
                       {rectificativeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Receipt className="h-4 w-4 mr-2" />}
                       {t("admin.billing.action_rectificative")}
                     </Button>
-                  </div>
-                  {selectedInvoice.status !== "CANCELLED" ? (
-                    <Button type="button" variant="destructive" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
-                      {cancelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
-                      {t("admin.billing.action_cancel")}
+                    {selectedInvoice.status !== "CANCELLED" ? (
+                      <Button type="button" variant="destructive" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
+                        {cancelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
+                        {t("admin.billing.action_cancel")}
+                      </Button>
+                    ) : null}
+                    <Button type="button" variant="destructive" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
+                      {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
+                      {t("admin.billing.action_delete_test_mode")}
                     </Button>
-                  ) : null}
-                  <Button type="button" variant="destructive" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
-                    {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
-                    {t("admin.billing.action_delete_test_mode")}
-                  </Button>
-                </>
+                  </div>
+                  <div className="space-y-1.5 max-w-md">
+                    <Label className="text-xs">{t("admin.billing.rectificative_series")}</Label>
+                    <Select value={rectificativeSeriesId} onValueChange={setRectificativeSeriesId}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {seriesForRectificative.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.code} · {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               )}
             </div>
 
