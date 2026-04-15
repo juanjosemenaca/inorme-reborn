@@ -1105,6 +1105,8 @@
     "col_concept": "Concept",
     "line_concept_rich_hint": "In the PDF: **bold**, *italic*, __underline__; ***bold and italic***.",
     "col_qty": "Quantity",
+    "col_billable_hours_pct": "% of qty",
+    "col_billable_hours_pct_hint": "Share of the quantity (e.g. hours) to bill. 100% = full amount. Line amount = quantity × unit price × this %.",
     "col_unit_price": "Unit price",
     "action_open": "Open",
     "action_create_draft": "Create draft",

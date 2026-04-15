@@ -1105,6 +1105,8 @@
     "col_concept": "Concepte",
     "line_concept_rich_hint": "Al PDF: **negreta**, *cursiva*, __subratllat__; ***negreta i cursiva***.",
     "col_qty": "Quantitat",
+    "col_billable_hours_pct": "% hores",
+    "col_billable_hours_pct_hint": "Percentatge de la quantitat (p. ex. hores) que es factura. 100% = íntegre. L’import usa quantitat × preu × aquest %.",
     "col_unit_price": "Preu unitari",
     "action_open": "Obrir",
     "action_create_draft": "Crear esborrany",

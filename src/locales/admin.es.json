@@ -1105,6 +1105,8 @@
     "col_concept": "Concepto",
     "line_concept_rich_hint": "En el PDF: **negrita**, *cursiva*, __subrayado__; ***negrita y cursiva***.",
     "col_qty": "Cantidad",
+    "col_billable_hours_pct": "% horas",
+    "col_billable_hours_pct_hint": "Porcentaje de la cantidad (p. ej. horas) que se factura. 100% = íntegro. El importe usa cantidad × precio × este %.",
     "col_unit_price": "Precio unitario",
     "action_open": "Abrir",
     "action_create_draft": "Crear borrador",

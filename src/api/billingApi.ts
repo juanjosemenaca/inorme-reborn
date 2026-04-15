@@ -37,6 +37,14 @@ function parseMoney(raw: unknown): number {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
 }
 
+/** 0.01–100; encaja con ck_billing_line_billable_hours_percent. */
+function clampBillableHoursPercent(raw: number): number {
+  if (!Number.isFinite(raw)) return 100;
+  if (raw <= 0) return 0.01;
+  if (raw > 100) return 100;
+  return Math.round(raw * 10000) / 10000;
+}
+
 type Profile = {
   id: string;
   role: "ADMIN" | "WORKER";
@@ -72,6 +80,9 @@ async function appendAudit(
 }
 
 function lineRowToDomain(row: BillingInvoiceLineRow): BillingInvoiceLineRecord {
+  const pctRaw = row.billable_hours_percent;
+  const pct =
+    pctRaw != null && String(pctRaw).trim() !== "" ? clampBillableHoursPercent(parseMoney(pctRaw)) : 100;
   return {
     id: row.id,
     invoiceId: row.invoice_id,
@@ -80,6 +91,7 @@ function lineRowToDomain(row: BillingInvoiceLineRow): BillingInvoiceLineRecord {
     description: row.description,
     quantity: parseMoney(row.quantity),
     unitPrice: parseMoney(row.unit_price),
+    billableHoursPercent: pct,
     vatRate: parseMoney(row.vat_rate),
     irpfRate: parseMoney(row.irpf_rate),
     taxableBase: parseMoney(row.taxable_base),
@@ -693,11 +705,15 @@ export async function createRectificativeDraftFromInvoice(originalInvoiceId: str
 
 function lineRowToDraftInput(row: BillingInvoiceLineRow): BillingInvoiceLineInput {
   const lt = row.line_type ?? "BILLABLE";
+  const pctRaw = row.billable_hours_percent;
+  const pct =
+    pctRaw != null && String(pctRaw).trim() !== "" ? clampBillableHoursPercent(parseMoney(pctRaw)) : 100;
   return {
     lineType: lt as BillingInvoiceLineInput["lineType"],
     description: row.description ?? "",
     quantity: parseMoney(row.quantity),
     unitPrice: parseMoney(row.unit_price),
+    billableHoursPercent: lt === "BILLABLE" ? pct : 100,
     vatRate: parseMoney(row.vat_rate) as BillingInvoiceLineInput["vatRate"],
     irpfRate: parseMoney(row.irpf_rate),
   };
@@ -919,6 +935,7 @@ export async function replaceBillingInvoiceLines(invoiceId: string, lines: Billi
       description: line.description.trim(),
       quantity: line.lineType === "BILLABLE" ? line.quantity : 0,
       unit_price: line.lineType === "BILLABLE" ? line.unitPrice : 0,
+      billable_hours_percent: line.lineType === "BILLABLE" ? clampBillableHoursPercent(line.billableHoursPercent ?? 100) : 100,
       vat_rate: line.vatRate,
       irpf_rate: line.lineType === "BILLABLE" ? line.irpfRate : 0,
     }));

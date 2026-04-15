@@ -156,6 +156,7 @@ function isDraftDirtyComparedToSaved(
     if ((a.description ?? "") !== (b.description ?? "")) return true;
     if (Number(a.quantity) !== Number(b.quantity)) return true;
     if (Number(a.unitPrice) !== Number(b.unitPrice)) return true;
+    if (Number(a.billableHoursPercent ?? 100) !== Number(b.billableHoursPercent ?? 100)) return true;
     if (Number(a.vatRate) !== Number(b.vatRate)) return true;
     if (Number(a.irpfRate) !== Number(b.irpfRate)) return true;
   }
@@ -163,7 +164,26 @@ function isDraftDirtyComparedToSaved(
 }
 
 function emptyLine(): BillingInvoiceLineInput {
-  return { lineType: "BILLABLE", description: "", quantity: 1, unitPrice: 0, vatRate: 21, irpfRate: 0 };
+  return {
+    lineType: "BILLABLE",
+    description: "",
+    quantity: 1,
+    unitPrice: 0,
+    billableHoursPercent: 100,
+    vatRate: 21,
+    irpfRate: 0,
+  };
+}
+
+function isPartialBillableHoursPct(line: BillingInvoiceLineInput): boolean {
+  if (line.lineType !== "BILLABLE") return false;
+  const p = line.billableHoursPercent ?? 100;
+  return Math.abs(p - 100) > 1e-6;
+}
+
+function effectiveBillableQuantity(line: BillingInvoiceLineInput): number {
+  const p = line.billableHoursPercent ?? 100;
+  return Math.round(line.quantity * (p / 100) * 10000) / 10000;
 }
 
 /** Cabecera emisor/fechas como en pantalla (puede no estar guardada aún). */
@@ -509,6 +529,7 @@ const AdminBilling = () => {
         description: line.description,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
+        billableHoursPercent: line.billableHoursPercent ?? 100,
         vatRate: line.vatRate as 21 | 10 | 4,
         irpfRate: line.irpfRate,
       }))
@@ -1965,6 +1986,7 @@ const AdminBilling = () => {
                     <TableHead className="w-[140px]">{t("admin.billing.col_line_type")}</TableHead>
                     <TableHead>{t("admin.billing.col_concept")}</TableHead>
                     <TableHead className="w-[90px]">{t("admin.billing.col_qty")}</TableHead>
+                    <TableHead className="w-[88px]">{t("admin.billing.col_billable_hours_pct")}</TableHead>
                     <TableHead className="w-[120px]">{t("admin.billing.col_unit_price")}</TableHead>
                     <TableHead className="w-[90px]">IVA %</TableHead>
                     <TableHead className="w-[90px]">IRPF %</TableHead>
@@ -1989,8 +2011,16 @@ const AdminBilling = () => {
                                         quantity: x.quantity > 0 ? x.quantity : 1,
                                         unitPrice: x.unitPrice,
                                         vatRate: x.vatRate as 21 | 10 | 4,
+                                        billableHoursPercent: x.billableHoursPercent ?? 100,
                                       }
-                                    : { ...x, lineType: v as BillingInvoiceLineInput["lineType"], quantity: 0, unitPrice: 0, irpfRate: 0 }
+                                    : {
+                                        ...x,
+                                        lineType: v as BillingInvoiceLineInput["lineType"],
+                                        quantity: 0,
+                                        unitPrice: 0,
+                                        irpfRate: 0,
+                                        billableHoursPercent: 100,
+                                      }
                               )
                             )
                           }
@@ -2018,14 +2048,56 @@ const AdminBilling = () => {
                         />
                       </TableCell>
                       <TableCell>
+                        <div className="space-y-1 min-w-[5.5rem]">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={line.quantity}
+                            disabled={!editable || line.lineType !== "BILLABLE"}
+                            onChange={(e) =>
+                              setDraftLines((prev) => prev.map((x, i) => (i === idx ? { ...x, quantity: Number(e.target.value || 0) } : x)))
+                            }
+                          />
+                          {line.lineType === "BILLABLE" && isPartialBillableHoursPct(line) ? (
+                            <div className="text-right text-xs leading-tight tabular-nums">
+                              <div>
+                                <span className="line-through text-muted-foreground">
+                                  {line.quantity.toLocaleString(localeTag, { maximumFractionDigits: 4 })}
+                                </span>
+                              </div>
+                              <div className="font-medium text-foreground">
+                                {effectiveBillableQuantity(line).toLocaleString(localeTag, {
+                                  maximumFractionDigits: 4,
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <Input
                           type="number"
+                          min={0.01}
+                          max={100}
                           step="0.01"
-                          value={line.quantity}
+                          title={t("admin.billing.col_billable_hours_pct_hint")}
+                          value={line.billableHoursPercent ?? 100}
                           disabled={!editable || line.lineType !== "BILLABLE"}
-                          onChange={(e) =>
-                            setDraftLines((prev) => prev.map((x, i) => (i === idx ? { ...x, quantity: Number(e.target.value || 0) } : x)))
-                          }
+                          onChange={(e) => {
+                            const n = Number(e.target.value);
+                            setDraftLines((prev) =>
+                              prev.map((x, i) =>
+                                i === idx
+                                  ? {
+                                      ...x,
+                                      billableHoursPercent: Number.isFinite(n)
+                                        ? Math.min(100, Math.max(0.01, Math.round(n * 10000) / 10000))
+                                        : 100,
+                                    }
+                                  : x
+                              )
+                            );
+                          }}
                         />
                       </TableCell>
                       <TableCell>
@@ -2079,7 +2151,7 @@ const AdminBilling = () => {
                       <TableCell colSpan={2} className="text-muted-foreground align-top py-3 text-sm font-medium">
                         {t("admin.billing.draft_totals_preview_title")}
                       </TableCell>
-                      <TableCell colSpan={4} className="text-right align-top py-3">
+                      <TableCell colSpan={5} className="text-right align-top py-3">
                         <div className="inline-flex flex-col gap-1 text-sm tabular-nums sm:min-w-[16rem]">
                           <div className="flex justify-end gap-6">
                             <span className="text-muted-foreground font-normal">{t("admin.billing.draft_totals_base")}</span>

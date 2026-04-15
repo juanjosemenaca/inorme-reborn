@@ -99,7 +99,35 @@ function estimateInvoiceLineRowHeightMm(
   doc.setFontSize(8.5);
   const lines = doc.splitTextToSize(line.description || "—", descMaxMm) as string[];
   const descH = Math.max(lines.length * 5.7, 6);
-  return descH + gapAfterLine;
+  const partialBillable =
+    line.lineType === "BILLABLE" &&
+    line.billableHoursPercent != null &&
+    Math.abs(line.billableHoursPercent - 100) > 1e-6;
+  let noteUnderConceptMm = 0;
+  if (partialBillable) {
+    const p = line.billableHoursPercent ?? 100;
+    const eff = round2(line.quantity * (p / 100));
+    const qFmt = line.quantity.toLocaleString("es-ES", { maximumFractionDigits: 4 });
+    const effFmt = eff.toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    const note = `totales: ${qFmt} h facturables: ${p.toLocaleString("es-ES", { maximumFractionDigits: 4 })}% total facturable: ${effFmt} h`;
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7);
+    const noteLines = doc.splitTextToSize(note, descMaxMm) as string[];
+    const lineStep = 3.15;
+    noteUnderConceptMm = 2 + noteLines.length * lineStep + 1.2;
+  }
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  /** Columna Cant. en dos líneas (total tachado + efectivo) si hay % parcial. */
+  const minCoreH = partialBillable ? 9.6 : 6;
+  return Math.max(descH + noteUnderConceptMm, minCoreH) + gapAfterLine;
+}
+
+function billableHoursFraction(line: Pick<BillingInvoiceLineInput, "lineType" | "billableHoursPercent">): number {
+  if (line.lineType !== "BILLABLE") return 1;
+  const p = line.billableHoursPercent ?? 100;
+  if (!Number.isFinite(p)) return 1;
+  return Math.min(1, Math.max(0.0001, p / 100));
 }
 
 /** Misma lógica de importes que en BD (líneas BILLABLE). */
@@ -110,7 +138,8 @@ function derivedAmountsForLine(line: BillingInvoiceLineInput): Pick<
   if (line.lineType !== "BILLABLE") {
     return { taxableBase: 0, vatAmount: 0, irpfAmount: 0, lineTotal: 0 };
   }
-  const taxableBase = round2(line.quantity * line.unitPrice);
+  const f = billableHoursFraction(line);
+  const taxableBase = round2(line.quantity * line.unitPrice * f);
   const vatAmount = round2((taxableBase * line.vatRate) / 100);
   const irpfAmount = round2((taxableBase * line.irpfRate) / 100);
   const lineTotal = round2(taxableBase + vatAmount - irpfAmount);
@@ -159,6 +188,7 @@ export function buildProformaInvoiceSnapshot(
       description: l.description,
       quantity: l.lineType === "BILLABLE" ? l.quantity : 0,
       unitPrice: l.lineType === "BILLABLE" ? l.unitPrice : 0,
+      billableHoursPercent: l.lineType === "BILLABLE" ? (l.billableHoursPercent ?? 100) : 100,
       vatRate: l.vatRate,
       irpfRate: l.lineType === "BILLABLE" ? l.irpfRate : 0,
       ...d,
@@ -559,15 +589,60 @@ export async function generateBillingInvoicePdfBlob(
       fontSize: 8.5,
       lineHeightMm: 5.7,
     });
+    const partialQty =
+      line.lineType === "BILLABLE" &&
+      line.billableHoursPercent != null &&
+      Math.abs(line.billableHoursPercent - 100) > 1e-6;
+    let extraBelowConcept = 0;
+    if (partialQty) {
+      const p = line.billableHoursPercent!;
+      const eff = round2(line.quantity * (p / 100));
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7);
+      doc.setTextColor(82, 82, 82);
+      const qFmt = line.quantity.toLocaleString("es-ES", { maximumFractionDigits: 4 });
+      const effFmt = eff.toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      const note = `totales: ${qFmt} h facturables: ${p.toLocaleString("es-ES", { maximumFractionDigits: 4 })}% total facturable: ${effFmt} h`;
+      const noteLines = doc.splitTextToSize(note, descMaxMm) as string[];
+      let ty = numY + descH + 2;
+      const lineStep = 3.15;
+      for (const nl of noteLines) {
+        doc.text(nl, margin, ty);
+        ty += lineStep;
+      }
+      doc.setTextColor(0, 0, 0);
+      extraBelowConcept = Math.max(4.8, noteLines.length * lineStep + 1.2);
+    }
     doc.setFont("helvetica", "normal");
     doc.setFontSize(numFont);
-    doc.text(String(line.quantity), colQtyR, numY, { align: "right" });
+    doc.setTextColor(0, 0, 0);
+    if (partialQty) {
+      const eff = round2(line.quantity * (line.billableHoursPercent! / 100));
+      const qFmt = line.quantity.toLocaleString("es-ES", { maximumFractionDigits: 4 });
+      const effFmt = eff.toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+      const qStr = `${qFmt} h`;
+      doc.text(qStr, colQtyR, numY, { align: "right" });
+      const wTot = doc.getTextWidth(qStr);
+      const leftTot = colQtyR - wTot;
+      doc.setDrawColor(72, 72, 72);
+      doc.setLineWidth(0.28);
+      doc.line(leftTot, numY - 1.1, colQtyR, numY - 1.1);
+      doc.setDrawColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${effFmt} h`, colQtyR, numY + 3.25, { align: "right" });
+      doc.setFont("helvetica", "normal");
+    } else {
+      doc.text(String(line.quantity), colQtyR, numY, { align: "right" });
+    }
     doc.text(money(line.unitPrice), colPriceR, numY, { align: "right" });
     doc.text(`${money(line.vatAmount)} (${line.vatRate}%)`, colVatR, numY, { align: "right" });
     doc.text(`${money(line.irpfAmount)} (${line.irpfRate}%)`, colIrpfR, numY, { align: "right" });
     doc.text(money(line.lineTotal), colTotalR, numY, { align: "right" });
     doc.setFontSize(8.5);
-    y += Math.max(descH, 6) + gapAfterLine;
+    const rowCoreH = partialQty
+      ? Math.max(descH + extraBelowConcept, 9.6)
+      : Math.max(descH, 6);
+    y += rowCoreH + gapAfterLine;
   }
 
   /** Separador + totales + hash / nota proforma deben caber en la página o pasan a una nueva. */

@@ -38,6 +38,8 @@ export interface BillingInvoiceLineRecord {
   description: string;
   quantity: number;
   unitPrice: number;
+  /** % de la cantidad (p. ej. horas) que entra en el importe; 100 = íntegro. Solo relevante en BILLABLE. */
+  billableHoursPercent: number;
   vatRate: number;
   irpfRate: number;
   taxableBase: number;
@@ -130,6 +132,8 @@ export interface BillingInvoiceLineInput {
   description: string;
   quantity: number;
   unitPrice: number;
+  /** 0.01–100; por defecto 100 (toda la cantidad facturable). */
+  billableHoursPercent: number;
   vatRate: 21 | 10 | 4;
   irpfRate: number;
 }

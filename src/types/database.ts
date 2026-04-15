@@ -468,6 +468,7 @@ export interface BillingInvoiceLineRow {
   description: string;
   quantity: string;
   unit_price: string;
+  billable_hours_percent?: string;
   vat_rate: string;
   irpf_rate: string;
   taxable_base: string;
