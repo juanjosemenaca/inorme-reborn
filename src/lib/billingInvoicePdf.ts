@@ -545,6 +545,10 @@ export async function generateBillingInvoicePdfBlob(
   const colIrpfR = 170;
   const colTotalR = pageW - margin;
   const descMaxMm = colQtyR - margin - gapConcept;
+  /** Sangría solo en líneas facturables: el concepto queda más cerca de la columna Cant. */
+  const billableConceptIndentMm = 8;
+  const conceptLeftBillable = margin + billableConceptIndentMm;
+  const descMaxMmBillable = Math.max(20, colQtyR - conceptLeftBillable - gapConcept);
 
   /** Última coordenada Y segura para el cuerpo (evita cortes al no paginar). */
   const maxContentY = PDF_PAGE_H_MM - margin;
@@ -582,7 +586,9 @@ export async function generateBillingInvoicePdfBlob(
   const lineHeightPaginationFudgeMm = 8;
 
   for (const line of invoice.lines) {
-    const estH = estimateInvoiceLineRowHeightMm(doc, line, descMaxMm, gapAfterLine);
+    const descWForEst =
+      line.lineType === "BILLABLE" ? descMaxMmBillable : descMaxMm;
+    const estH = estimateInvoiceLineRowHeightMm(doc, line, descWForEst, gapAfterLine);
     if (y + estH + lineHeightPaginationFudgeMm > maxContentY) {
       y = startConceptsContinuationPage();
     }
@@ -615,7 +621,11 @@ export async function generateBillingInvoicePdfBlob(
       continue;
     }
     const numY = y;
-    const descH = drawBillingRichLinePdf(doc, margin, y, descMaxMm, line.description || "—", {
+    const descLeft =
+      line.lineType === "BILLABLE" ? conceptLeftBillable : margin;
+    const descW =
+      line.lineType === "BILLABLE" ? descMaxMmBillable : descMaxMm;
+    const descH = drawBillingRichLinePdf(doc, descLeft, y, descW, line.description || "—", {
       fontSize: 8.5,
       lineHeightMm: 5.7,
     });
@@ -633,11 +643,11 @@ export async function generateBillingInvoicePdfBlob(
       const qFmt = line.quantity.toLocaleString("es-ES", { maximumFractionDigits: 4 });
       const effFmt = eff.toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
       const note = `totales: ${qFmt} h facturables: ${p.toLocaleString("es-ES", { maximumFractionDigits: 4 })}% total facturable: ${effFmt} h`;
-      const noteLines = doc.splitTextToSize(note, descMaxMm) as string[];
+      const noteLines = doc.splitTextToSize(note, descW) as string[];
       let ty = numY + descH + 2;
       const lineStep = 3.15;
       for (const nl of noteLines) {
-        doc.text(nl, margin, ty);
+        doc.text(nl, descLeft, ty);
         ty += lineStep;
       }
       doc.setTextColor(0, 0, 0);
