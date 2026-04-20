@@ -5,7 +5,13 @@
  */
 
 export type DbUserRole = "ADMIN" | "WORKER";
-export type DbWorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK" | "AGENDA" | "GASTOS";
+export type DbWorkerModuleKey =
+  | "VACATIONS"
+  | "MESSAGES"
+  | "TIME_CLOCK"
+  | "AGENDA"
+  | "GASTOS"
+  | "LEGAL";
 
 export type DbEmploymentType =
   | "FIJO"
@@ -509,3 +515,146 @@ export type BackofficeUserInsert = Omit<
   id?: string;
   auth_user_id?: string | null;
 };
+
+/** Grupo Legal — filas Postgres */
+export interface LegalClientRow {
+  id: string;
+  display_name: string;
+  tax_id: string;
+  fiscal_address: string;
+  client_type: "COMPANY" | "INDIVIDUAL";
+  email: string;
+  phone: string;
+  notes: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LegalContactRow {
+  id: string;
+  legal_client_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  mobile: string;
+  position: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LegalMatterRow {
+  id: string;
+  legal_client_id: string;
+  matter_code: string | null;
+  matter_type: string;
+  status: string;
+  responsible_lawyer_id: string | null;
+  title: string;
+  description: string;
+  opened_at: string | null;
+  closed_at: string | null;
+  key_dates: unknown;
+  created_by_backoffice_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LegalMatterActivityRow {
+  id: string;
+  matter_id: string;
+  activity_type: string;
+  title: string;
+  body: string;
+  metadata: Record<string, unknown>;
+  occurred_at: string;
+  created_by_backoffice_user_id: string | null;
+  created_at: string;
+}
+
+export interface LegalDocumentRow {
+  id: string;
+  matter_id: string;
+  name: string;
+  doc_type: string;
+  version: number;
+  storage_bucket: string;
+  storage_path: string;
+  mime_type: string;
+  file_size: number | null;
+  uploaded_by_backoffice_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LegalProcedureRow {
+  id: string;
+  matter_id: string;
+  court_name: string;
+  procedure_number: string;
+  procedural_status: string;
+  key_dates: unknown;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LegalInvoiceRow {
+  id: string;
+  matter_id: string | null;
+  legal_client_id: string;
+  invoice_number: string | null;
+  status: string;
+  billing_model: string;
+  issue_date: string | null;
+  due_date: string | null;
+  currency: string;
+  subtotal: string;
+  tax_total: string;
+  grand_total: string;
+  notes: string;
+  created_by_backoffice_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LegalInvoiceLineRow {
+  id: string;
+  invoice_id: string;
+  line_order: number;
+  line_type: string;
+  description: string;
+  quantity: string;
+  unit_price: string;
+  line_total: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LegalTimeEntryRow {
+  id: string;
+  matter_id: string;
+  backoffice_user_id: string;
+  work_date: string;
+  hours: string;
+  description: string;
+  billable: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LegalCalendarEventRow {
+  id: string;
+  matter_id: string | null;
+  event_type: string;
+  title: string;
+  description: string;
+  starts_at: string;
+  ends_at: string | null;
+  reminder_at: string | null;
+  all_day: boolean;
+  created_by_backoffice_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}

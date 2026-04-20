@@ -34,4 +34,13 @@ export const queryKeys = {
   billingInvoices: ["billingInvoices"] as const,
   workerExpenseSheets: (companyWorkerId: string) => ["workerExpenseSheets", companyWorkerId] as const,
   workerExpenseSheetsAdmin: ["workerExpenseSheets", "admin"] as const,
+  legalClients: ["legalClients"] as const,
+  legalMatters: ["legalMatters"] as const,
+  legalMatter: (id: string) => ["legalMatter", id] as const,
+  legalMatterActivities: (matterId: string) => ["legalMatterActivities", matterId] as const,
+  legalDocuments: (matterId: string) => ["legalDocuments", matterId] as const,
+  legalProcedures: (matterId: string) => ["legalProcedures", matterId] as const,
+  legalInvoices: ["legalInvoices"] as const,
+  legalTimeEntries: (filtersKey: string) => ["legalTimeEntries", filtersKey] as const,
+  legalCalendarEvents: (rangeKey: string) => ["legalCalendarEvents", rangeKey] as const,
 };

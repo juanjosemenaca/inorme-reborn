@@ -3,7 +3,13 @@ import { companyWorkerDisplayName } from "@/types/companyWorkers";
 
 /** Rol en el backoffice Inorme */
 export type UserRole = "ADMIN" | "WORKER";
-export type WorkerModuleKey = "VACATIONS" | "MESSAGES" | "TIME_CLOCK" | "AGENDA" | "GASTOS";
+export type WorkerModuleKey =
+  | "VACATIONS"
+  | "MESSAGES"
+  | "TIME_CLOCK"
+  | "AGENDA"
+  | "GASTOS"
+  | "LEGAL";
 
 export const ALL_WORKER_MODULES: WorkerModuleKey[] = [
   "VACATIONS",
@@ -11,6 +17,7 @@ export const ALL_WORKER_MODULES: WorkerModuleKey[] = [
   "TIME_CLOCK",
   "AGENDA",
   "GASTOS",
+  "LEGAL",
 ];
 
 /**

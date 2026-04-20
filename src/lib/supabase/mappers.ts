@@ -359,7 +359,8 @@ function normalizeModules(value: unknown): WorkerModuleKey[] {
       raw === "MESSAGES" ||
       raw === "TIME_CLOCK" ||
       raw === "AGENDA" ||
-      raw === "GASTOS"
+      raw === "GASTOS" ||
+      raw === "LEGAL"
     ) {
       set.add(raw);
     }

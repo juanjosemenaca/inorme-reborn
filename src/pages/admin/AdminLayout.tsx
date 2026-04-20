@@ -25,6 +25,7 @@ import {
   NotebookPen,
   Database,
   Euro,
+  Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +82,13 @@ const NAV_KEYS = [
     labelKey: "admin.layout.nav_billing",
     icon: FileText,
     roles: ["WORKER", "ADMIN"] as const,
+  },
+  {
+    to: "/admin/grupo-legal",
+    labelKey: "admin.layout.nav_legal_group",
+    icon: Scale,
+    roles: ["WORKER", "ADMIN"] as const,
+    requiredModule: "LEGAL" as const,
   },
   {
     to: "/admin/mensajes",

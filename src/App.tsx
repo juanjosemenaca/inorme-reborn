@@ -41,6 +41,12 @@ import AdminWorkerAgenda from "./pages/admin/AdminWorkerAgenda";
 import WorkerExpenses from "./pages/admin/WorkerExpenses";
 import AdminWorkerExpenses from "./pages/admin/AdminWorkerExpenses";
 import AdminBilling from "./pages/admin/AdminBilling";
+import LegalGrupoLayout from "./pages/admin/legal-grupo/LegalGrupoLayout";
+import LegalGrupoDashboard from "./pages/admin/legal-grupo/LegalGrupoDashboard";
+import LegalGrupoClientsPage from "./pages/admin/legal-grupo/LegalGrupoClientsPage";
+import LegalGrupoMattersPage from "./pages/admin/legal-grupo/LegalGrupoMattersPage";
+import LegalGrupoMatterDetailPage from "./pages/admin/legal-grupo/LegalGrupoMatterDetailPage";
+import LegalGrupoInvoicesPage from "./pages/admin/legal-grupo/LegalGrupoInvoicesPage";
 import { ADMIN_ROUTE_SEG } from "@/constants/adminPaths";
 
 const queryClient = new QueryClient();
@@ -139,6 +145,20 @@ const App = () => (
                     </RoleRoute>
                   }
                 />
+                <Route
+                  path="grupo-legal"
+                  element={
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="LEGAL">
+                      <LegalGrupoLayout />
+                    </RoleRoute>
+                  }
+                >
+                  <Route index element={<LegalGrupoDashboard />} />
+                  <Route path="clientes" element={<LegalGrupoClientsPage />} />
+                  <Route path="expedientes" element={<LegalGrupoMattersPage />} />
+                  <Route path="expedientes/:matterId" element={<LegalGrupoMatterDetailPage />} />
+                  <Route path="facturas" element={<LegalGrupoInvoicesPage />} />
+                </Route>
                 <Route
                   path="fichajes"
                   element={
