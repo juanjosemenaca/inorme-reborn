@@ -10,6 +10,11 @@ import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { getMissingSupabaseEnvVars, isSupabaseConfigured } from "@/lib/supabaseClient";
+import {
+  backofficeLoginSubtitleKey,
+  backofficeLoginTitleKey,
+  isAttisBackoffice,
+} from "@/lib/backofficeProduct";
 
 const AdminLogin = () => {
   const { isAuthenticated, login, ready, needsPasswordChange } = useAdminAuth();
@@ -178,8 +183,8 @@ const AdminLogin = () => {
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <Lock className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">{t("admin.login.title")}</CardTitle>
-          <CardDescription>{t("admin.login.subtitle")}</CardDescription>
+          <CardTitle className="text-2xl">{t(backofficeLoginTitleKey())}</CardTitle>
+          <CardDescription>{t(backofficeLoginSubtitleKey())}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -191,7 +196,9 @@ const AdminLogin = () => {
                 autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="usuario@inorme.com"
+                placeholder={t(
+                  isAttisBackoffice() ? "admin.login_attis.email_placeholder" : "admin.login.email_placeholder"
+                )}
                 required
                 className="h-11"
               />

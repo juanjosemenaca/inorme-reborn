@@ -42,6 +42,7 @@
     "role_admin": "Administrador",
     "role_worker": "Trabajador",
     "backoffice": "Backoffice",
+    "backoffice_attis": "Back Office Attis",
     "error": "Error"
   },
   "layout": {
@@ -96,11 +97,20 @@
     "nav_my_profile_pending_aria": "Tu solicitud de cambio de ficha está pendiente de revisión",
     "nav_messages_pending_aria": "Mensajes: {{count}} sin leer",
     "badge_admin": "Administrador",
-    "badge_worker": "Trabajador"
+    "badge_worker": "Trabajador",
+    "document_title": "Inorme · Administración"
+  },
+  "layout_attis": {
+    "brand": "Attis",
+    "admin_title": "Back Office Attis",
+    "admin_subtitle": "Panel de gestión (instancia independiente)",
+    "mobile_title": "Attis · Back office",
+    "document_title": "Back Office Attis"
   },
   "login": {
     "title": "Backoffice Inorme",
     "subtitle": "Accede con tu usuario corporativo. Los roles ADMIN y trabajador tienen permisos distintos.",
+    "email_placeholder": "usuario@inorme.com",
     "email_label": "Email",
     "password_label": "Contraseña",
     "password_hint": "Pulsa el icono del ojo para ver lo que escribes y evitar errores al teclear.",
@@ -131,6 +141,11 @@
     "env_prod_step3": "Los valores están en Supabase →",
     "env_prod_step3_link": "Project Settings → API",
     "env_prod_step4": "Guarda y pulsa Redeploy en el último deployment (o haz un commit nuevo). Sin un build nuevo, el front seguirá sin esas claves."
+  },
+  "login_attis": {
+    "title": "Back Office Attis",
+    "subtitle": "Accede con tu usuario. Los roles administrador y trabajador tienen permisos distintos.",
+    "email_placeholder": "usuario@empresa.com"
   },
   "passwordChange": {
     "header_title": "Cambiar contraseña",

@@ -42,6 +42,7 @@
     "role_admin": "Administrador",
     "role_worker": "Treballador",
     "backoffice": "Backoffice",
+    "backoffice_attis": "Back Office Attis",
     "error": "Error"
   },
   "layout": {
@@ -96,11 +97,20 @@
     "nav_my_profile_pending_aria": "La teva sol·licitud de canvi de fitxa està pendent de revisió",
     "nav_messages_pending_aria": "Missatges: {{count}} sense llegir",
     "badge_admin": "Administrador",
-    "badge_worker": "Treballador"
+    "badge_worker": "Treballador",
+    "document_title": "Inorme · Administració"
+  },
+  "layout_attis": {
+    "brand": "Attis",
+    "admin_title": "Back Office Attis",
+    "admin_subtitle": "Panell de gestió (instància independent)",
+    "mobile_title": "Attis · Back office",
+    "document_title": "Back Office Attis"
   },
   "login": {
     "title": "Backoffice Inorme",
     "subtitle": "Accedeix amb el teu usuari corporatiu. Els rols ADMIN i treballador tenen permisos diferents.",
+    "email_placeholder": "usuari@inorme.com",
     "email_label": "Correu",
     "password_label": "Contrasenya",
     "password_hint": "Prem la icona de l'ull per veure el que escrius i evitar errors.",
@@ -131,6 +141,11 @@
     "env_prod_step3": "Els valors són a Supabase →",
     "env_prod_step3_link": "Project Settings → API",
     "env_prod_step4": "Desa i prem Redeploy a l'últim deployment (o fes un commit nou). Sense un build nou, el front seguirà sense aquestes claus."
+  },
+  "login_attis": {
+    "title": "Back Office Attis",
+    "subtitle": "Accedeix amb el teu usuari. Els rols administrador i treballador tenen permisos diferents.",
+    "email_placeholder": "usuari@empresa.com"
   },
   "passwordChange": {
     "header_title": "Canvi de contrasenya",
