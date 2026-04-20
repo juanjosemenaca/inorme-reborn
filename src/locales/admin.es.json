@@ -1206,6 +1206,20 @@
     "toast_rejected": "Solicitud rechazada.",
     "toast_deleted": "Solicitud eliminada."
   },
+  "intranet_alerts": {
+    "clock_in_title": "Aún no has fichado la entrada",
+    "clock_in_desc": "Hoy es día laborable y no consta tu fichaje de entrada. Regístralo cuando empieces la jornada.",
+    "clock_out_title": "Recuerda fichar la salida",
+    "clock_out_desc": "Sigues con la jornada abierta (entrada sin salida). Cierra el fichaje al terminar para que el registro quede completo.",
+    "messages_title": "Mensajes nuevos en la intranet",
+    "messages_desc": "Tienes {{count}} mensaje(s) nuevo(s) sin leer. Revísalos para no perder avisos o peticiones.",
+    "profile_title": "Cambios pendientes en tu ficha",
+    "profile_desc": "Hay una solicitud de modificación de tu ficha pendiente de revisión. Abre «Mi ficha» para ver el detalle.",
+    "btn_go_clock": "Ir a fichar",
+    "btn_go_messages": "Abrir mensajes",
+    "btn_go_profile": "Ver mi ficha",
+    "btn_understood": "Entendido"
+  },
   "notfound": {
     "title": "404",
     "message": "Página no encontrada",

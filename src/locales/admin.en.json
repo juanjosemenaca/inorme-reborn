@@ -1206,6 +1206,20 @@
     "toast_rejected": "Request rejected.",
     "toast_deleted": "Request deleted."
   },
+  "intranet_alerts": {
+    "clock_in_title": "You have not clocked in yet",
+    "clock_in_desc": "Today is a working day and there is no clock-in on record. Register it when you start your shift.",
+    "clock_out_title": "Remember to clock out",
+    "clock_out_desc": "Your shift is still open (clock-in without clock-out). Clock out when you finish so the record is complete.",
+    "messages_title": "New intranet messages",
+    "messages_desc": "You have {{count}} new unread message(s). Check them so you do not miss notices or requests.",
+    "profile_title": "Pending changes on your profile",
+    "profile_desc": "There is a pending profile change request. Open “My profile” to review it.",
+    "btn_go_clock": "Go to time clock",
+    "btn_go_messages": "Open messages",
+    "btn_go_profile": "View my profile",
+    "btn_understood": "OK"
+  },
   "notfound": {
     "title": "404",
     "message": "Page not found",

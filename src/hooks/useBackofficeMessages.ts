@@ -14,11 +14,16 @@ export function useMyBackofficeMessages(enabled = true, includeArchived = false)
   });
 }
 
-export function useMyUnreadBackofficeMessageCount(enabled = true) {
+export function useMyUnreadBackofficeMessageCount(
+  enabled = true,
+  options?: { refetchIntervalMs?: number | false }
+) {
   return useQuery({
     queryKey: queryKeys.backofficeMessageUnreadCount,
     queryFn: countMyUnreadBackofficeMessages,
     enabled: isSupabaseConfigured() && enabled,
     staleTime: 60_000,
+    refetchInterval: options?.refetchIntervalMs ?? false,
+    refetchOnWindowFocus: true,
   });
 }

@@ -1206,6 +1206,20 @@
     "toast_rejected": "Sol·licitud rebutjada.",
     "toast_deleted": "Sol·licitud eliminada."
   },
+  "intranet_alerts": {
+    "clock_in_title": "Encara no has fitxat l'entrada",
+    "clock_in_desc": "Avui és dia laborable i no consta el teu fitxatge d'entrada. Registra'l quan comencis la jornada.",
+    "clock_out_title": "Recorda fitxar la sortida",
+    "clock_out_desc": "Encara tens la jornada oberta (entrada sense sortida). Tanca el fitxatge en acabar perquè el registre quedi complet.",
+    "messages_title": "Missatges nous a la intranet",
+    "messages_desc": "Tens {{count}} missatge(s) nou(s) sense llegir. Revisa'ls per no perdre avisos o peticions.",
+    "profile_title": "Canvis pendents a la teva fitxa",
+    "profile_desc": "Hi ha una sol·licitud de modificació de la teva fitxa pendent de revisió. Obre «La meva fitxa» per veure'n el detall.",
+    "btn_go_clock": "Anar a fitxar",
+    "btn_go_messages": "Obrir missatges",
+    "btn_go_profile": "Veure la meva fitxa",
+    "btn_understood": "Entès"
+  },
   "notfound": {
     "title": "404",
     "message": "Pàgina no trobada",

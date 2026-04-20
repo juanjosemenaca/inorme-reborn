@@ -43,6 +43,7 @@ import { usePendingWorkerVacationChangeRequests } from "@/hooks/useWorkerVacatio
 import { usePendingWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
 import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
 import { ADMIN_PATHS } from "@/constants/adminPaths";
+import { IntranetAttentionDialogs } from "@/components/admin/IntranetAttentionDialogs";
 
 const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
@@ -803,6 +804,8 @@ const AdminLayout = () => {
   /* ——— Vista ADMIN: shell oscuro + área clara ——— */
   if (isAdmin && user) {
     return (
+      <>
+        <IntranetAttentionDialogs />
       <div className="min-h-screen flex flex-col md:flex-row bg-slate-950">
         {/* Sidebar escritorio */}
         <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-slate-800/80 bg-slate-950">
@@ -895,11 +898,14 @@ const AdminLayout = () => {
           </main>
         </div>
       </div>
+      </>
     );
   }
 
   /* ——— Vista TRABAJADOR: layout clásico ——— */
   return (
+    <>
+      <IntranetAttentionDialogs />
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 sticky top-0 z-10">
         <div className="flex h-14 items-center justify-between px-4 lg:px-6 max-w-7xl mx-auto w-full gap-2">
@@ -968,6 +974,7 @@ const AdminLayout = () => {
         </main>
       </div>
     </div>
+    </>
   );
 };
 
