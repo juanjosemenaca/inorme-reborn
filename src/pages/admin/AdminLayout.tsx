@@ -44,10 +44,6 @@ import { usePendingWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
 import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
 import { ADMIN_PATHS } from "@/constants/adminPaths";
 import { IntranetAttentionDialogs } from "@/components/admin/IntranetAttentionDialogs";
-import {
-  backofficeLayoutKey,
-  backofficeWorkerShellTitleKey,
-} from "@/lib/backofficeProduct";
 
 const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
@@ -196,11 +192,6 @@ const AdminLayout = () => {
   const { t } = useLanguage();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    document.title = t(backofficeLayoutKey("document_title"));
-  }, [user, t]);
 
   const supabaseOk = isSupabaseConfigured();
   const { data: pendingProfileRequests = [] } = usePendingWorkerProfileChangeRequests(
@@ -819,9 +810,9 @@ const AdminLayout = () => {
         {/* Sidebar escritorio */}
         <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-slate-800/80 bg-slate-950">
           <div className="p-6 border-b border-slate-800/80">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">{t(backofficeLayoutKey("brand"))}</p>
-            <p className="text-lg font-bold text-white tracking-tight mt-0.5">{t(backofficeLayoutKey("admin_title"))}</p>
-            <p className="text-xs text-slate-400 mt-2 line-clamp-2">{t(backofficeLayoutKey("admin_subtitle"))}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">{t("admin.layout.brand")}</p>
+            <p className="text-lg font-bold text-white tracking-tight mt-0.5">{t("admin.layout.admin_title")}</p>
+            <p className="text-xs text-slate-400 mt-2 line-clamp-2">{t("admin.layout.admin_subtitle")}</p>
           </div>
           <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
             <NavLinks
@@ -853,7 +844,7 @@ const AdminLayout = () => {
                 <Menu className="h-5 w-5" />
               </Button>
               <span className="text-sm font-medium text-muted-foreground truncate md:hidden">
-                {t(backofficeLayoutKey("mobile_title"))}
+                {t("admin.layout.mobile_title")}
               </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -888,8 +879,8 @@ const AdminLayout = () => {
               />
               <div className="md:hidden fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] bg-slate-950 border-r border-slate-800 shadow-xl flex flex-col">
                 <div className="p-5 border-b border-slate-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">{t(backofficeLayoutKey("brand"))}</p>
-                  <p className="text-lg font-bold text-white">{t(backofficeLayoutKey("admin_title"))}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">{t("admin.layout.brand")}</p>
+                  <p className="text-lg font-bold text-white">{t("admin.layout.admin_title")}</p>
                 </div>
                 <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
                   <NavLinks
@@ -928,7 +919,7 @@ const AdminLayout = () => {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <h1 className="font-semibold text-lg tracking-tight truncate">{t(backofficeWorkerShellTitleKey())}</h1>
+            <h1 className="font-semibold text-lg tracking-tight truncate">{t("admin.common.backoffice")}</h1>
             {user && (
               <>
                 <span className="text-muted-foreground text-sm hidden sm:inline truncate">

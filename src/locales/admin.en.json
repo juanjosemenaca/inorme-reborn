@@ -42,7 +42,6 @@
     "role_admin": "Administrator",
     "role_worker": "Worker",
     "backoffice": "Back office",
-    "backoffice_attis": "Back Office Attis",
     "error": "Error"
   },
   "layout": {
@@ -97,20 +96,11 @@
     "nav_my_profile_pending_aria": "Your profile change request is awaiting review",
     "nav_messages_pending_aria": "Messages: {{count}} unread",
     "badge_admin": "Administrator",
-    "badge_worker": "Worker",
-    "document_title": "Inorme · Administration"
-  },
-  "layout_attis": {
-    "brand": "Attis",
-    "admin_title": "Back Office Attis",
-    "admin_subtitle": "Management panel (standalone instance)",
-    "mobile_title": "Attis · Back office",
-    "document_title": "Back Office Attis"
+    "badge_worker": "Worker"
   },
   "login": {
     "title": "Inorme back office",
     "subtitle": "Sign in with your corporate account. ADMIN and worker roles have different permissions.",
-    "email_placeholder": "user@inorme.com",
     "email_label": "Email",
     "password_label": "Password",
     "password_hint": "Use the eye icon to see what you type and avoid typos.",
@@ -141,11 +131,6 @@
     "env_prod_step3": "Values are in Supabase →",
     "env_prod_step3_link": "Project Settings → API",
     "env_prod_step4": "Save, then Redeploy the latest deployment (or push a new commit). Without a new build, the app will still lack those keys."
-  },
-  "login_attis": {
-    "title": "Back Office Attis",
-    "subtitle": "Sign in with your account. Administrator and worker roles have different permissions.",
-    "email_placeholder": "user@company.com"
   },
   "passwordChange": {
     "header_title": "Change password",
