@@ -103,6 +103,7 @@ export interface ProviderContactPersonRow {
 
 export interface ProjectRow {
   id: string;
+  project_code: string;
   title: string;
   description: string;
   client_id: string;

@@ -1,6 +1,8 @@
 /** Proyecto de negocio vinculado a un cliente (y opcionalmente a un cliente final si el contratante es intermediario). */
 export interface ProjectRecord {
   id: string;
+  /** Código único identificativo (ej. PRJ-000123). */
+  projectCode: string;
   title: string;
   description: string;
   clientId: string;

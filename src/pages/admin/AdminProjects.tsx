@@ -94,6 +94,7 @@ const AdminProjects = () => {
     if (!q) return projects;
     return projects.filter((p) => {
       const hay = [
+        p.projectCode,
         p.title,
         p.description,
         clientLabel(p.clientId),
@@ -108,6 +109,7 @@ const AdminProjects = () => {
   const sorted = useMemo(() => {
     if (!sort) return filtered;
     const getters: Record<string, (p: ProjectWithDocuments) => string | number> = {
+      code: (p) => p.projectCode,
       title: (p) => p.title,
       client: (p) => clientLabel(p.clientId),
       finalClient: (p) => (p.finalClientId ? clientLabel(p.finalClientId) : ""),
@@ -337,6 +339,13 @@ const AdminProjects = () => {
               <TableHeader>
                 <TableRow>
                   <SortableTableHead
+                    label={t("admin.projects.col_code")}
+                    columnKey="code"
+                    currentSort={sort}
+                    onSort={handleSort}
+                    className="min-w-[110px]"
+                  />
+                  <SortableTableHead
                     label={t("admin.projects.col_title")}
                     columnKey="title"
                     currentSort={sort}
@@ -395,6 +404,9 @@ const AdminProjects = () => {
                   const showFinal = cl?.clientKind === "INTERMEDIARIO";
                   return (
                     <TableRow key={p.id}>
+                      <TableCell className="font-mono text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+                        {p.projectCode}
+                      </TableCell>
                       <TableCell className="font-medium max-w-[220px]">
                         <div className="truncate" title={p.title}>
                           {p.title}

@@ -50,8 +50,10 @@ import { isoDateOnlyFromDb } from "@/lib/isoDate";
 // ---------------------------------------------------------------------------
 
 export function projectRowToDomain(row: ProjectRow): ProjectRecord {
+  const code = (row as { project_code?: string }).project_code?.trim();
   return {
     id: row.id,
+    projectCode: code || row.id,
     title: row.title,
     description: row.description,
     clientId: row.client_id,
@@ -131,6 +133,7 @@ export function projectRecordToInsert(
 ): ProjectInsert {
   return {
     id: record.id || undefined,
+    project_code: record.projectCode,
     title: record.title,
     description: record.description,
     client_id: record.clientId,

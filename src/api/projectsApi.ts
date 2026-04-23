@@ -37,6 +37,11 @@ function isProjectMembersSchemaCacheError(err: unknown): boolean {
   return m.includes("project_members") && m.includes("schema cache");
 }
 
+function isMissingProjectsColumnError(err: unknown, column: string): boolean {
+  const m = getErrorMessage(err).toLowerCase();
+  return m.includes("projects") && m.includes(column.toLowerCase()) && m.includes("column");
+}
+
 function toNullableId(s: string | null | undefined): string | null {
   if (s === undefined || s === null) return null;
   const t = String(s).trim();
@@ -208,9 +213,29 @@ export async function createProject(input: SaveProjectInput, allClients: ClientR
     end_notice_at: notice,
     end_notice_message_sent_at: null,
   };
-  const { data: inserted, error } = await sb.from("projects").insert(insert).select("*").single();
-  if (error) throwSupabaseError(error);
-  return projectRowToDomain(inserted as ProjectRow);
+  const firstTry = await sb.from("projects").insert(insert).select("*").single();
+  if (!firstTry.error) return projectRowToDomain(firstTry.data as ProjectRow);
+
+  // Compatibilidad local: permite guardar aunque falten columnas de la migracion reciente.
+  if (
+    isMissingProjectsColumnError(firstTry.error, "responsible_company_worker_id") ||
+    isMissingProjectsColumnError(firstTry.error, "end_notice_at") ||
+    isMissingProjectsColumnError(firstTry.error, "end_notice_message_sent_at")
+  ) {
+    const legacyInsert = {
+      title: input.title.trim(),
+      description: input.description.trim(),
+      client_id: input.clientId,
+      final_client_id: finalId,
+      start_date: startD,
+      end_date: endD,
+    };
+    const legacyTry = await sb.from("projects").insert(legacyInsert).select("*").single();
+    if (legacyTry.error) throwSupabaseError(legacyTry.error);
+    return projectRowToDomain(legacyTry.data as ProjectRow);
+  }
+
+  throwSupabaseError(firstTry.error);
 }
 
 export async function updateProject(
@@ -219,12 +244,36 @@ export async function updateProject(
   allClients: ClientRecord[]
 ): Promise<ProjectRecord> {
   const sb = requireSupabase();
-  const { data: prev, error: prevErr } = await sb
+  const prevRes = await sb
     .from("projects")
     .select("end_date, end_notice_at, responsible_company_worker_id, end_notice_message_sent_at")
     .eq("id", id)
     .maybeSingle();
-  if (prevErr) throwSupabaseError(prevErr);
+  let prev = prevRes.data as
+    | {
+        end_date: string;
+        end_notice_at: string | null;
+        responsible_company_worker_id: string | null;
+      }
+    | null;
+  if (prevRes.error) {
+    if (
+      isMissingProjectsColumnError(prevRes.error, "end_notice_at") ||
+      isMissingProjectsColumnError(prevRes.error, "responsible_company_worker_id")
+    ) {
+      const basePrev = await sb.from("projects").select("end_date").eq("id", id).maybeSingle();
+      if (basePrev.error) throwSupabaseError(basePrev.error);
+      prev = basePrev.data
+        ? ({
+            end_date: (basePrev.data as { end_date: string }).end_date,
+            end_notice_at: null,
+            responsible_company_worker_id: null,
+          } as const)
+        : null;
+    } else {
+      throwSupabaseError(prevRes.error);
+    }
+  }
 
   const client = allClients.find((c) => c.id === input.clientId);
   const finalId = validateProjectFinalClient(client, input.finalClientId, allClients);
@@ -257,9 +306,28 @@ export async function updateProject(
       patch.end_notice_message_sent_at = null;
     }
   }
-  const { data: updated, error } = await sb.from("projects").update(patch).eq("id", id).select("*").single();
-  if (error) throwSupabaseError(error);
-  return projectRowToDomain(updated as ProjectRow);
+  const updateTry = await sb.from("projects").update(patch).eq("id", id).select("*").single();
+  if (!updateTry.error) return projectRowToDomain(updateTry.data as ProjectRow);
+
+  if (
+    isMissingProjectsColumnError(updateTry.error, "responsible_company_worker_id") ||
+    isMissingProjectsColumnError(updateTry.error, "end_notice_at") ||
+    isMissingProjectsColumnError(updateTry.error, "end_notice_message_sent_at")
+  ) {
+    const legacyPatch = {
+      title: input.title.trim(),
+      description: input.description.trim(),
+      client_id: input.clientId,
+      final_client_id: finalId,
+      start_date: startD,
+      end_date: endD,
+    };
+    const legacyTry = await sb.from("projects").update(legacyPatch).eq("id", id).select("*").single();
+    if (legacyTry.error) throwSupabaseError(legacyTry.error);
+    return projectRowToDomain(legacyTry.data as ProjectRow);
+  }
+
+  throwSupabaseError(updateTry.error);
 }
 
 /** Ejecuta avisos de fin de proyecto para el día actual (Europa/Madrid). Idempotente en BD. */
