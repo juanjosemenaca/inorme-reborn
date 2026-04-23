@@ -2,6 +2,7 @@ import { getProfileByAuthUserId } from "@/api/backofficeUsersApi";
 import { PROJECT_DOCUMENTS_BUCKET } from "@/api/projectsApi";
 import { requireSupabase } from "@/api/supabaseRequire";
 import { getErrorMessage } from "@/lib/errorMessage";
+import { sortByLocaleKey } from "@/lib/sortAlpha";
 import { isInormeInformaticaOrganizacionIssuer } from "@/lib/billingPrivacyFooter";
 import type {
   BillingInvoiceLineRow,
@@ -157,15 +158,16 @@ function invoiceRowToDomain(
 export async function fetchBillingSeries(): Promise<BillingSeriesRecord[]> {
   await requireProfile();
   const sb = requireSupabase();
-  const { data, error } = await sb.from("billing_series").select("*").order("code", { ascending: true });
+  const { data, error } = await sb.from("billing_series").select("*");
   if (error) throwErr(error);
-  return ((data ?? []) as BillingSeriesRow[]).map((s) => ({
+  const list = ((data ?? []) as BillingSeriesRow[]).map((s) => ({
     id: s.id,
     issuerId: s.issuer_id,
     code: s.code,
     label: s.label,
     active: s.active,
   }));
+  return sortByLocaleKey(list, (s) => s.label || s.code);
 }
 
 function issuerRowToDomain(row: BillingIssuerRow): BillingIssuerRecord {
@@ -325,9 +327,10 @@ export async function removeBillingIssuerLogo(issuerId: string): Promise<void> {
 export async function fetchBillingIssuers(): Promise<BillingIssuerRecord[]> {
   await requireProfile();
   const sb = requireSupabase();
-  const { data, error } = await sb.from("billing_issuers").select("*").order("code", { ascending: true });
+  const { data, error } = await sb.from("billing_issuers").select("*");
   if (error) throwErr(error);
-  return ((data ?? []) as BillingIssuerRow[]).map(issuerRowToDomain);
+  const list = ((data ?? []) as BillingIssuerRow[]).map(issuerRowToDomain);
+  return sortByLocaleKey(list, (i) => i.legalName || i.code);
 }
 
 export async function createBillingIssuer(input: {

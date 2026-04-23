@@ -19,6 +19,10 @@ export type WorkerVacationAdminSummary = {
   annualAllowance: number;
   /** Días aprobados (marcados) del año seleccionado, sin filtrar por fecha actual. */
   usedInSelectedYear: number;
+  /** Días de traspaso (año anterior) ya marcados en el año seleccionado. */
+  carryoverUsedInSelectedYear: number;
+  /** Días de traspaso aprobados para disfrutar en el año seleccionado (desde el año previo). */
+  carryoverApprovedForSelectedYear: number;
   /** Días usados cuyo día ya pasó respecto a hoy (disfrutados). */
   enjoyedInSelectedYear: number;
   pendingInSelectedYear: number;
@@ -29,28 +33,60 @@ export type WorkerVacationAdminSummary = {
   unusedFromPreviousYear: number;
 };
 
+export type VacationBookingRow = {
+  companyWorkerId: string;
+  vacationDate: string;
+  carryoverFromYear: number | null;
+};
+
 export async function fetchVacationBookingRowsForYearRange(
   fromYear: number,
   toYear: number
-): Promise<{ companyWorkerId: string; vacationDate: string }[]> {
+): Promise<VacationBookingRow[]> {
   const sb = requireSupabase();
   const { data, error } = await sb
     .from("company_worker_vacation_days")
-    .select("company_worker_id, vacation_date")
+    .select("company_worker_id, vacation_date, carryover_from_year")
     .gte("vacation_date", `${fromYear}-01-01`)
     .lte("vacation_date", `${toYear}-12-31`);
   if (error) throwSupabaseError(error);
-  return (data ?? []).map((r) => ({
-    companyWorkerId: (r as { company_worker_id: string }).company_worker_id,
-    vacationDate: isoDateOnlyFromDb(String((r as { vacation_date: string }).vacation_date)),
-  }));
+  return (data ?? []).map((r) => {
+    const row = r as { company_worker_id: string; vacation_date: string; carryover_from_year: number | null };
+    return {
+      companyWorkerId: row.company_worker_id,
+      vacationDate: isoDateOnlyFromDb(String(row.vacation_date)),
+      carryoverFromYear: row.carryover_from_year == null ? null : Number(row.carryover_from_year),
+    };
+  });
+}
+
+async function fetchCarryoverApprovedByWorkerForTarget(
+  targetYear: number
+): Promise<Map<string, number>> {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from("worker_vacation_carryover_requests")
+    .select("company_worker_id, days_approved")
+    .eq("target_year", targetYear)
+    .eq("status", "APPROVED");
+  if (error) throwSupabaseError(error);
+  const m = new Map<string, number>();
+  for (const raw of data ?? []) {
+    const r = raw as { company_worker_id: string; days_approved: number | null };
+    const d = r.days_approved;
+    if (d == null || d <= 0) continue;
+    const w = r.company_worker_id;
+    m.set(w, (m.get(w) ?? 0) + d);
+  }
+  return m;
 }
 
 export function computeVacationSummaries(
   workers: CompanyWorkerRecord[],
   siteNameById: Map<string, string>,
-  rows: { companyWorkerId: string; vacationDate: string }[],
-  selectedYear: number
+  rows: VacationBookingRow[],
+  selectedYear: number,
+  carryoverApprovedByWorker: Map<string, number>
 ): WorkerVacationAdminSummary[] {
   const now = new Date();
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
@@ -58,6 +94,7 @@ export function computeVacationSummaries(
   ).padStart(2, "0")}`;
   const prevYear = selectedYear - 1;
   const byWorkerYear = new Map<string, Map<number, number>>();
+  const carryoverInSelected = new Map<string, number>();
   const enjoyedBeforeTodayByWorker = new Map<string, number>();
   for (const r of rows) {
     const y = parseInt(r.vacationDate.slice(0, 4), 10);
@@ -67,6 +104,12 @@ export function computeVacationSummaries(
     }
     const ym = byWorkerYear.get(r.companyWorkerId)!;
     ym.set(y, (ym.get(y) ?? 0) + 1);
+    if (y === selectedYear && r.carryoverFromYear != null) {
+      carryoverInSelected.set(
+        r.companyWorkerId,
+        (carryoverInSelected.get(r.companyWorkerId) ?? 0) + 1
+      );
+    }
     if (y === selectedYear && r.vacationDate < todayIso) {
       enjoyedBeforeTodayByWorker.set(
         r.companyWorkerId,
@@ -81,6 +124,8 @@ export function computeVacationSummaries(
     const usedSel = ym?.get(selectedYear) ?? 0;
     const enjoyedSel = enjoyedBeforeTodayByWorker.get(w.id) ?? 0;
     const usedPrev = ym?.get(prevYear) ?? 0;
+    const cUsed = carryoverInSelected.get(w.id) ?? 0;
+    const cApp = carryoverApprovedByWorker.get(w.id) ?? 0;
     return {
       workerId: w.id,
       workerName: companyWorkerDisplayName(w),
@@ -88,8 +133,11 @@ export function computeVacationSummaries(
       siteName: siteNameById.get(w.workCalendarSiteId) ?? "—",
       annualAllowance: allowance,
       usedInSelectedYear: usedSel,
+      carryoverUsedInSelectedYear: cUsed,
+      carryoverApprovedForSelectedYear: cApp,
       enjoyedInSelectedYear: enjoyedSel,
-      pendingInSelectedYear: Math.max(0, allowance - usedSel),
+      /** Pendientes del cupo anual (sin traspaso). */
+      pendingInSelectedYear: Math.max(0, allowance - (usedSel - cUsed)),
       selectedYear,
       previousYear: prevYear,
       usedInPreviousYear: usedPrev,
@@ -105,9 +153,13 @@ export function computeVacationSummaries(
 export async function fetchAdminVacationSummaries(
   selectedYear: number
 ): Promise<WorkerVacationAdminSummary[]> {
-  const [workers, sites] = await Promise.all([fetchCompanyWorkers(), fetchWorkCalendarSites()]);
+  const [workers, sites, carryoverApprovedByWorker] = await Promise.all([
+    fetchCompanyWorkers(),
+    fetchWorkCalendarSites(),
+    fetchCarryoverApprovedByWorkerForTarget(selectedYear),
+  ]);
   const siteNameById = new Map(sites.map((s) => [s.id, s.name] as const));
   const prevYear = selectedYear - 1;
   const rows = await fetchVacationBookingRowsForYearRange(prevYear, selectedYear);
-  return computeVacationSummaries(workers, siteNameById, rows, selectedYear);
+  return computeVacationSummaries(workers, siteNameById, rows, selectedYear, carryoverApprovedByWorker);
 }

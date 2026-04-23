@@ -84,12 +84,16 @@ type Props = {
   tooltipSummer7h: string;
   /** Días marcados como vacaciones (vista trabajador). */
   vacationIsoSet?: ReadonlySet<string>;
+  /** Subconjunto: vacaciones de traspaso (año anterior), otro color. */
+  vacationCarryoverIsoSet?: ReadonlySet<string>;
   /** Subconjunto de vacaciones ya disfrutadas (pasadas) para marcar visualmente. */
   vacationPastIsoSet?: ReadonlySet<string>;
   onVacationDayClick?: (iso: string) => void;
   vacationDayCanClick?: (iso: string) => boolean;
   vacationLegendLabel?: string;
   vacationTooltipLine?: string;
+  vacationCarryoverLegendLabel?: string;
+  vacationCarryoverTooltipLine?: string;
   /** Número de entradas de agenda personal por fecha ISO (día local). */
   agendaCountByIso?: ReadonlyMap<string, number>;
   agendaLegendLabel?: string;
@@ -113,11 +117,14 @@ export function WorkCalendarYearGrid({
   tooltipFriday7h,
   tooltipSummer7h,
   vacationIsoSet,
+  vacationCarryoverIsoSet,
   vacationPastIsoSet,
   onVacationDayClick,
   vacationDayCanClick,
   vacationLegendLabel,
   vacationTooltipLine,
+  vacationCarryoverLegendLabel,
+  vacationCarryoverTooltipLine,
   agendaCountByIso,
   agendaLegendLabel,
 }: Props) {
@@ -154,6 +161,8 @@ export function WorkCalendarYearGrid({
     "bg-emerald-50 text-emerald-950/90 border-emerald-300/80 dark:bg-emerald-950/30 dark:text-emerald-100 dark:border-emerald-800/50";
   const vacationRingClass =
     "ring-2 ring-sky-600/85 ring-inset shadow-[inset_0_0_0_1px_rgba(2,132,199,0.35)] bg-sky-50/90 dark:bg-sky-950/35 dark:ring-sky-500/80";
+  const vacationCarryoverRingClass =
+    "ring-2 ring-amber-600/85 ring-inset shadow-[inset_0_0_0_1px_rgba(217,119,6,0.35)] bg-amber-50/90 dark:bg-amber-950/35 dark:ring-amber-500/80";
   const vacationPastClass = "line-through decoration-1 opacity-85";
   const pastDayClass = "line-through decoration-1 opacity-80";
   const todayClass = "font-bold";
@@ -193,6 +202,15 @@ export function WorkCalendarYearGrid({
                 aria-hidden
               />
               <span>{vacationLegendLabel}</span>
+            </span>
+          ) : null}
+          {vacationCarryoverLegendLabel ? (
+            <span className="flex items-center gap-1.5">
+              <span
+                className="inline-block size-4 rounded border border-amber-600/60 bg-amber-100 dark:bg-amber-950/50"
+                aria-hidden
+              />
+              <span>{vacationCarryoverLegendLabel}</span>
             </span>
           ) : null}
           {agendaLegendLabel ? (
@@ -237,6 +255,7 @@ export function WorkCalendarYearGrid({
                       const h = byDate.get(cell.iso);
                       const cls = cellClass(cell.iso, h, weekendClass, monThuClass, sevenHourClass, summerIsoSet);
                       const isVac = vacationIsoSet?.has(cell.iso) ?? false;
+                      const isVacCarry = vacationCarryoverIsoSet?.has(cell.iso) ?? false;
                       const isVacPast = vacationPastIsoSet?.has(cell.iso) ?? false;
                       const isPast = cell.iso < todayIso;
                       const isToday = cell.iso === todayIso;
@@ -272,7 +291,9 @@ export function WorkCalendarYearGrid({
                           tooltipLines.push(legendMonThu);
                         }
                       }
-                      if (isVac && vacationTooltipLine) {
+                      if (isVac && isVacCarry && vacationCarryoverTooltipLine) {
+                        tooltipLines.push(vacationCarryoverTooltipLine);
+                      } else if (isVac && !isVacCarry && vacationTooltipLine) {
                         tooltipLines.push(vacationTooltipLine);
                       }
                       const agendaN = agendaCountByIso?.get(cell.iso) ?? 0;
@@ -290,7 +311,7 @@ export function WorkCalendarYearGrid({
                       const cellClassName = cn(
                         "min-h-[1.75rem] sm:min-h-[2rem] w-full flex items-center justify-center rounded-sm tabular-nums border",
                         cls,
-                        isVac && vacationRingClass,
+                        isVac && (isVacCarry ? vacationCarryoverRingClass : vacationRingClass),
                         isPast && pastDayClass,
                         isToday && todayClass,
                         isVac && isVacPast && vacationPastClass,

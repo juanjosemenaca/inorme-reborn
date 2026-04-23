@@ -1,5 +1,6 @@
 import { syncDraftInvoicesRecipientWebsite } from "@/api/billingApi";
 import { requireSupabase } from "@/api/supabaseRequire";
+import { sortByLocaleKey } from "@/lib/sortAlpha";
 import {
   clientContactRowToDomain,
   clientRecordToRowInsert,
@@ -63,7 +64,7 @@ export async function fetchClients(): Promise<ClientRecord[]> {
   }
   const clientRows = (rows ?? []) as ClientRow[];
   const byId = new Map(clientRows.map((r) => [r.id, r]));
-  return clientRows.map((row) => {
+  const mapped = clientRows.map((row) => {
     const contacts = byClient.get(row.id) ?? [];
     let rec = clientRowToDomain(row, contacts);
     const lid = rec.linkedFinalClientId;
@@ -75,6 +76,7 @@ export async function fetchClients(): Promise<ClientRecord[]> {
     }
     return rec;
   });
+  return sortByLocaleKey(mapped, (c) => c.tradeName.trim() || c.companyName.trim() || c.cif);
 }
 
 export type CreateClientInput = {

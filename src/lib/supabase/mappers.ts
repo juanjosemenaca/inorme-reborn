@@ -58,6 +58,9 @@ export function projectRowToDomain(row: ProjectRow): ProjectRecord {
     finalClientId: row.final_client_id,
     startDate: row.start_date,
     endDate: row.end_date,
+    responsibleCompanyWorkerId: row.responsible_company_worker_id,
+    endNoticeAt: row.end_notice_at,
+    endNoticeMessageSentAt: row.end_notice_message_sent_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -134,6 +137,9 @@ export function projectRecordToInsert(
     final_client_id: record.finalClientId,
     start_date: record.startDate,
     end_date: record.endDate,
+    responsible_company_worker_id: record.responsibleCompanyWorkerId,
+    end_notice_at: record.endNoticeAt,
+    end_notice_message_sent_at: record.endNoticeMessageSentAt,
   };
 }
 

@@ -12,6 +12,7 @@ import {
   type ProjectWithDocuments,
 } from "@/types/projects";
 import { getProjectDocumentSignedUrl, type ProjectMemberInput } from "@/api/projectsApi";
+import { defaultProjectEndNoticeAtIso } from "@/lib/defaultProjectEndNoticeAt";
 import {
   Dialog,
   DialogContent,
@@ -57,8 +58,10 @@ const schema = z
     description: z.string().optional(),
     clientId: z.string().min(1, "Elige un cliente"),
     finalClientId: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
+    startDate: z.string().min(1, "Indica la fecha de inicio"),
+    endDate: z.string().min(1, "Indica la fecha de fin planificada"),
+    responsibleWorkerId: z.string().min(1, "Indica el responsable del proyecto"),
+    endNoticeAt: z.string().optional(),
   })
   .refine(
     (data) => {
@@ -66,6 +69,14 @@ const schema = z
       return data.endDate >= data.startDate;
     },
     { message: "La fecha de fin debe ser posterior o igual al inicio", path: ["endDate"] }
+  )
+  .refine(
+    (data) => {
+      const n = data.endNoticeAt?.trim();
+      if (!n) return true;
+      return n <= data.endDate;
+    },
+    { message: "La fecha de aviso no puede ser posterior a la fecha de fin.", path: ["endNoticeAt"] }
   );
 
 export type ProjectFormValues = z.infer<typeof schema>;
@@ -95,6 +106,12 @@ type Props = {
     finalNone: string;
     startDate: string;
     endDate: string;
+    responsible: string;
+    responsiblePlaceholder: string;
+    responsibleShortHint: string;
+    endNotice: string;
+    endNoticeHint: string;
+    endNoticeDefaultLine: string;
     docsSection: string;
     docsHint: string;
     teamSection: string;
@@ -157,15 +174,24 @@ export function ProjectFormDialog({
       finalClientId: "",
       startDate: "",
       endDate: "",
+      responsibleWorkerId: "",
+      endNoticeAt: "",
     },
   });
 
   const clientId = useWatch({ control: form.control, name: "clientId" });
+  const endDateW = useWatch({ control: form.control, name: "endDate" });
   const selectedClient = useMemo(() => clients.find((c) => c.id === clientId), [clients, clientId]);
 
   const finalClientOptions = useMemo(() => {
     return clients.filter((c) => c.clientKind === "FINAL");
   }, [clients]);
+
+  const computedDefaultNotice = useMemo(() => {
+    const d = endDateW?.trim() ?? "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    return defaultProjectEndNoticeAtIso(d);
+  }, [endDateW]);
 
   useEffect(() => {
     if (selectedClient?.clientKind === "FINAL") {
@@ -194,6 +220,8 @@ export function ProjectFormDialog({
         finalClientId: initial.finalClientId ?? "",
         startDate: initial.startDate ?? "",
         endDate: initial.endDate ?? "",
+        responsibleWorkerId: initial.responsibleCompanyWorkerId ?? "",
+        endNoticeAt: initial.endNoticeAt ?? "",
       });
     } else if (mode === "create") {
       setMemberRows([]);
@@ -204,11 +232,18 @@ export function ProjectFormDialog({
         finalClientId: "",
         startDate: "",
         endDate: "",
+        responsibleWorkerId: "",
+        endNoticeAt: "",
       });
     }
   }, [open, mode, initial, form]);
 
   const activeWorkers = useMemo(() => workers.filter((w) => w.active), [workers]);
+
+  const responsibleWorkerOptions = useMemo(() => {
+    const keepId = mode === "edit" && initial?.responsibleCompanyWorkerId ? initial.responsibleCompanyWorkerId : null;
+    return workers.filter((w) => w.active || (keepId && w.id === keepId));
+  }, [workers, mode, initial?.responsibleCompanyWorkerId]);
 
   const takenWorkerIds = (exceptRowKey: string) =>
     new Set(
@@ -283,6 +318,8 @@ export function ProjectFormDialog({
             : "",
         startDate: values.startDate?.trim() || "",
         endDate: values.endDate?.trim() || "",
+        responsibleWorkerId: values.responsibleWorkerId?.trim() || "",
+        endNoticeAt: values.endNoticeAt?.trim() || "",
       };
       const memberInputs: ProjectMemberInput[] = memberRows
         .filter((r) => r.companyWorkerId.trim())
@@ -428,6 +465,59 @@ export function ProjectFormDialog({
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="responsibleWorkerId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{labels.responsible}</FormLabel>
+                    <p className="text-xs text-muted-foreground -mt-0.5 mb-1">{labels.responsibleShortHint}</p>
+                    <Select
+                      onValueChange={(v) => field.onChange(v === NONE_VALUE ? "" : v)}
+                      value={field.value?.trim() ? field.value : NONE_VALUE}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={labels.responsiblePlaceholder} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={NONE_VALUE}>{labels.responsiblePlaceholder}</SelectItem>
+                        {responsibleWorkerOptions.map((w) => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {workerDisplayName(w)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="endNoticeAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{labels.endNotice}</FormLabel>
+                    <p className="text-xs text-muted-foreground -mt-0.5 mb-1">{labels.endNoticeHint}</p>
+                    <FormControl>
+                      <Input type="date" {...field} value={field.value ?? ""} />
+                    </FormControl>
+                    {computedDefaultNotice && (
+                      <p className="text-xs text-muted-foreground">
+                        {labels.endNoticeDefaultLine}{" "}
+                        <span className="font-medium tabular-nums">
+                          {new Date(computedDefaultNotice + "T12:00:00").toLocaleDateString()}
+                        </span>
+                      </p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className="space-y-2 rounded-lg border p-3 bg-muted/30">
                 <p className="text-sm font-medium">{labels.teamSection}</p>

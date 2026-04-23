@@ -107,8 +107,13 @@ export interface ProjectRow {
   description: string;
   client_id: string;
   final_client_id: string | null;
-  start_date: string | null;
-  end_date: string | null;
+  start_date: string;
+  end_date: string;
+  /** Responsable (ficha trabajador). Puede quedar null en filas heredadas. */
+  responsible_company_worker_id: string | null;
+  /** Día de envío de aviso; null = 2 meses antes de end_date. */
+  end_notice_at: string | null;
+  end_notice_message_sent_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -128,7 +133,10 @@ export type DbProjectMemberRole =
   | "ANALISTA_FUNCIONAL"
   | "ANALISTA_PROGRAMADOR"
   | "PROGRAMADOR"
-  | "JEFE_DE_EQUIPO";
+  | "JEFE_DE_EQUIPO"
+  | "ADMINISTRATIVA"
+  | "CONTABLE"
+  | "CONTROLER";
 
 export interface ProjectMemberRow {
   id: string;
@@ -165,6 +173,23 @@ export interface WorkerVacationChangeRequestRow {
   worker_message: string;
   proposed_dates: unknown;
   previous_approved_dates: unknown;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkerVacationCarryoverRequestRow {
+  id: string;
+  company_worker_id: string;
+  backoffice_user_id: string;
+  source_year: number;
+  target_year: number;
+  days_requested: number;
+  days_approved: number | null;
+  status: DbWorkerVacationChangeStatus;
+  worker_message: string;
   reviewed_by: string | null;
   reviewed_at: string | null;
   rejection_reason: string | null;

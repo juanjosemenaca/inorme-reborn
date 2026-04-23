@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarRange, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,32 @@ import { WorkCalendarYearGrid } from "@/components/admin/WorkCalendarYearGrid";
 import { expandSummerRangesToWeekdayIsoSet } from "@/lib/workCalendarSummerRange";
 import { isWeekendIso } from "@/lib/calendarIso";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
+import {
+  normalizeVacationEntries,
+  vacationEntriesEqual,
+} from "@/lib/vacationProposedJson";
 import { queryKeys } from "@/lib/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import { submitWorkerVacationChangeRequest } from "@/api/workerVacationChangeRequestsApi";
+import {
+  fetchApprovedCarryoverAllowance,
+  getUnusedStandardDaysInYear,
+  submitCarryoverRequest,
+} from "@/api/workerVacationCarryoverRequestsApi";
 import type { WorkCalendarHolidayKind } from "@/types/workCalendars";
 import { getErrorMessage } from "@/lib/errorMessage";
+import type { VacationDayEntry } from "@/types/vacationDays";
+
+function countStandardAndCarry(entries: VacationDayEntry[], calendarYear: number) {
+  const src = calendarYear - 1;
+  let standardN = 0;
+  let carryN = 0;
+  for (const e of entries) {
+    if (e.carryoverFromYear == null) standardN += 1;
+    else if (e.carryoverFromYear === src) carryN += 1;
+  }
+  return { standardN, carryN };
+}
 
 const WorkerMyCalendar = () => {
   const { t, language } = useLanguage();
@@ -31,7 +52,10 @@ const WorkerMyCalendar = () => {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [workerMessage, setWorkerMessage] = useState("");
-  const [draftDates, setDraftDates] = useState<string[]>([]);
+  const [draftEntries, setDraftEntries] = useState<VacationDayEntry[]>([]);
+  const [carryDaysRequested, setCarryDaysRequested] = useState("");
+  const [carryMessage, setCarryMessage] = useState("");
+
   const today = new Date();
   const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
     today.getDate()
@@ -62,17 +86,28 @@ const WorkerMyCalendar = () => {
     error: summerErr,
   } = useWorkCalendarSummerDays(year);
   const {
-    data: vacationDates = [],
+    data: vacationEntries = [],
     isLoading: vacationLoading,
     isError: vacationError,
     error: vacationErr,
   } = useWorkerVacationDays(workerId, year);
   const { data: vacationRequests = [] } = useWorkerVacationChangeHistory(workerId);
   const pendingRequestForYear = useMemo(
-    () =>
-      vacationRequests.find((r) => r.status === "PENDING" && r.calendarYear === year),
+    () => vacationRequests.find((r) => r.status === "PENDING" && r.calendarYear === year),
     [vacationRequests, year]
   );
+
+  const sourceYear = year - 1;
+  const { data: carryAllow = 0 } = useQuery({
+    queryKey: ["approvedCarryoverAllowance", workerId, year, sourceYear] as const,
+    queryFn: () => fetchApprovedCarryoverAllowance(workerId!, year, sourceYear),
+    enabled: !!workerId && year > 2000,
+  });
+  const { data: unusedPrev = 0 } = useQuery({
+    queryKey: ["unusedStandardPrevYear", workerId, sourceYear, worker?.vacationDays] as const,
+    queryFn: () => getUnusedStandardDaysInYear(workerId!, sourceYear, worker!.vacationDays),
+    enabled: !!workerId && !!worker,
+  });
 
   const siteHolidays = useMemo(() => {
     if (!worker) return [];
@@ -107,41 +142,59 @@ const WorkerMyCalendar = () => {
 
   useEffect(() => {
     if (pendingRequestForYear) {
-      setDraftDates(pendingRequestForYear.proposedDates);
+      setDraftEntries(
+        pendingRequestForYear.proposedEntries?.length
+          ? pendingRequestForYear.proposedEntries
+          : pendingRequestForYear.proposedDates.map((d) => ({ date: d, carryoverFromYear: null }))
+      );
       setWorkerMessage(pendingRequestForYear.workerMessage || "");
       return;
     }
-    setDraftDates(vacationDates);
+    setDraftEntries(vacationEntries);
     setWorkerMessage("");
-  }, [vacationDates, pendingRequestForYear]);
+  }, [vacationEntries, pendingRequestForYear]);
 
-  const vacationIsoSet = useMemo(() => new Set(draftDates), [draftDates]);
-  const approvedIsoSet = useMemo(() => new Set(vacationDates), [vacationDates]);
-  const approvedPastIsoSet = useMemo(
-    () => new Set(vacationDates.filter((d) => d < todayIso)),
-    [vacationDates, todayIso]
+  const vacationIsoSet = useMemo(() => new Set(draftEntries.map((e) => e.date)), [draftEntries]);
+  const vacationCarryoverIsoSet = useMemo(
+    () =>
+      new Set(
+        draftEntries.filter((e) => e.carryoverFromYear != null).map((e) => e.date)
+      ),
+    [draftEntries]
   );
-  const usedCount = vacationIsoSet.size;
-  const maxDays = worker?.vacationDays ?? 0;
-  const remaining = Math.max(0, maxDays - usedCount);
-  const hasDraftChanges =
-    draftDates.length !== vacationDates.length ||
-    draftDates.some((d, idx) => d !== vacationDates[idx]);
+  const approvedIsoSet = useMemo(() => new Set(vacationEntries.map((e) => e.date)), [vacationEntries]);
+  const approvedPastIsoSet = useMemo(
+    () => new Set(vacationEntries.filter((e) => e.date < todayIso).map((e) => e.date)),
+    [vacationEntries, todayIso]
+  );
 
-  const canVacationClick = (iso: string) => {
-    if (iso < todayIso) return false;
-    if (vacationIsoSet.has(iso)) return true;
-    if (usedCount >= maxDays) return false;
-    if (isWeekendIso(iso)) return false;
-    if (holidayDateSet.has(iso)) return false;
-    return true;
-  };
+  const { standardN, carryN } = useMemo(
+    () => countStandardAndCarry(draftEntries, year),
+    [draftEntries, year]
+  );
+  const maxDays = worker?.vacationDays ?? 0;
+  const remainingAnnual = Math.max(0, maxDays - standardN);
+  const remainingCarry = Math.max(0, carryAllow - carryN);
+  const hasDraftChanges = !vacationEntriesEqual(draftEntries, vacationEntries);
+
+  const canVacationClick = useCallback(
+    (iso: string) => {
+      if (iso < todayIso) return false;
+      if (vacationIsoSet.has(iso)) return true;
+      if (isWeekendIso(iso)) return false;
+      if (holidayDateSet.has(iso)) return false;
+      if (standardN < maxDays) return true;
+      if (carryN < carryAllow) return true;
+      return false;
+    },
+    [todayIso, vacationIsoSet, holidayDateSet, standardN, maxDays, carryN, carryAllow]
+  );
 
   const submitMutation = useMutation({
     mutationFn: () =>
       submitWorkerVacationChangeRequest({
         calendarYear: year,
-        proposedDates: draftDates,
+        proposedEntries: normalizeVacationEntries(draftEntries),
         workerMessage,
       }),
     onSuccess: async () => {
@@ -149,7 +202,33 @@ const WorkerMyCalendar = () => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.workerVacationChangeRequestsFor(workerId ?? ""),
       });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminVacationSummaries(year) });
       toast({ title: t("admin.workerMyCalendar.toast_request_sent") });
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: getErrorMessage(e),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const carryoverMutation = useMutation({
+    mutationFn: () =>
+      submitCarryoverRequest({
+        sourceYear,
+        targetYear: year,
+        daysRequested: Math.floor(Number(carryDaysRequested)),
+        workerMessage: carryMessage,
+      }),
+    onSuccess: async () => {
+      setCarryDaysRequested("");
+      setCarryMessage("");
+      await queryClient.invalidateQueries({ queryKey: ["approvedCarryoverAllowance"] });
+      await queryClient.invalidateQueries({ queryKey: ["unusedStandardPrevYear"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminVacationSummaries(year) });
+      toast({ title: t("admin.workerMyCalendar.carryover_toast_sent") });
     },
     onError: (e) => {
       toast({
@@ -167,6 +246,40 @@ const WorkerMyCalendar = () => {
 
   const loadError = holidaysError || summerError || vacationError;
   const loadErrorDetail = holidaysErr ?? summerErr ?? vacationErr;
+
+  const toggleDraftDate = (iso: string) => {
+    if (pendingRequestForYear || submitMutation.isPending) return;
+    setDraftEntries((prev) => {
+      const exists = prev.find((p) => p.date === iso);
+      if (exists) {
+        return prev.filter((p) => p.date !== iso);
+      }
+      if (isWeekendIso(iso) || holidayDateSet.has(iso)) return prev;
+      const { standardN: sN, carryN: cN } = countStandardAndCarry(prev, year);
+      if (sN < maxDays) {
+        return normalizeVacationEntries([...prev, { date: iso, carryoverFromYear: null }]);
+      }
+      if (cN < carryAllow) {
+        return normalizeVacationEntries([
+          ...prev,
+          { date: iso, carryoverFromYear: sourceYear },
+        ]);
+      }
+      toast({
+        title: t("admin.common.error"),
+        description: t("admin.workerMyCalendar.error_no_slots"),
+        variant: "destructive",
+      });
+      return prev;
+    });
+  };
+
+  const carryParsed = Math.floor(Number(carryDaysRequested));
+  const canSubmitCarry =
+    Number.isFinite(carryParsed) &&
+    carryParsed >= 1 &&
+    carryParsed <= unusedPrev &&
+    !carryoverMutation.isPending;
 
   if (!user) return null;
 
@@ -198,26 +311,6 @@ const WorkerMyCalendar = () => {
   }
 
   const calendarLoading = holidaysLoading || summerLoading || vacationLoading;
-
-  const toggleDraftDate = (iso: string) => {
-    if (pendingRequestForYear || submitMutation.isPending) return;
-    setDraftDates((prev) => {
-      if (prev.includes(iso)) return prev.filter((d) => d !== iso).sort();
-      const next = [...prev, iso].sort();
-      if (next.length > maxDays) {
-        toast({
-          title: t("admin.common.error"),
-          description: t("admin.workerMyCalendar.error_limit").replace("{{max}}", String(maxDays)),
-          variant: "destructive",
-        });
-        return prev;
-      }
-      if (isWeekendIso(iso) || holidayDateSet.has(iso)) {
-        return prev;
-      }
-      return next;
-    });
-  };
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -262,8 +355,20 @@ const WorkerMyCalendar = () => {
             <span className="font-semibold tabular-nums">{maxDays}</span>
           </p>
           <p>
-            <span className="text-muted-foreground">{t("admin.workerMyCalendar.vacation_used")}</span>{" "}
-            <span className="font-semibold tabular-nums">{usedCount}</span>
+            <span className="text-muted-foreground">{t("admin.workerMyCalendar.draft_total")}</span>{" "}
+            <span className="font-semibold tabular-nums">{draftEntries.length}</span>
+          </p>
+          <p>
+            <span className="text-muted-foreground">{t("admin.workerMyCalendar.draft_annual")}</span>{" "}
+            <span className="font-semibold tabular-nums">
+              {standardN}/{maxDays}
+            </span>
+          </p>
+          <p>
+            <span className="text-muted-foreground">{t("admin.workerMyCalendar.draft_carry")}</span>{" "}
+            <span className="font-semibold tabular-nums">
+              {carryN}/{Math.max(0, carryAllow)}
+            </span>
           </p>
           <p>
             <span className="text-muted-foreground">{t("admin.workerMyCalendar.vacation_approved")}</span>{" "}
@@ -276,9 +381,19 @@ const WorkerMyCalendar = () => {
             </span>
           </p>
           <p>
-            <span className="text-muted-foreground">{t("admin.workerMyCalendar.vacation_remaining")}</span>{" "}
-            <span className="font-semibold tabular-nums text-primary">{remaining}</span>
+            <span className="text-muted-foreground">{t("admin.workerMyCalendar.vacation_remaining_annual")}</span>{" "}
+            <span className="font-semibold tabular-nums text-primary">{remainingAnnual}</span>
           </p>
+          {carryAllow > 0 ? (
+            <p>
+              <span className="text-muted-foreground">
+                {t("admin.workerMyCalendar.vacation_remaining_carry")}
+              </span>{" "}
+              <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                {remainingCarry}
+              </span>
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -293,11 +408,69 @@ const WorkerMyCalendar = () => {
 
       <Card>
         <CardHeader className="pb-2">
+          <CardTitle className="text-base">{t("admin.workerMyCalendar.carryover_card_title")}</CardTitle>
+          <CardDescription>
+            {t("admin.workerMyCalendar.carryover_card_desc")
+              .replace(/\{\{prev\}\}/g, String(sourceYear))
+              .replace(/\{\{next\}\}/g, String(year))}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 max-w-lg">
+          <p className="text-sm text-muted-foreground">
+            {t("admin.workerMyCalendar.carryover_unused_line")
+              .replace(/\{\{prev\}\}/g, String(sourceYear))
+              .replace(/\{\{days\}\}/g, String(unusedPrev))}
+          </p>
+          {unusedPrev > 0 ? (
+            <>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium" htmlFor="carry-days">
+                    {t("admin.workerMyCalendar.carryover_days_label")}
+                  </label>
+                  <Input
+                    id="carry-days"
+                    type="number"
+                    min={1}
+                    max={unusedPrev}
+                    className="w-28 h-9"
+                    value={carryDaysRequested}
+                    onChange={(e) => setCarryDaysRequested(e.target.value)}
+                    disabled={carryoverMutation.isPending}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!canSubmitCarry}
+                  onClick={() => carryoverMutation.mutate()}
+                >
+                  {carryoverMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : null}
+                  {t("admin.workerMyCalendar.carryover_send")}
+                </Button>
+              </div>
+              <Textarea
+                value={carryMessage}
+                onChange={(e) => setCarryMessage(e.target.value)}
+                rows={2}
+                maxLength={1000}
+                placeholder={t("admin.workerMyCalendar.carryover_message_ph")}
+                disabled={carryoverMutation.isPending}
+              />
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("admin.workerMyCalendar.carryover_no_unused")}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
           <CardTitle className="text-base">{t("admin.workerMyCalendar.grid_title")}</CardTitle>
           <CardDescription>
-            {t("admin.workerMyCalendar.grid_desc")}
-            {" "}
-            {t("admin.workerMyCalendar.grid_past_locked")}
+            {t("admin.workerMyCalendar.grid_desc")} {t("admin.workerMyCalendar.grid_past_locked")}
           </CardDescription>
         </CardHeader>
         <CardContent className="pb-6">
@@ -327,11 +500,17 @@ const WorkerMyCalendar = () => {
               tooltipFriday7h={t("admin.workCalendars.tooltip_friday_7h")}
               tooltipSummer7h={t("admin.workCalendars.tooltip_summer_7h")}
               vacationIsoSet={vacationIsoSet}
+              vacationCarryoverIsoSet={vacationCarryoverIsoSet}
               vacationPastIsoSet={approvedPastIsoSet}
               onVacationDayClick={toggleDraftDate}
               vacationDayCanClick={vacationDayCanClick}
               vacationLegendLabel={t("admin.workerMyCalendar.legend_vacation")}
               vacationTooltipLine={t("admin.workerMyCalendar.tooltip_vacation")}
+              vacationCarryoverLegendLabel={t("admin.workerMyCalendar.legend_vacation_carryover")}
+              vacationCarryoverTooltipLine={t("admin.workerMyCalendar.tooltip_vacation_carryover").replace(
+                "{{prevYear}}",
+                String(sourceYear)
+              )}
             />
           )}
         </CardContent>

@@ -18,6 +18,7 @@ export const queryKeys = {
   workerVacationChangeRequestsFor: (companyWorkerId: string) =>
     ["workerVacationChangeRequests", companyWorkerId] as const,
   adminVacationSummaries: (year: number) => ["adminVacationSummaries", year] as const,
+  pendingCarryoverRequests: ["pendingCarryoverRequests"] as const,
   adminVacationNotifications: ["adminVacationNotifications"] as const,
   adminVacationNotificationCount: (sinceDays: number) =>
     ["adminVacationNotificationCount", sinceDays] as const,

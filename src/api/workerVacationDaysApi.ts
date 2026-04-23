@@ -6,6 +6,7 @@ import { getErrorMessage } from "@/lib/errorMessage";
 import { isWeekendIso } from "@/lib/calendarIso";
 import { recordVacationDayAddedNotification } from "@/api/vacationNotificationsApi";
 import { isoDateOnlyFromDb, parseIsoDateYmdCalendar } from "@/lib/isoDate";
+import type { VacationDayEntry } from "@/types/vacationDays";
 
 function throwSupabaseError(err: unknown): never {
   throw new Error(getErrorMessage(err));
@@ -23,22 +24,37 @@ async function requireWorkerProfile(): Promise<{ workerId: string }> {
 }
 
 /**
- * Fechas ISO (YYYY-MM-DD) de vacaciones del usuario autenticado en el año natural.
+ * Días de vacaciones del usuario autenticado en el año natural (cupo y traspaso).
  */
-export async function fetchMyVacationDatesForYear(year: number): Promise<string[]> {
+export async function fetchMyVacationDayEntriesForYear(year: number): Promise<VacationDayEntry[]> {
   const { workerId } = await requireWorkerProfile();
   const sb = requireSupabase();
   const start = `${year}-01-01`;
   const end = `${year}-12-31`;
   const { data, error } = await sb
     .from("company_worker_vacation_days")
-    .select("vacation_date")
+    .select("vacation_date, carryover_from_year")
     .eq("company_worker_id", workerId)
     .gte("vacation_date", start)
     .lte("vacation_date", end)
     .order("vacation_date", { ascending: true });
   if (error) throwSupabaseError(error);
-  return (data ?? []).map((r) => isoDateOnlyFromDb(String((r as { vacation_date: string }).vacation_date)));
+  return (data ?? []).map((r) => {
+    const row = r as { vacation_date: string; carryover_from_year: number | null };
+    const c = row.carryover_from_year;
+    return {
+      date: isoDateOnlyFromDb(String(row.vacation_date)),
+      carryoverFromYear: c == null ? null : Number(c),
+    };
+  });
+}
+
+/**
+ * Fechas ISO (YYYY-MM-DD) de vacaciones del usuario en el año natural.
+ */
+export async function fetchMyVacationDatesForYear(year: number): Promise<string[]> {
+  const entries = await fetchMyVacationDayEntriesForYear(year);
+  return entries.map((e) => e.date);
 }
 
 export type ToggleVacationDayResult = {
@@ -97,6 +113,7 @@ export async function toggleMyVacationDay(
     .from("company_worker_vacation_days")
     .select("id")
     .eq("company_worker_id", workerId)
+    .is("carryover_from_year", null)
     .gte("vacation_date", `${calendarYear}-01-01`)
     .lte("vacation_date", `${calendarYear}-12-31`);
   if (countErr) throwSupabaseError(countErr);
@@ -110,6 +127,7 @@ export async function toggleMyVacationDay(
   const { error: insErr } = await sb.from("company_worker_vacation_days").insert({
     company_worker_id: workerId,
     vacation_date: iso,
+    carryover_from_year: null,
   });
   if (insErr) throwSupabaseError(insErr);
 

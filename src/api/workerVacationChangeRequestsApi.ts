@@ -1,3 +1,4 @@
+import { fetchApprovedCarryoverAllowance } from "@/api/workerVacationCarryoverRequestsApi";
 import { getProfileByAuthUserId } from "@/api/backofficeUsersApi";
 import { createBackofficeMessage } from "@/api/backofficeMessagesApi";
 import { getCompanyWorkerById } from "@/api/companyWorkersApi";
@@ -5,26 +6,25 @@ import { requireSupabase } from "@/api/supabaseRequire";
 import { fetchWorkCalendarHolidays } from "@/api/workCalendarsApi";
 import { isWeekendIso } from "@/lib/calendarIso";
 import { getErrorMessage } from "@/lib/errorMessage";
+import {
+  entryDatesForDiff,
+  normalizeVacationEntries,
+  parseVacationProposedJson,
+  vacationEntriesEqual,
+  vacationProposedToJson,
+} from "@/lib/vacationProposedJson";
 import { isoDateOnlyFromDb, parseIsoDateYmdCalendar } from "@/lib/isoDate";
 import type { WorkerVacationChangeRequestRow } from "@/types/database";
 import type { WorkerVacationChangeRequestRecord } from "@/types/workerVacationChangeRequests";
+import type { VacationDayEntry } from "@/types/vacationDays";
 
 function throwErr(error: unknown): never {
   throw new Error(getErrorMessage(error));
 }
 
-function parseDateArray(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  const uniq = new Set<string>();
-  for (const v of raw) {
-    if (typeof v !== "string") continue;
-    const t = isoDateOnlyFromDb(v);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) uniq.add(t);
-  }
-  return [...uniq].sort();
-}
-
 function rowToDomain(row: WorkerVacationChangeRequestRow): WorkerVacationChangeRequestRecord {
+  const proposedEntries = parseVacationProposedJson(row.proposed_dates);
+  const previousApprovedEntries = parseVacationProposedJson(row.previous_approved_dates);
   return {
     id: row.id,
     companyWorkerId: row.company_worker_id,
@@ -32,8 +32,10 @@ function rowToDomain(row: WorkerVacationChangeRequestRow): WorkerVacationChangeR
     calendarYear: row.calendar_year,
     status: row.status,
     workerMessage: row.worker_message,
-    proposedDates: parseDateArray(row.proposed_dates),
-    previousApprovedDates: parseDateArray(row.previous_approved_dates),
+    proposedEntries,
+    previousApprovedEntries,
+    proposedDates: entryDatesForDiff(proposedEntries),
+    previousApprovedDates: entryDatesForDiff(previousApprovedEntries),
     reviewedBy: row.reviewed_by,
     reviewedAt: row.reviewed_at,
     rejectionReason: row.rejection_reason,
@@ -42,20 +44,27 @@ function rowToDomain(row: WorkerVacationChangeRequestRow): WorkerVacationChangeR
   };
 }
 
-async function fetchApprovedVacationDatesForWorkerYear(
+export async function fetchApprovedVacationEntriesForWorkerYear(
   companyWorkerId: string,
   calendarYear: number
-): Promise<string[]> {
+): Promise<VacationDayEntry[]> {
   const sb = requireSupabase();
   const { data, error } = await sb
     .from("company_worker_vacation_days")
-    .select("vacation_date")
+    .select("vacation_date, carryover_from_year")
     .eq("company_worker_id", companyWorkerId)
     .gte("vacation_date", `${calendarYear}-01-01`)
     .lte("vacation_date", `${calendarYear}-12-31`)
     .order("vacation_date", { ascending: true });
   if (error) throwErr(error);
-  return (data ?? []).map((r) => isoDateOnlyFromDb(String((r as { vacation_date: string }).vacation_date)));
+  return (data ?? []).map((r) => {
+    const raw = r as { vacation_date: string; carryover_from_year: number | null };
+    const c = raw.carryover_from_year;
+    return {
+      date: isoDateOnlyFromDb(String(raw.vacation_date)),
+      carryoverFromYear: c == null ? null : Number(c),
+    };
+  });
 }
 
 export async function fetchPendingWorkerVacationChangeRequests(): Promise<
@@ -113,7 +122,8 @@ export async function hasPendingWorkerVacationRequest(
 
 export type SubmitWorkerVacationChangeInput = {
   calendarYear: number;
-  proposedDates: string[];
+  /** Fechas aprobadas; carryover del año natural anterior a `calendarYear`. */
+  proposedEntries: VacationDayEntry[];
   workerMessage?: string;
 };
 
@@ -138,45 +148,67 @@ export async function submitWorkerVacationChangeRequest(
   const worker = await getCompanyWorkerById(workerId);
   if (!worker) throw new Error("No se encontro la ficha de trabajador.");
 
-  const approvedDates = await fetchApprovedVacationDatesForWorkerYear(workerId, year);
-  const normalized = [...new Set(input.proposedDates.map((d) => parseIsoDateYmdCalendar(d).iso))].sort();
+  const approvedEntries = await fetchApprovedVacationEntriesForWorkerYear(workerId, year);
+  const normalized = normalizeVacationEntries(input.proposedEntries);
   const now = new Date();
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
     now.getDate()
   ).padStart(2, "0")}`;
-  for (const iso of normalized) {
-    const parsed = parseIsoDateYmdCalendar(iso);
+
+  const prevSourceYear = year - 1;
+  let standardN = 0;
+  let carryN = 0;
+  for (const e of normalized) {
+    const parsed = parseIsoDateYmdCalendar(e.date);
     if (parsed.year !== year) throw new Error("Todas las fechas propuestas deben pertenecer al ano seleccionado.");
+    if (e.carryoverFromYear == null) {
+      standardN += 1;
+    } else {
+      if (e.carryoverFromYear !== prevSourceYear) {
+        throw new Error(
+          "Los días de traspaso deben proceder del año natural inmediatamente anterior al seleccionado."
+        );
+      }
+      carryN += 1;
+    }
   }
 
-  const approvedPast = approvedDates.filter((d) => d < todayIso).sort();
-  const proposedPast = normalized.filter((d) => d < todayIso).sort();
+  if (standardN > worker.vacationDays) {
+    throw new Error(`No puedes proponer más de ${worker.vacationDays} días de vacaciones de cupo anual.`);
+  }
+  const carryAllow = await fetchApprovedCarryoverAllowance(workerId, year, prevSourceYear);
+  if (carryN > carryAllow) {
+    throw new Error(
+      carryAllow <= 0
+        ? "No tienes días de traspaso aprobados para este año, o el cupo ya está agotado en esta propuesta."
+        : `Solo puedes marcar hasta ${carryAllow} días procedentes de ${prevSourceYear} (traspaso aprobado).`
+    );
+  }
+
+  const approvedIso = entryDatesForDiff(approvedEntries);
+  const approvedPast = approvedIso.filter((d) => d < todayIso).sort();
+  const proposedIso = entryDatesForDiff(normalized);
+  const proposedPast = proposedIso.filter((d) => d < todayIso).sort();
   const samePast =
-    approvedPast.length === proposedPast.length &&
-    approvedPast.every((d, idx) => d === proposedPast[idx]);
+    approvedPast.length === proposedPast.length && approvedPast.every((d, idx) => d === proposedPast[idx]);
   if (!samePast) {
     throw new Error(
       "No puedes modificar vacaciones ya disfrutadas. Solo se permiten cambios desde hoy en adelante."
     );
   }
 
-  if (normalized.length > worker.vacationDays) {
-    throw new Error(`No puedes proponer mas de ${worker.vacationDays} dias de vacaciones.`);
-  }
-
   const holidays = await fetchWorkCalendarHolidays(year);
   const holidaySet = new Set(
     holidays.filter((h) => h.siteId === worker.workCalendarSiteId).map((h) => isoDateOnlyFromDb(h.holidayDate))
   );
-  for (const iso of normalized) {
-    if (isWeekendIso(iso)) throw new Error("No puedes proponer vacaciones en fin de semana.");
-    if (holidaySet.has(iso)) throw new Error("No puedes proponer vacaciones en un festivo.");
+  for (const e of normalized) {
+    if (isWeekendIso(e.date)) throw new Error("No puedes proponer vacaciones en fin de semana.");
+    if (holidaySet.has(e.date)) throw new Error("No puedes proponer vacaciones en un festivo.");
   }
 
-  const same =
-    normalized.length === approvedDates.length &&
-    normalized.every((d, idx) => d === approvedDates[idx]);
-  if (same) throw new Error("No hay cambios respecto a las vacaciones ya aprobadas.");
+  if (vacationEntriesEqual(normalized, approvedEntries)) {
+    throw new Error("No hay cambios respecto a las vacaciones ya aprobadas.");
+  }
 
   const { error } = await sb.from("worker_vacation_change_requests").insert({
     company_worker_id: workerId,
@@ -184,8 +216,8 @@ export async function submitWorkerVacationChangeRequest(
     calendar_year: year,
     status: "PENDING",
     worker_message: (input.workerMessage ?? "").trim(),
-    proposed_dates: normalized,
-    previous_approved_dates: approvedDates,
+    proposed_dates: vacationProposedToJson(normalized),
+    previous_approved_dates: vacationProposedToJson(approvedEntries),
   });
   if (error) throwErr(error);
 }
@@ -212,7 +244,7 @@ export async function approveWorkerVacationChangeRequest(requestId: string): Pro
   }
 
   const year = req.calendar_year;
-  const proposed = parseDateArray(req.proposed_dates);
+  const proposed = parseVacationProposedJson(req.proposed_dates);
 
   const { error: delErr } = await sb
     .from("company_worker_vacation_days")
@@ -224,9 +256,10 @@ export async function approveWorkerVacationChangeRequest(requestId: string): Pro
 
   if (proposed.length > 0) {
     const { error: insErr } = await sb.from("company_worker_vacation_days").insert(
-      proposed.map((d) => ({
+      proposed.map((e) => ({
         company_worker_id: req.company_worker_id,
-        vacation_date: d,
+        vacation_date: e.date,
+        carryover_from_year: e.carryoverFromYear,
       }))
     );
     if (insErr) throwErr(insErr);

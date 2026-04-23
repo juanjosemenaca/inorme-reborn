@@ -1,4 +1,5 @@
 import { requireSupabase } from "@/api/supabaseRequire";
+import { sortByLocaleKey } from "@/lib/sortAlpha";
 import { getErrorMessage } from "@/lib/errorMessage";
 import {
   projectDocumentRowToDomain,
@@ -20,6 +21,15 @@ export const PROJECT_DOCUMENTS_BUCKET = "project-documents";
 
 function throwSupabaseError(err: unknown): never {
   throw new Error(getErrorMessage(err));
+}
+
+/** Si aún no está aplicada la migración 20260423150000_project_members_rpc.sql. */
+function isLikelyMissingProjectMembersRpcError(err: unknown): boolean {
+  const m = getErrorMessage(err).toLowerCase();
+  return (
+    m.includes("list_project_members_for_ids") ||
+    m.includes("sync_project_members")
+  ) && (m.includes("does not exist") || m.includes("not found") || m.includes("unknown"));
 }
 
 function toNullableId(s: string | null | undefined): string | null {
@@ -63,8 +73,22 @@ export async function fetchProjectsWithDocuments(): Promise<ProjectWithDocuments
   const ids = projects.map((p) => p.id);
   const { data: docRows, error: dErr } = await sb.from("project_documents").select("*").in("project_id", ids);
   if (dErr) throwSupabaseError(dErr);
-  const { data: memRows, error: mErr } = await sb.from("project_members").select("*").in("project_id", ids);
-  if (mErr) throwSupabaseError(mErr);
+  const rpcMem = await sb.rpc("list_project_members_for_ids", { p_project_ids: ids });
+  let memRows: ProjectMemberRow[] = [];
+  if (rpcMem.error) {
+    if (isLikelyMissingProjectMembersRpcError(rpcMem.error)) {
+      const fb = await sb.from("project_members").select("*").in("project_id", ids);
+      if (fb.error) throwSupabaseError(fb.error);
+      memRows = (fb.data ?? []) as ProjectMemberRow[];
+    } else {
+      throwSupabaseError(rpcMem.error);
+    }
+  } else {
+    const memJson = rpcMem.data;
+    memRows = Array.isArray(memJson)
+      ? (memJson as ProjectMemberRow[])
+      : ((memJson as unknown as ProjectMemberRow[] | null) ?? []);
+  }
   const byProject = new Map<string, ProjectDocumentRecord[]>();
   for (const dr of (docRows ?? []) as ProjectDocumentRow[]) {
     const d = projectDocumentRowToDomain(dr);
@@ -73,17 +97,18 @@ export async function fetchProjectsWithDocuments(): Promise<ProjectWithDocuments
     byProject.set(d.projectId, list);
   }
   const byMembers = new Map<string, ProjectMemberRecord[]>();
-  for (const mr of (memRows ?? []) as ProjectMemberRow[]) {
+  for (const mr of memRows as ProjectMemberRow[]) {
     const m = projectMemberRowToDomain(mr);
     const list = byMembers.get(m.projectId) ?? [];
     list.push(m);
     byMembers.set(m.projectId, list);
   }
-  return projects.map((row) => ({
+  const list = projects.map((row) => ({
     ...projectRowToDomain(row),
     documents: byProject.get(row.id) ?? [],
     members: byMembers.get(row.id) ?? [],
   }));
+  return sortByLocaleKey(list, (p) => p.title);
 }
 
 export type ProjectMemberInput = { companyWorkerId: string; role: ProjectMemberRole };
@@ -100,16 +125,30 @@ export async function syncProjectMembers(projectId: string, assignments: Project
     seen.add(a.companyWorkerId);
   }
   const valid = assignments.filter((a) => a.companyWorkerId.trim());
-  const { error: delErr } = await sb.from("project_members").delete().eq("project_id", projectId);
-  if (delErr) throwSupabaseError(delErr);
-  if (valid.length === 0) return;
-  const rows = valid.map((a) => ({
-    project_id: projectId,
+  const payload = valid.map((a) => ({
     company_worker_id: a.companyWorkerId,
     role: a.role,
   }));
-  const { error: insErr } = await sb.from("project_members").insert(rows);
-  if (insErr) throwSupabaseError(insErr);
+  const rpc = await sb.rpc("sync_project_members", {
+    p_project_id: projectId,
+    p_members: payload,
+  });
+  if (rpc.error) {
+    if (isLikelyMissingProjectMembersRpcError(rpc.error)) {
+      const { error: delErr } = await sb.from("project_members").delete().eq("project_id", projectId);
+      if (delErr) throwSupabaseError(delErr);
+      if (payload.length === 0) return;
+      const rows = payload.map((a) => ({
+        project_id: projectId,
+        company_worker_id: a.company_worker_id,
+        role: a.role,
+      }));
+      const { error: insErr } = await sb.from("project_members").insert(rows);
+      if (insErr) throwSupabaseError(insErr);
+      return;
+    }
+    throwSupabaseError(rpc.error);
+  }
 }
 
 export type SaveProjectInput = {
@@ -117,21 +156,37 @@ export type SaveProjectInput = {
   description: string;
   clientId: string;
   finalClientId: string | null;
-  startDate: string | null;
-  endDate: string | null;
+  startDate: string;
+  endDate: string;
+  responsibleCompanyWorkerId: string;
+  /** Si null, el aviso se programa con la regla de 2 meses antes del fin. */
+  endNoticeAt: string | null;
 };
+
+function normalizeDateOnly(s: string): string {
+  return s.trim();
+}
 
 export async function createProject(input: SaveProjectInput, allClients: ClientRecord[]): Promise<ProjectRecord> {
   const sb = requireSupabase();
   const client = allClients.find((c) => c.id === input.clientId);
   const finalId = validateProjectFinalClient(client, input.finalClientId, allClients);
+  const rid = input.responsibleCompanyWorkerId.trim();
+  if (!rid) throw new Error("Debes indicar un responsable de proyecto.");
+  const startD = normalizeDateOnly(input.startDate);
+  const endD = normalizeDateOnly(input.endDate);
+  if (!startD || !endD) throw new Error("Las fechas de inicio y de fin del proyecto son obligatorias.");
+  const notice = input.endNoticeAt?.trim() || null;
   const insert = {
     title: input.title.trim(),
     description: input.description.trim(),
     client_id: input.clientId,
     final_client_id: finalId,
-    start_date: input.startDate,
-    end_date: input.endDate,
+    start_date: startD,
+    end_date: endD,
+    responsible_company_worker_id: rid,
+    end_notice_at: notice,
+    end_notice_message_sent_at: null,
   };
   const { data: inserted, error } = await sb.from("projects").insert(insert).select("*").single();
   if (error) throwSupabaseError(error);
@@ -144,19 +199,55 @@ export async function updateProject(
   allClients: ClientRecord[]
 ): Promise<ProjectRecord> {
   const sb = requireSupabase();
+  const { data: prev, error: prevErr } = await sb
+    .from("projects")
+    .select("end_date, end_notice_at, responsible_company_worker_id, end_notice_message_sent_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (prevErr) throwSupabaseError(prevErr);
+
   const client = allClients.find((c) => c.id === input.clientId);
   const finalId = validateProjectFinalClient(client, input.finalClientId, allClients);
-  const patch = {
+  const rid = input.responsibleCompanyWorkerId.trim();
+  if (!rid) throw new Error("Debes indicar un responsable de proyecto.");
+  const startD = normalizeDateOnly(input.startDate);
+  const endD = normalizeDateOnly(input.endDate);
+  if (!startD || !endD) throw new Error("Las fechas de inicio y de fin del proyecto son obligatorias.");
+  const notice = input.endNoticeAt?.trim() || null;
+
+  const patch: Record<string, unknown> = {
     title: input.title.trim(),
     description: input.description.trim(),
     client_id: input.clientId,
     final_client_id: finalId,
-    start_date: input.startDate,
-    end_date: input.endDate,
+    start_date: startD,
+    end_date: endD,
+    responsible_company_worker_id: rid,
+    end_notice_at: notice,
   };
+  if (prev) {
+    const prevNotice = (prev as { end_notice_at: string | null }).end_notice_at;
+    const prevRid = (prev as { responsible_company_worker_id: string | null }).responsible_company_worker_id;
+    const prevEnd = (prev as { end_date: string }).end_date;
+    if (
+      prevEnd !== endD ||
+      (prevNotice ?? null) !== (notice ?? null) ||
+      (prevRid ?? null) !== rid
+    ) {
+      patch.end_notice_message_sent_at = null;
+    }
+  }
   const { data: updated, error } = await sb.from("projects").update(patch).eq("id", id).select("*").single();
   if (error) throwSupabaseError(error);
   return projectRowToDomain(updated as ProjectRow);
+}
+
+/** Ejecuta avisos de fin de proyecto para el día actual (Europa/Madrid). Idempotente en BD. */
+export async function runProjectEndNotices(): Promise<number> {
+  const sb = requireSupabase();
+  const { data, error } = await sb.rpc("send_project_end_notices");
+  if (error) throwSupabaseError(error);
+  return typeof data === "number" ? data : Number(data) || 0;
 }
 
 async function removeStorageFiles(paths: string[]): Promise<void> {

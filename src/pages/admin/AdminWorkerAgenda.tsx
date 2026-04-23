@@ -132,8 +132,10 @@ const AdminWorkerAgenda = () => {
   const { data: vacA = [], isLoading: vLoadA } = useWorkerVacationDays(workerId, holidayYears.a);
   const { data: vacB = [], isLoading: vLoadB } = useWorkerVacationDays(workerId, holidayYears.b);
   const vacationDates = useMemo(() => {
-    if (holidayYears.a === holidayYears.b) return vacA;
-    return [...new Set([...vacA, ...vacB])];
+    const da = vacA.map((e) => e.date);
+    const db = vacB.map((e) => e.date);
+    if (holidayYears.a === holidayYears.b) return da;
+    return [...new Set([...da, ...db])];
   }, [holidayYears, vacA, vacB]);
 
   const agendaRange = useMemo(() => {

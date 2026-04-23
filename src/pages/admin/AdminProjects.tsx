@@ -43,6 +43,7 @@ import { ProjectFormDialog, type ProjectFormValues } from "@/components/admin/Pr
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errorMessage";
+import { companyWorkerDisplayName } from "@/types/companyWorkers";
 
 const AdminProjects = () => {
   const queryClient = useQueryClient();
@@ -79,6 +80,15 @@ const AdminProjects = () => {
     [clients]
   );
 
+  const workerName = useCallback(
+    (id: string | null) => {
+      if (!id) return "—";
+      const w = workers.find((x) => x.id === id);
+      return w ? companyWorkerDisplayName(w) : "—";
+    },
+    [workers]
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return projects;
@@ -101,6 +111,7 @@ const AdminProjects = () => {
       title: (p) => p.title,
       client: (p) => clientLabel(p.clientId),
       finalClient: (p) => (p.finalClientId ? clientLabel(p.finalClientId) : ""),
+      responsible: (p) => workerName(p.responsibleCompanyWorkerId),
       startDate: (p) => p.startDate ?? "",
       endDate: (p) => p.endDate ?? "",
       docs: (p) => p.documents.length,
@@ -136,8 +147,10 @@ const AdminProjects = () => {
       description: values.description ?? "",
       clientId: values.clientId,
       finalClientId: finalRaw,
-      startDate: values.startDate?.trim() ? values.startDate : null,
-      endDate: values.endDate?.trim() ? values.endDate : null,
+      startDate: values.startDate.trim(),
+      endDate: values.endDate.trim(),
+      responsibleCompanyWorkerId: values.responsibleWorkerId.trim(),
+      endNoticeAt: values.endNoticeAt?.trim() || null,
     };
   };
 
@@ -233,6 +246,12 @@ const AdminProjects = () => {
     finalNone: t("admin.projects.final_none"),
     startDate: t("admin.projects.field_start"),
     endDate: t("admin.projects.field_end"),
+    responsible: t("admin.projects.field_responsible"),
+    responsiblePlaceholder: t("admin.projects.responsible_placeholder"),
+    responsibleShortHint: t("admin.projects.responsible_short_hint"),
+    endNotice: t("admin.projects.field_end_notice"),
+    endNoticeHint: t("admin.projects.field_end_notice_hint"),
+    endNoticeDefaultLine: t("admin.projects.end_notice_default_line"),
     teamSection: t("admin.projects.team_section"),
     teamHint: t("admin.projects.team_hint"),
     addMember: t("admin.projects.add_member"),
@@ -337,6 +356,13 @@ const AdminProjects = () => {
                     className="min-w-[120px]"
                   />
                   <SortableTableHead
+                    label={t("admin.projects.col_responsible")}
+                    columnKey="responsible"
+                    currentSort={sort}
+                    onSort={handleSort}
+                    className="min-w-[120px]"
+                  />
+                  <SortableTableHead
                     label={t("admin.projects.col_start")}
                     columnKey="startDate"
                     currentSort={sort}
@@ -384,6 +410,11 @@ const AdminProjects = () => {
                             ? clientLabel(p.finalClientId)
                             : t("admin.clients.final_not_set")
                           : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[140px]">
+                        <div className="truncate" title={workerName(p.responsibleCompanyWorkerId)}>
+                          {workerName(p.responsibleCompanyWorkerId)}
+                        </div>
                       </TableCell>
                       <TableCell className="tabular-nums text-sm">{formatDate(p.startDate)}</TableCell>
                       <TableCell className="tabular-nums text-sm">{formatDate(p.endDate)}</TableCell>

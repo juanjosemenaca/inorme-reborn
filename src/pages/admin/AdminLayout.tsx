@@ -45,6 +45,7 @@ import { usePendingWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
 import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
 import { ADMIN_PATHS } from "@/constants/adminPaths";
 import { IntranetAttentionDialogs } from "@/components/admin/IntranetAttentionDialogs";
+import { runProjectEndNotices } from "@/api/projectsApi";
 
 const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
@@ -256,6 +257,19 @@ const AdminLayout = () => {
   useEffect(() => {
     if (isAdminDataSectionActive) setAdminDataSectionOpen(true);
   }, [isAdminDataSectionActive]);
+
+  /** Avisos de fin de proyecto (RPC diaria, una vez por navegador y día). */
+  useEffect(() => {
+    if (!supabaseOk || !user) return;
+    const key = "projectEndNoticesLastRunYmd";
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(key) === today) return;
+    void runProjectEndNotices()
+      .then(() => localStorage.setItem(key, today))
+      .catch(() => {
+        /* migración o RPC aún no aplicado */
+      });
+  }, [supabaseOk, user]);
 
   const isAdminDataFichajeSectionActive =
     isAdmin && location.pathname.startsWith("/admin/fichajes");

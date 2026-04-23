@@ -2,6 +2,7 @@ import { requireSupabase } from "@/api/supabaseRequire";
 import { getCompanyWorkerById } from "@/api/companyWorkersApi";
 import { createMemorySupabaseClient } from "@/lib/supabaseMemoryClient";
 import { generateInitialPassword } from "@/lib/passwordPolicy";
+import { sortByLocaleKey } from "@/lib/sortAlpha";
 import { backofficeUserRowToDomain } from "@/lib/supabase/mappers";
 import type { BackofficeUserRow } from "@/types/database";
 import {
@@ -41,7 +42,8 @@ export async function fetchBackofficeUsers(): Promise<BackofficeUserRecord[]> {
     .select("*")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (rows ?? []).map((row) => backofficeUserRowToDomain(row as BackofficeUserRow));
+  const list = (rows ?? []).map((row) => backofficeUserRowToDomain(row as BackofficeUserRow));
+  return sortByLocaleKey(list, (u) => getDisplayName(u) || u.email);
 }
 
 export async function getUserById(id: string): Promise<BackofficeUserRecord | undefined> {

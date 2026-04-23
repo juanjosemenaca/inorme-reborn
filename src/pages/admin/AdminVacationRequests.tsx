@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -33,8 +34,14 @@ import {
   deleteWorkerVacationChangeRequest,
   rejectWorkerVacationChangeRequest,
 } from "@/api/workerVacationChangeRequestsApi";
+import {
+  approveCarryoverRequest,
+  fetchPendingCarryoverRequests,
+  rejectCarryoverRequest,
+} from "@/api/workerVacationCarryoverRequestsApi";
 import { companyWorkerDisplayName } from "@/types/companyWorkers";
 import type { WorkerVacationChangeRequestRecord } from "@/types/workerVacationChangeRequests";
+import type { WorkerVacationCarryoverRequestRecord } from "@/api/workerVacationCarryoverRequestsApi";
 
 function DiffSummary({ req }: { req: WorkerVacationChangeRequestRecord }) {
   const prev = new Set(req.previousApprovedDates);
@@ -63,9 +70,17 @@ const AdminVacationRequests = () => {
   const { data: workers = [] } = useCompanyWorkers();
   const { data: sites = [] } = useWorkCalendarSites();
   const { data: requests = [], isLoading, isError, error } = useAllWorkerVacationChangeRequests();
+  const { data: carryoverPending = [], isLoading: carryLoading } = useQuery({
+    queryKey: queryKeys.pendingCarryoverRequests,
+    queryFn: fetchPendingCarryoverRequests,
+  });
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<WorkerVacationChangeRequestRecord | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [rejectCarryOpen, setRejectCarryOpen] = useState(false);
+  const [rejectCarryTarget, setRejectCarryTarget] = useState<WorkerVacationCarryoverRequestRecord | null>(null);
+  const [rejectCarryReason, setRejectCarryReason] = useState("");
+  const [approveDaysById, setApproveDaysById] = useState<Record<string, string>>({});
 
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const formatDt = (iso: string) =>
@@ -140,6 +155,42 @@ const AdminVacationRequests = () => {
     },
   });
 
+  const approveCarryoverMutation = useMutation({
+    mutationFn: ({ id, daysApproved }: { id: string; daysApproved: number }) =>
+      approveCarryoverRequest(id, daysApproved),
+    onSuccess: async () => {
+      toast({ title: t("admin.vacationRequests.toast_carry_approved") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pendingCarryoverRequests });
+      await queryClient.invalidateQueries({ queryKey: ["adminVacationSummaries"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rejectCarryoverMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => rejectCarryoverRequest(id, reason),
+    onSuccess: async () => {
+      toast({ title: t("admin.vacationRequests.toast_carry_rejected") });
+      setRejectCarryOpen(false);
+      setRejectCarryTarget(null);
+      setRejectCarryReason("");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pendingCarryoverRequests });
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
@@ -164,6 +215,105 @@ const AdminVacationRequests = () => {
           {t("admin.vacationRequests.subtitle")}
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("admin.vacationRequests.carryover_section_title")}</CardTitle>
+          <CardDescription>{t("admin.vacationRequests.carryover_section_desc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {carryLoading ? (
+            <p className="text-sm text-muted-foreground py-4">{t("admin.common.loading")}</p>
+          ) : carryoverPending.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">{t("admin.vacationRequests.empty_carryover")}</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("admin.vacationRequests.col_worker")}</TableHead>
+                  <TableHead>{t("admin.vacationRequests.col_site")}</TableHead>
+                  <TableHead className="text-right">{t("admin.vacationRequests.carryover_col_from")}</TableHead>
+                  <TableHead className="text-right">{t("admin.vacationRequests.carryover_col_to")}</TableHead>
+                  <TableHead className="text-right">{t("admin.vacationRequests.carryover_col_days")}</TableHead>
+                  <TableHead>{t("admin.vacationRequests.col_message")}</TableHead>
+                  <TableHead className="text-right w-[220px]">{t("admin.common.actions")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {carryoverPending.map((cr) => (
+                  <TableRow key={cr.id}>
+                    <TableCell className="font-medium whitespace-nowrap">
+                      {workerNameById.get(cr.companyWorkerId) ?? cr.companyWorkerId}
+                    </TableCell>
+                    <TableCell>{workerSiteName(cr.companyWorkerId)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{cr.sourceYear}</TableCell>
+                    <TableCell className="text-right tabular-nums">{cr.targetYear}</TableCell>
+                    <TableCell className="text-right tabular-nums">{cr.daysRequested}</TableCell>
+                    <TableCell className="text-sm max-w-[200px]">{cr.workerMessage || "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
+                        <div className="flex items-center gap-1 justify-end">
+                          <Label htmlFor={`carry-apr-${cr.id}`} className="text-xs whitespace-nowrap sr-only">
+                            {t("admin.vacationRequests.carryover_approve_label")}
+                          </Label>
+                          <Input
+                            id={`carry-apr-${cr.id}`}
+                            type="number"
+                            min={0}
+                            max={cr.daysRequested}
+                            className="h-8 w-16 text-right tabular-nums"
+                            value={approveDaysById[cr.id] ?? String(cr.daysRequested)}
+                            onChange={(e) =>
+                              setApproveDaysById((prev) => ({ ...prev, [cr.id]: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            className="gap-1"
+                            disabled={approveCarryoverMutation.isPending}
+                            onClick={() => {
+                              const raw = approveDaysById[cr.id] ?? String(cr.daysRequested);
+                              const n = Math.floor(Number(raw));
+                              if (!Number.isFinite(n) || n < 0 || n > cr.daysRequested) {
+                                toast({
+                                  title: t("admin.common.error"),
+                                  description: t("admin.vacationRequests.carryover_invalid_days"),
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              approveCarryoverMutation.mutate({ id: cr.id, daysApproved: n });
+                            }}
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            {t("admin.vacationRequests.carryover_approve")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-destructive"
+                            disabled={rejectCarryoverMutation.isPending}
+                            onClick={() => {
+                              setRejectCarryTarget(cr);
+                              setRejectCarryReason("");
+                              setRejectCarryOpen(true);
+                            }}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            {t("admin.vacationRequests.reject")}
+                          </Button>
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -255,6 +405,39 @@ const AdminVacationRequests = () => {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={rejectCarryOpen} onOpenChange={setRejectCarryOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("admin.vacationRequests.reject_carry_title")}</DialogTitle>
+            <DialogDescription>{t("admin.vacationRequests.reject_desc")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="carry-reject-reason">{t("admin.vacationRequests.reject_reason_label")}</Label>
+            <Textarea
+              id="carry-reject-reason"
+              value={rejectCarryReason}
+              onChange={(e) => setRejectCarryReason(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectCarryOpen(false)}>
+              {t("admin.common.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!rejectCarryReason.trim() || rejectCarryoverMutation.isPending || !rejectCarryTarget}
+              onClick={() => {
+                if (!rejectCarryTarget) return;
+                rejectCarryoverMutation.mutate({ id: rejectCarryTarget.id, reason: rejectCarryReason });
+              }}
+            >
+              {t("admin.vacationRequests.reject_confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent>

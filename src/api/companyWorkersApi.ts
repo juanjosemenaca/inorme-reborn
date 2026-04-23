@@ -2,12 +2,14 @@ import { requireSupabase } from "@/api/supabaseRequire";
 import { getProfileByAuthUserId } from "@/api/backofficeUsersApi";
 import { getWorkCalendarSiteById } from "@/api/workCalendarSitesApi";
 import { getProviderById } from "@/api/providersApi";
+import { sortByLocaleKey } from "@/lib/sortAlpha";
 import { companyWorkerRecordToRowInsert, companyWorkerRowToDomain } from "@/lib/supabase/mappers";
 import type { CompanyWorkerRow } from "@/types/database";
-import type {
-  AutonomoVia,
-  CompanyWorkerEmploymentType,
-  CompanyWorkerRecord,
+import {
+  companyWorkerDisplayName,
+  type AutonomoVia,
+  type CompanyWorkerEmploymentType,
+  type CompanyWorkerRecord,
 } from "@/types/companyWorkers";
 
 async function normalizeEmploymentFields(
@@ -47,7 +49,8 @@ export async function fetchCompanyWorkers(): Promise<CompanyWorkerRecord[]> {
     .select("*")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (rows ?? []).map((row) => companyWorkerRowToDomain(row as CompanyWorkerRow));
+  const list = (rows ?? []).map((row) => companyWorkerRowToDomain(row as CompanyWorkerRow));
+  return sortByLocaleKey(list, (w) => companyWorkerDisplayName(w));
 }
 
 export async function getCompanyWorkerById(id: string): Promise<CompanyWorkerRecord | undefined> {

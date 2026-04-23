@@ -1,4 +1,5 @@
 import { requireSupabase } from "@/api/supabaseRequire";
+import { sortByLocaleKey } from "@/lib/sortAlpha";
 import {
   providerContactRowToDomain,
   providerRecordToRowInsert,
@@ -21,9 +22,10 @@ export async function fetchProviders(): Promise<ProviderRecord[]> {
     list.push(c as ProviderContactPersonRow);
     byProv.set(c.provider_id, list);
   }
-  return (rows ?? []).map((row) =>
+  const list = (rows ?? []).map((row) =>
     providerRowToDomain(row as ProviderRow, byProv.get((row as ProviderRow).id) ?? [])
   );
+  return sortByLocaleKey(list, (p) => p.tradeName.trim() || p.companyName.trim() || p.cif);
 }
 
 export async function getProviderById(id: string): Promise<ProviderRecord | undefined> {

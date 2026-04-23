@@ -112,6 +112,8 @@ const AdminVacations = () => {
       enjoyedInSelectedYear: (r) => r.enjoyedInSelectedYear,
       pendingInSelectedYear: (r) => r.pendingInSelectedYear,
       unusedFromPreviousYear: (r) => r.unusedFromPreviousYear,
+      carryoverApprovedForSelectedYear: (r) => r.carryoverApprovedForSelectedYear,
+      carryoverUsedInSelectedYear: (r) => r.carryoverUsedInSelectedYear,
     };
     const get = getters[sort.key];
     if (!get) return filtered;
@@ -331,13 +333,27 @@ const AdminVacations = () => {
                       onSort={handleSort}
                       className="text-right tabular-nums"
                     />
+                    <SortableTableHead
+                      label={t("admin.vacations.col_carry_approved")}
+                      columnKey="carryoverApprovedForSelectedYear"
+                      currentSort={sort}
+                      onSort={handleSort}
+                      className="text-right tabular-nums"
+                    />
+                    <SortableTableHead
+                      label={t("admin.vacations.col_carry_used")}
+                      columnKey="carryoverUsedInSelectedYear"
+                      currentSort={sort}
+                      onSort={handleSort}
+                      className="text-right tabular-nums"
+                    />
                     <TableHead className="min-w-[200px]">{t("admin.vacations.col_carry_note")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sorted.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
                         {t("admin.vacations.empty")}
                       </TableCell>
                     </TableRow>
@@ -386,6 +402,8 @@ const AdminVacations = () => {
                         <TableCell className="text-right tabular-nums">{r.usedInSelectedYear}</TableCell>
                         <TableCell className="text-right tabular-nums">{r.pendingInSelectedYear}</TableCell>
                         <TableCell className="text-right tabular-nums">{r.enjoyedInSelectedYear}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.carryoverApprovedForSelectedYear}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.carryoverUsedInSelectedYear}</TableCell>
                         <TableCell>
                           {r.unusedFromPreviousYear > 0 ? (
                             <span className="inline-flex flex-wrap items-center gap-2 text-sm">

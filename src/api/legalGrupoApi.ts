@@ -1,4 +1,5 @@
 import { requireSupabase } from "@/api/supabaseRequire";
+import { sortByLocaleKey } from "@/lib/sortAlpha";
 import { getProfileByAuthUserId } from "@/api/backofficeUsersApi";
 import type {
   LegalCalendarEventRow,
@@ -237,7 +238,8 @@ export async function fetchLegalClients(): Promise<LegalClientRecord[]> {
     .select("*")
     .order("created_at", { ascending: false });
   if (error) throwErr(error);
-  return (data ?? []).map((r) => clientRowToDomain(r as LegalClientRow));
+  const list = (data ?? []).map((r) => clientRowToDomain(r as LegalClientRow));
+  return sortByLocaleKey(list, (c) => c.displayName);
 }
 
 export type CreateLegalClientInput = {
@@ -300,7 +302,8 @@ export async function fetchLegalContacts(legalClientId: string): Promise<LegalCo
     .eq("legal_client_id", legalClientId)
     .order("created_at", { ascending: true });
   if (error) throwErr(error);
-  return (data ?? []).map((r) => contactRowToDomain(r as LegalContactRow));
+  const list = (data ?? []).map((r) => contactRowToDomain(r as LegalContactRow));
+  return sortByLocaleKey(list, (c) => `${c.firstName} ${c.lastName}`.trim() || c.email);
 }
 
 export async function createLegalContact(input: {
@@ -339,7 +342,8 @@ export async function fetchLegalMatters(): Promise<LegalMatterRecord[]> {
     .select("*")
     .order("updated_at", { ascending: false });
   if (error) throwErr(error);
-  return (data ?? []).map((r) => matterRowToDomain(r as LegalMatterRow));
+  const list = (data ?? []).map((r) => matterRowToDomain(r as LegalMatterRow));
+  return sortByLocaleKey(list, (m) => m.title);
 }
 
 export async function fetchLegalMatterById(id: string): Promise<LegalMatterRecord | null> {
