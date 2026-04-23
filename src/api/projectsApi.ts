@@ -32,6 +32,11 @@ function isLikelyMissingProjectMembersRpcError(err: unknown): boolean {
   ) && (m.includes("does not exist") || m.includes("not found") || m.includes("unknown"));
 }
 
+function isProjectMembersSchemaCacheError(err: unknown): boolean {
+  const m = getErrorMessage(err).toLowerCase();
+  return m.includes("project_members") && m.includes("schema cache");
+}
+
 function toNullableId(s: string | null | undefined): string | null {
   if (s === undefined || s === null) return null;
   const t = String(s).trim();
@@ -78,8 +83,16 @@ export async function fetchProjectsWithDocuments(): Promise<ProjectWithDocuments
   if (rpcMem.error) {
     if (isLikelyMissingProjectMembersRpcError(rpcMem.error)) {
       const fb = await sb.from("project_members").select("*").in("project_id", ids);
-      if (fb.error) throwSupabaseError(fb.error);
-      memRows = (fb.data ?? []) as ProjectMemberRow[];
+      if (fb.error) {
+        // Fallback de compatibilidad: si PostgREST no ve project_members, no romper listado.
+        if (isProjectMembersSchemaCacheError(fb.error)) {
+          memRows = [];
+        } else {
+          throwSupabaseError(fb.error);
+        }
+      } else {
+        memRows = (fb.data ?? []) as ProjectMemberRow[];
+      }
     } else {
       throwSupabaseError(rpcMem.error);
     }
@@ -136,7 +149,11 @@ export async function syncProjectMembers(projectId: string, assignments: Project
   if (rpc.error) {
     if (isLikelyMissingProjectMembersRpcError(rpc.error)) {
       const { error: delErr } = await sb.from("project_members").delete().eq("project_id", projectId);
-      if (delErr) throwSupabaseError(delErr);
+      if (delErr) {
+        // Permite guardar proyecto aunque project_members no esté visible en cache REST.
+        if (isProjectMembersSchemaCacheError(delErr)) return;
+        throwSupabaseError(delErr);
+      }
       if (payload.length === 0) return;
       const rows = payload.map((a) => ({
         project_id: projectId,
@@ -144,7 +161,10 @@ export async function syncProjectMembers(projectId: string, assignments: Project
         role: a.role,
       }));
       const { error: insErr } = await sb.from("project_members").insert(rows);
-      if (insErr) throwSupabaseError(insErr);
+      if (insErr) {
+        if (isProjectMembersSchemaCacheError(insErr)) return;
+        throwSupabaseError(insErr);
+      }
       return;
     }
     throwSupabaseError(rpc.error);
