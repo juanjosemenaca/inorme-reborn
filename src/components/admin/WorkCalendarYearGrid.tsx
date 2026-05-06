@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import { isWeekendIso } from "@/lib/calendarIso";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
 import type { WorkCalendarHolidayKind, WorkCalendarHolidayRecord } from "@/types/workCalendars";
+import type { AgendaAudienceDayCounts } from "@/lib/workerAgendaAudience";
+import { agendaAudienceDotClass } from "@/lib/workerAgendaAudience";
 
 type DayVisual =
   | { type: "empty" }
@@ -97,6 +99,9 @@ type Props = {
   /** Número de entradas de agenda personal por fecha ISO (día local). */
   agendaCountByIso?: ReadonlyMap<string, number>;
   agendaLegendLabel?: string;
+  /** Desglose por alcance (trabajador / todos / proyecto); si se informa, sustituye el punto único violeta. */
+  agendaAudienceCountsByIso?: ReadonlyMap<string, AgendaAudienceDayCounts>;
+  agendaAudienceTooltipLabels?: { worker: string; all: string; project: string };
 };
 
 export function WorkCalendarYearGrid({
@@ -127,6 +132,8 @@ export function WorkCalendarYearGrid({
   vacationCarryoverTooltipLine,
   agendaCountByIso,
   agendaLegendLabel,
+  agendaAudienceCountsByIso,
+  agendaAudienceTooltipLabels,
 }: Props) {
   const todayIso = useMemo(() => {
     const now = new Date();
@@ -297,7 +304,16 @@ export function WorkCalendarYearGrid({
                         tooltipLines.push(vacationTooltipLine);
                       }
                       const agendaN = agendaCountByIso?.get(cell.iso) ?? 0;
-                      if (agendaN > 0 && agendaLegendLabel) {
+                      const ac = agendaAudienceCountsByIso?.get(cell.iso);
+                      const agendaTotalAudience = ac ? ac.worker + ac.all + ac.project : 0;
+                      const useAudienceAgenda =
+                        agendaAudienceCountsByIso != null && agendaAudienceTooltipLabels != null;
+                      if (useAudienceAgenda && ac && agendaTotalAudience > 0 && agendaAudienceTooltipLabels) {
+                        const L = agendaAudienceTooltipLabels;
+                        if (ac.worker > 0) tooltipLines.push(`${L.worker}: ${ac.worker}`);
+                        if (ac.all > 0) tooltipLines.push(`${L.all}: ${ac.all}`);
+                        if (ac.project > 0) tooltipLines.push(`${L.project}: ${ac.project}`);
+                      } else if (agendaN > 0 && agendaLegendLabel) {
                         tooltipLines.push(`${agendaLegendLabel}: ${agendaN}`);
                       }
 
@@ -332,7 +348,17 @@ export function WorkCalendarYearGrid({
                               >
                                 <span className="relative flex flex-col items-center justify-center gap-0.5">
                                   <span>{cell.day}</span>
-                                  {(agendaCountByIso?.get(cell.iso) ?? 0) > 0 ? (
+                                  {useAudienceAgenda && agendaTotalAudience > 0 && ac ? (
+                                    <span className="flex gap-0.5 justify-center" aria-hidden>
+                                      {ac.worker > 0 ? (
+                                        <span className={agendaAudienceDotClass("worker")} />
+                                      ) : null}
+                                      {ac.all > 0 ? <span className={agendaAudienceDotClass("all")} /> : null}
+                                      {ac.project > 0 ? (
+                                        <span className={agendaAudienceDotClass("project")} />
+                                      ) : null}
+                                    </span>
+                                  ) : agendaN > 0 ? (
                                     <span className="size-1.5 rounded-full bg-violet-600 dark:bg-violet-400" aria-hidden />
                                   ) : null}
                                 </span>
@@ -341,7 +367,17 @@ export function WorkCalendarYearGrid({
                               <div className={cellClassName}>
                                 <span className="relative flex flex-col items-center justify-center gap-0.5">
                                   <span>{cell.day}</span>
-                                  {(agendaCountByIso?.get(cell.iso) ?? 0) > 0 ? (
+                                  {useAudienceAgenda && agendaTotalAudience > 0 && ac ? (
+                                    <span className="flex gap-0.5 justify-center" aria-hidden>
+                                      {ac.worker > 0 ? (
+                                        <span className={agendaAudienceDotClass("worker")} />
+                                      ) : null}
+                                      {ac.all > 0 ? <span className={agendaAudienceDotClass("all")} /> : null}
+                                      {ac.project > 0 ? (
+                                        <span className={agendaAudienceDotClass("project")} />
+                                      ) : null}
+                                    </span>
+                                  ) : agendaN > 0 ? (
                                     <span className="size-1.5 rounded-full bg-violet-600 dark:bg-violet-400" aria-hidden />
                                   ) : null}
                                 </span>

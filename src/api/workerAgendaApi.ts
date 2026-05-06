@@ -398,3 +398,33 @@ export async function deleteWorkerAgendaItem(id: string): Promise<void> {
   const { error } = await sb.from("worker_agenda_items").delete().eq("id", id);
   if (error) throwErr(error);
 }
+
+/**
+ * Todas las entradas con origen administración en el rango (cualquier administrador).
+ * Útil para revisar y gestionar notas/eventos/to-dos creados desde backoffice.
+ */
+export async function fetchAdminAgendaAuditItems(
+  fromIsoDate: string,
+  toIsoDate: string
+): Promise<WorkerAgendaItemRecord[]> {
+  const sb = requireSupabase();
+  const profile = await requireProfile();
+  if (profile.role !== "ADMIN") {
+    throw new Error("Sin permiso.");
+  }
+
+  const start = `${fromIsoDate}T00:00:00.000Z`;
+  const endNext = new Date(`${toIsoDate}T23:59:59.999Z`);
+  const end = endNext.toISOString();
+
+  const { data, error } = await sb
+    .from("worker_agenda_items")
+    .select("*")
+    .eq("source", "ADMIN")
+    .gte("starts_at", start)
+    .lte("starts_at", end)
+    .order("starts_at", { ascending: true });
+
+  if (error) throwErr(error);
+  return (data ?? []).map((r) => rowToDomain(r as WorkerAgendaItemRow));
+}

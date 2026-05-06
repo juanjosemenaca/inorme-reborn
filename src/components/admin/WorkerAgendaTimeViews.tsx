@@ -6,6 +6,7 @@ import { isWeekendIso } from "@/lib/calendarIso";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
 import type { WorkCalendarHolidayKind, WorkCalendarHolidayRecord } from "@/types/workCalendars";
 import type { WorkerAgendaItemRecord } from "@/types/agenda";
+import { agendaItemChipClass } from "@/lib/workerAgendaAudience";
 
 /** Lunes = primera columna. */
 export function buildMonthGridCells(year: number, month1to12: number): { type: "empty" } | { type: "day"; day: number; iso: string }[][] {
@@ -234,12 +235,7 @@ export function AgendaMonthView({
                         e.stopPropagation();
                         onItemClick(it);
                       }}
-                      className={cn(
-                        "truncate rounded border px-0.5 py-px text-left text-[10px] leading-tight transition-colors sm:text-[11px]",
-                        it.source === "ADMIN"
-                          ? "border-violet-400/60 bg-violet-100/90 text-violet-950 hover:bg-violet-200/90 dark:border-violet-700/60 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-900/60"
-                          : "border-border bg-background/80 hover:bg-muted dark:hover:bg-muted/80"
-                      )}
+                      className={agendaItemChipClass(it, "compact")}
                     >
                       {new Date(it.startsAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}{" "}
                       {it.title}
@@ -400,12 +396,7 @@ export function AgendaWeekView({
                       key={it.id}
                       type="button"
                       onClick={() => onItemClick(it)}
-                      className={cn(
-                        "rounded-md border px-2 py-1.5 text-left text-xs transition-colors",
-                        it.source === "ADMIN"
-                          ? "border-violet-400/60 bg-violet-100/90 text-violet-950 dark:border-violet-700/60 dark:bg-violet-950/50 dark:text-violet-100"
-                          : "border-border bg-background hover:bg-muted"
-                      )}
+                      className={cn("rounded-md text-left transition-colors", agendaItemChipClass(it, "comfortable"))}
                     >
                       <span className="font-medium">
                         {new Date(it.startsAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}

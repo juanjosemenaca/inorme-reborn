@@ -30,6 +30,8 @@ export const queryKeys = {
     ["workersTimeClockEvents", workerIdsKey, fromIsoDate, toIsoDate] as const,
   workerAgendaItems: (companyWorkerId: string, fromIsoDate: string, toIsoDate: string) =>
     ["workerAgendaItems", companyWorkerId, fromIsoDate, toIsoDate] as const,
+  adminAgendaAuditItems: (fromIsoDate: string, toIsoDate: string) =>
+    ["adminAgendaAuditItems", fromIsoDate, toIsoDate] as const,
   billingIssuers: ["billingIssuers"] as const,
   billingSeries: ["billingSeries"] as const,
   billingInvoices: ["billingInvoices"] as const,

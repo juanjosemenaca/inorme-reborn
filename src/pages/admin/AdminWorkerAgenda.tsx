@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Loader2, Plus } from "lucide-react";
+import { CalendarDays, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,9 @@ import {
 } from "@/components/admin/WorkerAgendaTimeViews";
 import { expandSummerRangesToWeekdayIsoSet } from "@/lib/workCalendarSummerRange";
 import { useToast } from "@/hooks/use-toast";
-import { createWorkerAgendaItem } from "@/api/workerAgendaApi";
+import { createWorkerAgendaItem, deleteWorkerAgendaItem, updateWorkerAgendaItem } from "@/api/workerAgendaApi";
+import { useAdminAgendaAuditItems } from "@/hooks/useAdminAgendaAudit";
+import { useBackofficeUsers } from "@/hooks/useBackofficeUsers";
 import type { WorkCalendarHolidayKind } from "@/types/workCalendars";
 import type { WorkerAgendaItemRecord, WorkerAgendaItemType } from "@/types/agenda";
 import { ADMIN_WORKER_AGENDA_CREATE_TYPES } from "@/types/agenda";
@@ -43,6 +45,12 @@ import { companyWorkerDisplayName } from "@/types/companyWorkers";
 import { cn } from "@/lib/utils";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
 import { isWeekendIso } from "@/lib/calendarIso";
+import {
+  agendaAudienceDotClass,
+  agendaDetailDialogAccentClass,
+  agendaItemChipClass,
+  buildAgendaAudienceCountsByIso,
+} from "@/lib/workerAgendaAudience";
 
 function toLocalYmd(isoUtc: string): string {
   const d = new Date(isoUtc);
@@ -60,6 +68,43 @@ function buildAgendaCountByIso(items: WorkerAgendaItemRecord[]): Map<string, num
     m.set(k, (m.get(k) ?? 0) + 1);
   }
   return m;
+}
+
+function sortAgendaByTime(items: WorkerAgendaItemRecord[]): WorkerAgendaItemRecord[] {
+  return [...items].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+}
+
+function agendaScopeLine(
+  it: WorkerAgendaItemRecord,
+  t: (key: string) => string,
+  projectTitleById: Map<string, string>,
+  workerNameById: Map<string, string>
+): string | null {
+  if (it.appliesToAllCompanyWorkers) {
+    return t("admin.agenda.scope_all_workers_label");
+  }
+  if (it.projectId) {
+    const title = projectTitleById.get(it.projectId) ?? it.projectId;
+    return t("admin.agenda.scope_project_label").replace("{{title}}", title);
+  }
+  if (it.companyWorkerId) {
+    const name = workerNameById.get(it.companyWorkerId) ?? "—";
+    return t("admin.agenda.scope_worker_label").replace("{{name}}", name);
+  }
+  return null;
+}
+
+function adminAgendaCreatedByLine(
+  item: WorkerAgendaItemRecord,
+  creatorEmailById: Map<string, string>,
+  t: (key: string) => string
+): string | null {
+  if (item.source !== "ADMIN") return null;
+  const cid = item.createdByBackofficeUserId;
+  if (!cid) return t("admin.agenda.detail_created_by_unknown");
+  const email = creatorEmailById.get(cid);
+  if (!email) return t("admin.agenda.detail_created_by_unknown");
+  return t("admin.agenda.detail_created_by").replace("{{email}}", email);
 }
 
 type AgendaViewMode = "year" | "month" | "week";
@@ -87,7 +132,17 @@ const AdminWorkerAgenda = () => {
   const [agendaAudience, setAgendaAudience] = useState<AdminAgendaAudience>("worker");
   const [agendaProjectId, setAgendaProjectId] = useState<string>("");
   const [detailItem, setDetailItem] = useState<WorkerAgendaItemRecord | null>(null);
+  const [detailEditing, setDetailEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("12:00");
+  const [editItemType, setEditItemType] = useState<WorkerAgendaItemType>("note");
   const [summaryIso, setSummaryIso] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDetailEditing(false);
+  }, [detailItem?.id]);
 
   useEffect(() => {
     if (adminAgendaType === "todo") {
@@ -115,6 +170,15 @@ const AdminWorkerAgenda = () => {
 
   const { data: projects = [] } = useProjects();
   const projectTitleById = useMemo(() => new Map(projects.map((p) => [p.id, p.title])), [projects]);
+
+  const workerNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const w of activeWorkers) m.set(w.id, companyWorkerDisplayName(w));
+    return m;
+  }, [activeWorkers]);
+
+  const { data: backofficeUsers = [] } = useBackofficeUsers();
+  const creatorEmailById = useMemo(() => new Map(backofficeUsers.map((u) => [u.id, u.email])), [backofficeUsers]);
 
   const holidayYears = useMemo(() => {
     if (viewMode === "year") return { a: editYear, b: editYear };
@@ -172,6 +236,19 @@ const AdminWorkerAgenda = () => {
     !!workerId
   );
 
+  const { data: adminAuditItems = [], isLoading: auditLoad } = useAdminAgendaAuditItems(
+    agendaRange.fromIso,
+    agendaRange.toIso,
+    !!workerId
+  );
+
+  const mergedAgendaItems = useMemo(() => {
+    const byId = new Map<string, WorkerAgendaItemRecord>();
+    for (const it of adminAuditItems) byId.set(it.id, it);
+    for (const it of agendaItems) byId.set(it.id, it);
+    return sortAgendaByTime([...byId.values()]);
+  }, [adminAuditItems, agendaItems]);
+
   const siteHolidays = useMemo(() => {
     if (!worker) return [];
     return holidays.filter((h) => h.siteId === worker.workCalendarSiteId);
@@ -192,8 +269,20 @@ const AdminWorkerAgenda = () => {
   }, [summerDays, worker]);
 
   const vacationIsoSet = useMemo(() => new Set(vacationDates), [vacationDates]);
-  const agendaCountByIso = useMemo(() => buildAgendaCountByIso(agendaItems), [agendaItems]);
-  const itemsByDay = useMemo(() => groupAgendaItemsByLocalDay(agendaItems), [agendaItems]);
+  const agendaCountByIso = useMemo(() => buildAgendaCountByIso(mergedAgendaItems), [mergedAgendaItems]);
+  const agendaAudienceCountsByIso = useMemo(
+    () => buildAgendaAudienceCountsByIso(mergedAgendaItems),
+    [mergedAgendaItems]
+  );
+  const agendaAudienceTooltipLabels = useMemo(
+    () => ({
+      worker: t("admin.agenda.legend_scope_worker"),
+      all: t("admin.agenda.legend_scope_all"),
+      project: t("admin.agenda.legend_scope_project"),
+    }),
+    [t, language]
+  );
+  const itemsByDay = useMemo(() => groupAgendaItemsByLocalDay(mergedAgendaItems), [mergedAgendaItems]);
 
   const dateLocale = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const kindLabel = (k: WorkCalendarHolidayKind) => t(`admin.workCalendars.kind_${k}`);
@@ -235,7 +324,7 @@ const AdminWorkerAgenda = () => {
     : "";
 
   const calendarLoading =
-    !workerId || hLoadA || hLoadB || sLoadA || sLoadB || vLoadA || vLoadB || aLoad;
+    !workerId || hLoadA || hLoadB || sLoadA || sLoadB || vLoadA || vLoadB || aLoad || auditLoad;
 
   const noteMutation = useMutation({
     mutationFn: async () => {
@@ -275,6 +364,7 @@ const AdminWorkerAgenda = () => {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["workerAgendaItems"] });
+      await queryClient.invalidateQueries({ queryKey: ["adminAgendaAuditItems"] });
       toast({ title: t("admin.agenda.toast_saved") });
       setNoteTitle("");
       setNoteBody("");
@@ -289,6 +379,78 @@ const AdminWorkerAgenda = () => {
       });
     },
   });
+
+  const adminDeleteMutation = useMutation({
+    mutationFn: (id: string) => deleteWorkerAgendaItem(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["workerAgendaItems"] });
+      await queryClient.invalidateQueries({ queryKey: ["adminAgendaAuditItems"] });
+      toast({ title: t("admin.agenda.toast_deleted") });
+      setDetailItem(null);
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const adminUpdateMutation = useMutation({
+    mutationFn: async () => {
+      if (!detailItem) throw new Error("no item");
+      const [hh, mm] = editTime.split(":").map(Number);
+      const start = new Date(editDate + "T12:00:00");
+      start.setHours(hh, mm, 0, 0);
+      return updateWorkerAgendaItem(detailItem.id, {
+        title: editTitle.trim(),
+        description: editBody.trim() || null,
+        startsAt: start.toISOString(),
+        itemType: editItemType,
+      });
+    },
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ["workerAgendaItems"] });
+      await queryClient.invalidateQueries({ queryKey: ["adminAgendaAuditItems"] });
+      setDetailItem(data);
+      setDetailEditing(false);
+      toast({ title: t("admin.agenda.toast_updated") });
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const startDetailEdit = () => {
+    if (!detailItem) return;
+    setEditTitle(detailItem.title);
+    setEditBody(detailItem.description ?? "");
+    const d = new Date(detailItem.startsAt);
+    setEditDate(dateToLocalYmd(d));
+    setEditTime(
+      `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+    );
+    let nextType = detailItem.itemType;
+    if (
+      (detailItem.appliesToAllCompanyWorkers || detailItem.projectId) &&
+      nextType === "todo"
+    ) {
+      nextType = "note";
+    }
+    setEditItemType(nextType);
+    setDetailEditing(true);
+  };
+
+  const detailEditTypeOptions = useMemo(() => {
+    if (!detailItem) return ADMIN_WORKER_AGENDA_CREATE_TYPES;
+    const skipTodo = detailItem.appliesToAllCompanyWorkers || !!detailItem.projectId;
+    return ADMIN_WORKER_AGENDA_CREATE_TYPES.filter((k) => !skipTodo || k !== "todo");
+  }, [detailItem]);
 
   const goPrevMonth = () => setMonthCursor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const goNextMonth = () => setMonthCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
@@ -511,6 +673,20 @@ const AdminWorkerAgenda = () => {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">{t("admin.agenda.grid_title")}</CardTitle>
               <CardDescription>{t("admin.agenda.grid_desc")}</CardDescription>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={agendaAudienceDotClass("worker")} aria-hidden />
+                  {t("admin.agenda.legend_scope_worker")}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={agendaAudienceDotClass("all")} aria-hidden />
+                  {t("admin.agenda.legend_scope_all")}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={agendaAudienceDotClass("project")} aria-hidden />
+                  {t("admin.agenda.legend_scope_project")}
+                </span>
+              </div>
             </CardHeader>
             <CardContent className="pb-6">
               {calendarLoading ? (
@@ -543,6 +719,8 @@ const AdminWorkerAgenda = () => {
                   vacationTooltipLine={t("admin.workerMyCalendar.tooltip_vacation")}
                   agendaCountByIso={agendaCountByIso}
                   agendaLegendLabel={t("admin.agenda.legend_agenda")}
+                  agendaAudienceCountsByIso={agendaAudienceCountsByIso}
+                  agendaAudienceTooltipLabels={agendaAudienceTooltipLabels}
                 />
               ) : viewMode === "month" ? (
                 <AgendaMonthView
@@ -584,138 +762,190 @@ const AdminWorkerAgenda = () => {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("admin.agenda.list_title")}</CardTitle>
-              <CardDescription>{t("admin.agenda.admin_list_desc")}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {agendaItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("admin.agenda.list_empty")}</p>
-              ) : (
-                <ul className="space-y-2">
-                  {agendaItems.map((it) => (
-                    <li
-                      key={it.id}
-                      className={cn(
-                        "rounded-lg border p-3",
-                        it.source === "ADMIN" && "border-violet-300/60 bg-violet-50/80 dark:bg-violet-950/20"
-                      )}
-                    >
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            className={cn(
-                              "text-left font-medium hover:underline",
-                              it.itemType === "todo" && it.completedAt && "line-through text-muted-foreground"
-                            )}
-                            onClick={() => setDetailItem(it)}
-                          >
-                            {it.title}
-                          </button>
-                          <Badge variant="outline" className="text-[10px]">
-                            {t(`admin.agenda.type_${it.itemType}`)}
-                          </Badge>
-                          {it.itemType === "todo" && it.completedAt ? (
-                            <Badge className="text-[10px] bg-emerald-600 hover:bg-emerald-600">
-                              {t("admin.agenda.todo_done_badge")}
-                            </Badge>
-                          ) : null}
-                          {it.source === "ADMIN" ? (
-                            <Badge variant="secondary" className="text-[10px]">
-                              {t("admin.agenda.badge_admin")}
-                            </Badge>
-                          ) : null}
-                          {it.appliesToAllCompanyWorkers ? (
-                            <Badge className="bg-sky-700 text-[10px] hover:bg-sky-700">
-                              {t("admin.agenda.badge_all_workers")}
-                            </Badge>
-                          ) : null}
-                          {it.projectId ? (
-                            <Badge className="bg-amber-800 text-[10px] hover:bg-amber-800">
-                              {t("admin.agenda.badge_project")}
-                              {projectTitleById.get(it.projectId)
-                                ? `: ${projectTitleById.get(it.projectId)}`
-                                : ""}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(it.startsAt).toLocaleString(dateLocale, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}
-                          {it.endsAt
-                            ? ` – ${new Date(it.endsAt).toLocaleTimeString(dateLocale, { timeStyle: "short" })}`
-                            : null}
-                        </p>
-                        {it.description ? (
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{it.description}</p>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+          <Dialog
+            open={!!detailItem}
+            onOpenChange={(open) => {
+              if (!open) {
+                setDetailItem(null);
+                setDetailEditing(false);
+              }
+            }}
+          >
+            <DialogContent
+              className={cn(
+                "max-w-md sm:max-w-lg",
+                detailItem ? agendaDetailDialogAccentClass(detailItem) : undefined
               )}
-            </CardContent>
-          </Card>
-
-          <Dialog open={!!detailItem} onOpenChange={(open) => !open && setDetailItem(null)}>
-            <DialogContent className="max-w-md">
+            >
               {detailItem ? (
                 <>
                   <DialogHeader>
-                    <DialogTitle className="pr-8">{detailItem.title}</DialogTitle>
+                    <DialogTitle className="pr-8">
+                      {detailEditing ? t("admin.agenda.detail_edit_title") : detailItem.title}
+                    </DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-3 py-1">
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">{t(`admin.agenda.type_${detailItem.itemType}`)}</Badge>
-                      {detailItem.source === "ADMIN" ? (
-                        <Badge variant="secondary">{t("admin.agenda.badge_admin")}</Badge>
-                      ) : null}
-                      {detailItem.appliesToAllCompanyWorkers ? (
-                        <Badge className="bg-sky-700 hover:bg-sky-700">{t("admin.agenda.badge_all_workers")}</Badge>
-                      ) : null}
-                      {detailItem.projectId ? (
-                        <Badge className="bg-amber-800 hover:bg-amber-800">
-                          {t("admin.agenda.badge_project")}
-                          {projectTitleById.get(detailItem.projectId)
-                            ? `: ${projectTitleById.get(detailItem.projectId)}`
-                            : ""}
-                        </Badge>
+                  {detailEditing ? (
+                    <div className="space-y-3 py-1">
+                      <p className="text-xs text-muted-foreground">{t("admin.agenda.detail_edit_scope_hint")}</p>
+                      <div className="space-y-2">
+                        <Label>{t("admin.agenda.field_type")}</Label>
+                        <SearchableSelect
+                          value={editItemType}
+                          onValueChange={(v) => setEditItemType(v as WorkerAgendaItemType)}
+                          options={detailEditTypeOptions.map((k) => ({
+                            value: k,
+                            label: t(`admin.agenda.type_${k}`),
+                          }))}
+                          searchable={false}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{t("admin.agenda.field_title")}</Label>
+                        <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{t("admin.agenda.field_description")}</Label>
+                        <Textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={4} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-2">
+                          <Label>{t("admin.agenda.field_date")}</Label>
+                          <Input
+                            type="date"
+                            value={editDate}
+                            onChange={(e) => setEditDate(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t("admin.agenda.field_time")}</Label>
+                          <Input
+                            type="time"
+                            value={editTime}
+                            onChange={(e) => setEditTime(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 py-1">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline">{t(`admin.agenda.type_${detailItem.itemType}`)}</Badge>
+                        {detailItem.source === "ADMIN" ? (
+                          <Badge variant="secondary">{t("admin.agenda.badge_admin")}</Badge>
+                        ) : null}
+                        {detailItem.appliesToAllCompanyWorkers ? (
+                          <Badge className="bg-sky-700 hover:bg-sky-700">
+                            {t("admin.agenda.badge_all_workers")}
+                          </Badge>
+                        ) : null}
+                        {detailItem.projectId ? (
+                          <Badge className="bg-amber-800 hover:bg-amber-800">
+                            {t("admin.agenda.badge_project")}
+                            {projectTitleById.get(detailItem.projectId)
+                              ? `: ${projectTitleById.get(detailItem.projectId)}`
+                              : ""}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      {(() => {
+                        const s = agendaScopeLine(detailItem, t, projectTitleById, workerNameById);
+                        return s ? <p className="text-sm text-muted-foreground">{s}</p> : null;
+                      })()}
+                      {(() => {
+                        const line = adminAgendaCreatedByLine(detailItem, creatorEmailById, t);
+                        return line ? <p className="text-xs text-muted-foreground">{line}</p> : null;
+                      })()}
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(detailItem.startsAt).toLocaleString(dateLocale, {
+                          dateStyle: "full",
+                          timeStyle: "short",
+                        })}
+                        {detailItem.endsAt
+                          ? ` – ${new Date(detailItem.endsAt).toLocaleTimeString(dateLocale, { timeStyle: "short" })}`
+                          : null}
+                      </p>
+                      {detailItem.description ? (
+                        <p className="text-sm whitespace-pre-wrap">{detailItem.description}</p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{t("admin.agenda.detail_no_description")}</p>
+                      )}
+                      {detailItem.itemType === "todo" && detailItem.completedAt ? (
+                        <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                          {t("admin.agenda.todo_completed_at").replace(
+                            "{{date}}",
+                            new Date(detailItem.completedAt).toLocaleString(dateLocale, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })
+                          )}
+                        </p>
                       ) : null}
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(detailItem.startsAt).toLocaleString(dateLocale, {
-                        dateStyle: "full",
-                        timeStyle: "short",
-                      })}
-                      {detailItem.endsAt
-                        ? ` – ${new Date(detailItem.endsAt).toLocaleTimeString(dateLocale, { timeStyle: "short" })}`
-                        : null}
-                    </p>
-                    {detailItem.description ? (
-                      <p className="text-sm whitespace-pre-wrap">{detailItem.description}</p>
+                  )}
+                  <DialogFooter className="flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                    {detailEditing ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="w-full sm:w-auto"
+                          disabled={adminUpdateMutation.isPending}
+                          onClick={() => setDetailEditing(false)}
+                        >
+                          {t("admin.agenda.detail_cancel_edit")}
+                        </Button>
+                        <Button
+                          type="button"
+                          className="w-full sm:w-auto gap-2"
+                          disabled={
+                            !editTitle.trim() ||
+                            !editDate ||
+                            adminUpdateMutation.isPending
+                          }
+                          onClick={() => adminUpdateMutation.mutate()}
+                        >
+                          {adminUpdateMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : null}
+                          {t("admin.agenda.detail_save")}
+                        </Button>
+                      </>
                     ) : (
-                      <p className="text-sm text-muted-foreground">{t("admin.agenda.detail_no_description")}</p>
+                      <>
+                        {detailItem.source === "ADMIN" ? (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            className="w-full sm:w-auto mr-auto gap-2"
+                            disabled={adminDeleteMutation.isPending}
+                            onClick={() => {
+                              if (window.confirm(t("admin.agenda.delete_confirm"))) {
+                                adminDeleteMutation.mutate(detailItem.id);
+                              }
+                            }}
+                          >
+                            {adminDeleteMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                            {t("admin.agenda.delete_admin_entry")}
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full sm:w-auto gap-2"
+                          onClick={startDetailEdit}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          {t("admin.agenda.detail_edit")}
+                        </Button>
+                        <Button type="button" variant="secondary" onClick={() => setDetailItem(null)}>
+                          {t("admin.agenda.detail_close")}
+                        </Button>
+                      </>
                     )}
-                    {detailItem.itemType === "todo" && detailItem.completedAt ? (
-                      <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                        {t("admin.agenda.todo_completed_at").replace(
-                          "{{date}}",
-                          new Date(detailItem.completedAt).toLocaleString(dateLocale, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })
-                        )}
-                      </p>
-                    ) : null}
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="secondary" onClick={() => setDetailItem(null)}>
-                      {t("admin.agenda.detail_close")}
-                    </Button>
                   </DialogFooter>
                 </>
               ) : null}
@@ -763,19 +993,31 @@ const AdminWorkerAgenda = () => {
                         <li key={it.id}>
                           <button
                             type="button"
-                            className="w-full rounded-md border px-3 py-2 text-left transition-colors hover:bg-muted"
+                            className={cn(
+                              "w-full min-w-0 text-left transition-colors",
+                              agendaItemChipClass(it, "comfortable")
+                            )}
                             onClick={() => {
                               setSummaryIso(null);
                               setDetailItem(it);
                             }}
                           >
-                            <span className="font-medium">{it.title}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {new Date(it.startsAt).toLocaleTimeString(dateLocale, {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
+                            <div className="min-w-0">
+                              <div>
+                                <span className="font-medium">{it.title}</span>
+                                <span className="ml-2 text-xs opacity-80">
+                                  {new Date(it.startsAt).toLocaleTimeString(dateLocale, {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              </div>
+                              {it.description ? (
+                                <p className="mt-1 line-clamp-3 text-xs opacity-80 whitespace-pre-wrap">
+                                  {it.description}
+                                </p>
+                              ) : null}
+                            </div>
                           </button>
                         </li>
                       ))}
