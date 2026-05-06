@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Clock3, Euro, Inbox, Loader2, MessageSquare, NotebookPen, CalendarRange } from "lucide-react";
+import { Clock3, Euro, Inbox, Loader2, MessageSquare, NotebookPen, CalendarRange, ClipboardList } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,9 @@ import {
   todayIso,
 } from "@/pages/admin/workerTimeClockShared";
 import { cn } from "@/lib/utils";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { BackofficeTodayDateCard } from "@/components/admin/BackofficeTodayDateCard";
+import { useMyDmsDocumentReviewsAsAssignee } from "@/hooks/useMyDmsDocumentReviews";
 import type { WorkerAgendaItemRecord } from "@/types/agenda";
 
 function sortAgendaByTime(items: WorkerAgendaItemRecord[]): WorkerAgendaItemRecord[] {
@@ -87,8 +89,8 @@ export function WorkerDashboard() {
   const { t, language } = useLanguage();
   const { user } = useAdminAuth();
   const modules = user?.enabledModules ?? [];
+  const supabaseOk = isSupabaseConfigured();
   const hasTimeClock = modules.includes("TIME_CLOCK");
-  const hasMessages = modules.includes("MESSAGES");
   const hasAgenda = modules.includes("AGENDA");
   const hasGastos = modules.includes("GASTOS");
   const companyWorkerId = user?.companyWorkerId ?? null;
@@ -131,7 +133,12 @@ export function WorkerDashboard() {
     to,
     hasTimeClock
   );
-  const { data: unreadCount = 0, isLoading: msgLoading } = useMyUnreadBackofficeMessageCount(hasMessages);
+  const { data: unreadCount = 0, isLoading: msgLoading } = useMyUnreadBackofficeMessageCount(
+    supabaseOk && !!user
+  );
+  const { data: pendingDocReviews = [], isLoading: pendingDocsLoading } = useMyDmsDocumentReviewsAsAssignee(
+    supabaseOk && !!user
+  );
 
   const { data: expenseSheets = [], isLoading: expensesLoading } = useWorkerExpenseSheets(
     companyWorkerId,
@@ -189,7 +196,8 @@ export function WorkerDashboard() {
             ? "border-destructive/40 bg-destructive/10 text-destructive"
             : "border-muted-foreground/30 bg-muted text-muted-foreground";
 
-  const showMessagesCard = hasMessages && !msgLoading && unreadCount > 0;
+  const showMessagesCard = !msgLoading && unreadCount > 0;
+  const showAssignedDocsCard = !pendingDocsLoading && pendingDocReviews.length > 0;
   const showAgendaWeekCard =
     hasAgenda && !!companyWorkerId && !agendaLoading && currentWeekItems.length > 0;
   const showAgendaFridayCard =
@@ -328,7 +336,35 @@ export function WorkerDashboard() {
           </Card>
         ) : null}
 
-        {/* Mensajes sin leer: solo si hay alguno pendiente */}
+        {showAssignedDocsCard ? (
+          <Card className="flex flex-col border-2 border-primary/25 shadow-sm md:col-span-2 xl:col-span-1">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                <CardTitle className="text-base">{t("admin.dashboard.worker_assigned_docs_title")}</CardTitle>
+              </div>
+              <CardDescription>{t("admin.dashboard.worker_assigned_docs_hint")}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-1 flex-col justify-between gap-4">
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
+                  {pendingDocReviews.length}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {t("admin.dashboard.worker_assigned_docs_count_label")}
+                </span>
+              </div>
+              <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
+                <Link to="/admin/documentos-pendientes" className="inline-flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4" aria-hidden />
+                  {t("admin.dashboard.worker_assigned_docs_link")}
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {/* Mensajes sin leer */}
         {showMessagesCard ? (
           <Card className="flex flex-col border-2 shadow-sm">
             <CardHeader className="pb-2">

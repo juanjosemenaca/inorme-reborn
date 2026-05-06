@@ -23,17 +23,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { optionalEmail } from "@/lib/zodOptional";
 import { mergeTradeAndCompanyName } from "@/lib/tradeCompanyName";
+import { EntityDocumentsSection } from "@/components/admin/EntityDocumentsSection";
 
 const kindEnum = z.enum(["FINAL", "INTERMEDIARIO"]);
 
@@ -270,20 +265,17 @@ export function ClientFormDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo de cliente</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {(Object.keys(CLIENT_KIND_LABELS) as ClientKind[]).map((k) => (
-                          <SelectItem key={k} value={k}>
-                            {CLIENT_KIND_LABELS[k]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={(Object.keys(CLIENT_KIND_LABELS) as ClientKind[]).map((k) => ({
+                          value: k,
+                          label: CLIENT_KIND_LABELS[k],
+                        }))}
+                        searchable={false}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -299,26 +291,17 @@ export function ClientFormDialog({
                         Si se conoce el destinatario final a través de este intermediario, elígelo.
                         Si no, deja «No indicado».
                       </p>
-                      <Select
-                        value={field.value ? field.value : NONE_VALUE}
-                        onValueChange={(v) =>
-                          field.onChange(v === NONE_VALUE ? "" : v)
-                        }
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar…" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={NONE_VALUE}>No indicado / desconocido</SelectItem>
-                          {finalClientOptions.map((opt) => (
-                            <SelectItem key={opt.id} value={opt.id}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value ? field.value : NONE_VALUE}
+                          onValueChange={(v) => field.onChange(v === NONE_VALUE ? "" : v)}
+                          options={[
+                            { value: NONE_VALUE, label: "No indicado / desconocido" },
+                            ...finalClientOptions.map((opt) => ({ value: opt.id, label: opt.label })),
+                          ]}
+                          placeholder="Seleccionar…"
+                        />
+                      </FormControl>
                       {finalClientOptions.length === 0 && (
                         <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                           No hay clientes con tipo «cliente final» dados de alta. Crea primero el
@@ -479,6 +462,10 @@ export function ClientFormDialog({
                 )}
               />
             </div>
+            <EntityDocumentsSection
+              ownerType="CLIENT"
+              ownerId={mode === "edit" && initial ? initial.id : null}
+            />
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar

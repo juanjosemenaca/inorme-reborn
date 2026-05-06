@@ -9,6 +9,14 @@ export default defineConfig(({ mode }) => ({
     /** Puerto del proyecto. Sin `host: "::"` para evitar fallos de `os.networkInterfaces()` en entornos restringidos. */
     port: 8080,
     strictPort: true,
+    proxy: {
+      "/api/bulk-invoices": {
+        target: "http://127.0.0.1:3847",
+        changeOrigin: true,
+        timeout: 3_600_000,
+        proxyTimeout: 3_600_000,
+      },
+    },
     /** Evita que el navegador sirva un JS antiguo y parezca que los cambios no aplican. */
     headers: {
       "Cache-Control": "no-store",

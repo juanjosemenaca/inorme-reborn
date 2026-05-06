@@ -19,13 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -767,20 +761,18 @@ const AdminWorkCalendars = () => {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("admin.workCalendars.field_kind")}</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={t("admin.workCalendars.field_kind")} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {WORK_CALENDAR_HOLIDAY_KINDS.map((k) => (
-                          <SelectItem key={k} value={k}>
-                            {kindLabel(k)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={WORK_CALENDAR_HOLIDAY_KINDS.map((k) => ({
+                          value: k,
+                          label: kindLabel(k),
+                        }))}
+                        placeholder={t("admin.workCalendars.field_kind")}
+                        searchable={false}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

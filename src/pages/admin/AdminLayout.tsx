@@ -25,7 +25,9 @@ import {
   NotebookPen,
   Database,
   Euro,
-  Scale,
+  ClipboardList,
+  Archive,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +45,7 @@ import {
 import { usePendingWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
 import { usePendingWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
 import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
+import { useMyDmsDocumentReviewsAsAssignee } from "@/hooks/useMyDmsDocumentReviews";
 import { ADMIN_PATHS } from "@/constants/adminPaths";
 import { IntranetAttentionDialogs } from "@/components/admin/IntranetAttentionDialogs";
 import { runProjectEndNotices } from "@/api/projectsApi";
@@ -85,18 +88,16 @@ const NAV_KEYS = [
     roles: ["WORKER", "ADMIN"] as const,
   },
   {
-    to: "/admin/grupo-legal",
-    labelKey: "admin.layout.nav_legal_group",
-    icon: Scale,
-    roles: ["WORKER", "ADMIN"] as const,
-    requiredModule: "LEGAL" as const,
-  },
-  {
     to: "/admin/mensajes",
     labelKey: "admin.layout.nav_messages",
     icon: Inbox,
     roles: ["WORKER", "ADMIN"] as const,
-    requiredModule: "MESSAGES" as const,
+  },
+  {
+    to: "/admin/documentos-pendientes",
+    labelKey: "admin.layout.nav_assigned_documents",
+    icon: ClipboardList,
+    roles: ["WORKER"] as const,
   },
   {
     to: "/admin/mensajes-trabajadores",
@@ -157,7 +158,14 @@ const NAV_KEYS = [
   { to: "/admin/proveedores", labelKey: "admin.layout.nav_providers", icon: Truck, roles: ["ADMIN"] as const },
   { to: "/admin/clientes", labelKey: "admin.layout.nav_clients", icon: Building2, roles: ["ADMIN"] as const },
   { to: "/admin/proyectos", labelKey: "admin.layout.nav_projects", icon: FolderKanban, roles: ["ADMIN"] as const },
+  { to: "/admin/documentos", labelKey: "admin.layout.nav_dms", icon: Archive, roles: ["ADMIN", "WORKER"] as const, requiredModule: "DMS" as const },
   { to: "/admin/calendarios-laborales", labelKey: "admin.layout.nav_calendars", icon: CalendarDays, roles: ["ADMIN"] as const },
+  {
+    to: "/admin/generador-facturas-masivas",
+    labelKey: "admin.layout.nav_bulk_invoices",
+    icon: FileSpreadsheet,
+    roles: ["ADMIN"] as const,
+  },
 ] as const;
 
 const ADMIN_MESSAGE_CHILD_ROUTES = [
@@ -214,11 +222,12 @@ const AdminLayout = () => {
     userRole === "WORKER" || userRole === "ADMIN" ? user?.companyWorkerId ?? null : null
   );
   const { data: unreadMessageCount = 0 } = useMyUnreadBackofficeMessageCount(
-    supabaseOk &&
-      !!user &&
-      (userRole === "WORKER" || userRole === "ADMIN") &&
-      enabledModules.includes("MESSAGES")
+    supabaseOk && !!user && (userRole === "WORKER" || userRole === "ADMIN")
   );
+  const { data: myPendingDmsReviews = [] } = useMyDmsDocumentReviewsAsAssignee(
+    supabaseOk && userRole === "WORKER" && !!user
+  );
+  const pendingAssignedDocsCount = myPendingDmsReviews.length;
   const { data: pendingVacationRequests = [] } = usePendingWorkerVacationChangeRequests(
     isAdmin && supabaseOk && !!user
   );
@@ -232,6 +241,7 @@ const AdminLayout = () => {
   const navItems = NAV_KEYS.filter((item) => {
     if (userRole === null || !item.roles.includes(userRole)) return false;
     if ("requiredModule" in item && item.requiredModule) {
+      if (userRole === "ADMIN" && item.requiredModule === "DMS") return true;
       return enabledModules.includes(item.requiredModule);
     }
     return true;
@@ -294,6 +304,15 @@ const AdminLayout = () => {
       !TIME_CLOCK_SECTION_ROUTES.includes(item.to as (typeof TIME_CLOCK_SECTION_ROUTES)[number]) &&
       !(isAdmin && (ADMIN_SELF_SERVICE_PATHS as readonly string[]).includes(item.to))
   );
+  const adminSidebarPanelItem = isAdmin
+    ? (navItemsWithoutAdminMessages.find((i) => i.to === "/admin") ?? null)
+    : null;
+  const adminSidebarDmsItem = isAdmin
+    ? (navItemsWithoutAdminMessages.find((i) => i.to === "/admin/documentos") ?? null)
+    : null;
+  const adminSidebarRestItems = isAdmin
+    ? navItemsWithoutAdminMessages.filter((i) => i.to !== "/admin" && i.to !== "/admin/documentos")
+    : [];
   const isAdminMessagesSectionActive = ADMIN_MESSAGE_CHILD_ROUTES.some(
     (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
   );
@@ -331,6 +350,7 @@ const AdminLayout = () => {
     if (to === ADMIN_PATHS.gastosTrabajadores && userRole === "ADMIN") return pendingExpenseSheetCount > 0;
     if (to === "/admin/mensajes" && (userRole === "WORKER" || userRole === "ADMIN"))
       return unreadMessageCount > 0;
+    if (to === "/admin/documentos-pendientes" && userRole === "WORKER") return pendingAssignedDocsCount > 0;
     if (to === "/admin/mi-ficha" && (userRole === "WORKER" || userRole === "ADMIN"))
       return workerHasPendingProfileRequest;
     return false;
@@ -369,25 +389,32 @@ const AdminLayout = () => {
     mobile = false,
     vacationNotifyCount: vacCount = 0,
     expensePendingCount = 0,
+    assignedDocsPendingCount = 0,
   }: {
     mobile?: boolean;
     vacationNotifyCount?: number;
     expensePendingCount?: number;
-  }) => (
-    <>
-      {navItemsWithoutAdminMessages.map((item) => {
-        const active = isNavActive(item.to);
-        const attention = navNeedsAttention(item.to);
-        const pendingLabel =
-          item.to === ADMIN_PATHS.solicitudesFicha && pendingAdminProfileCount > 0
-            ? t("admin.layout.nav_pending_profile_requests_aria").replace(
-                "{{count}}",
-                String(pendingAdminProfileCount)
-              )
-            : attention && item.to === "/admin/mi-ficha"
-              ? t("admin.layout.nav_my_profile_pending_aria")
-              : attention && item.to === "/admin/mensajes"
-                ? t("admin.layout.nav_messages_pending_aria").replace("{{count}}", String(unreadMessageCount))
+    assignedDocsPendingCount?: number;
+  }) => {
+    type NavItem = (typeof navItems)[number];
+    const renderTopNavItem = (item: NavItem) => {
+      const active = isNavActive(item.to);
+      const attention = navNeedsAttention(item.to);
+      const pendingLabel =
+        item.to === ADMIN_PATHS.solicitudesFicha && pendingAdminProfileCount > 0
+          ? t("admin.layout.nav_pending_profile_requests_aria").replace(
+              "{{count}}",
+              String(pendingAdminProfileCount)
+            )
+          : attention && item.to === "/admin/mi-ficha"
+            ? t("admin.layout.nav_my_profile_pending_aria")
+            : attention && item.to === "/admin/mensajes"
+              ? t("admin.layout.nav_messages_pending_aria").replace("{{count}}", String(unreadMessageCount))
+              : attention && item.to === "/admin/documentos-pendientes"
+                ? t("admin.layout.nav_assigned_documents_pending_aria").replace(
+                    "{{count}}",
+                    String(assignedDocsPendingCount)
+                  )
                 : attention && item.to === ADMIN_PATHS.solicitudesVacaciones && vacCount > 0
                   ? t("admin.layout.nav_vacation_requests_pending_aria").replace("{{count}}", String(vacCount))
                   : attention && item.to === ADMIN_PATHS.gastosTrabajadores && expensePendingCount > 0
@@ -396,202 +423,160 @@ const AdminLayout = () => {
                         String(expensePendingCount)
                       )
                     : undefined;
-        return (
-          <Fragment key={item.to}>
-            <Link
-              to={item.to}
-              onClick={() => mobile && setMobileNavOpen(false)}
-              aria-label={pendingLabel}
-              title={pendingLabel}
+      return (
+        <Link
+          to={item.to}
+          onClick={() => mobile && setMobileNavOpen(false)}
+          aria-label={pendingLabel}
+          title={pendingLabel}
+          className={cn(
+            "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full",
+            active ? "font-bold" : attention ? "font-semibold" : "font-medium",
+            isAdmin
+              ? active
+                ? attention
+                  ? "bg-red-950/50 text-red-400 border-l-2 border-red-500 -ml-px pl-[11px]"
+                  : "bg-primary/20 text-primary border-l-2 border-primary -ml-px pl-[11px] font-bold"
+                : attention
+                  ? "text-red-400 border-l-2 border-transparent hover:bg-slate-800 hover:text-red-300"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
+              : active
+                ? attention
+                  ? "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 font-bold"
+                  : "bg-secondary text-secondary-foreground font-bold"
+                : attention
+                  ? "text-red-600 dark:text-red-400 font-bold hover:bg-muted hover:text-red-700 dark:hover:text-red-300"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <span className="flex items-center gap-3 min-w-0">
+            <item.icon
               className={cn(
-                "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full",
-                active ? "font-bold" : attention ? "font-semibold" : "font-medium",
-                isAdmin
-                  ? active
-                    ? attention
-                      ? "bg-red-950/50 text-red-400 border-l-2 border-red-500 -ml-px pl-[11px]"
-                      : "bg-primary/20 text-primary border-l-2 border-primary -ml-px pl-[11px] font-bold"
-                    : attention
-                      ? "text-red-400 border-l-2 border-transparent hover:bg-slate-800 hover:text-red-300"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent"
-                  : active
-                    ? attention
-                      ? "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 font-bold"
-                      : "bg-secondary text-secondary-foreground font-bold"
-                    : attention
-                      ? "text-red-600 dark:text-red-400 font-bold hover:bg-muted hover:text-red-700 dark:hover:text-red-300"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                "h-4 w-4 shrink-0 opacity-90",
+                attention && isAdmin && "text-red-400 opacity-100",
+                attention && !isAdmin && "text-red-600 dark:text-red-400 opacity-100"
               )}
+            />
+            <span className="truncate">{t(item.labelKey)}</span>
+          </span>
+          {item.to === ADMIN_PATHS.solicitudesVacaciones && vacCount > 0 ? (
+            <Badge
+              variant="secondary"
+              className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
             >
-              <span className="flex items-center gap-3 min-w-0">
-                <item.icon
+              {vacCount > 99 ? "99+" : vacCount}
+            </Badge>
+          ) : item.to === ADMIN_PATHS.gastosTrabajadores && expensePendingCount > 0 ? (
+            <Badge
+              variant="secondary"
+              className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
+            >
+              {expensePendingCount > 99 ? "99+" : expensePendingCount}
+            </Badge>
+          ) : item.to === "/admin/documentos-pendientes" && assignedDocsPendingCount > 0 ? (
+            <Badge
+              variant="secondary"
+              className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
+            >
+              {assignedDocsPendingCount > 99 ? "99+" : assignedDocsPendingCount}
+            </Badge>
+          ) : null}
+        </Link>
+      );
+    };
+
+    const adminPersonalSubmenu = showAdminDataNav ? (
+      <div className="space-y-1">
+        <button
+          type="button"
+          onClick={() => setAdminDataSectionOpen((v) => !v)}
+          aria-expanded={adminDataSectionOpen}
+          aria-controls="admin-data-submenu"
+          id="admin-data-menu-button"
+          className={cn(
+            "flex w-full items-center justify-between gap-2 rounded-lg border-l-2 px-3 py-2.5 text-sm transition-colors",
+            isAdminDataSectionActive
+              ? "-ml-px border-primary bg-primary/20 pl-[11px] font-bold text-primary"
+              : "border-transparent font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+          )}
+        >
+          <span className="flex min-w-0 items-center gap-3">
+            <Database className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+            {user ? <AdminDataNavHeading user={user} /> : <span className="truncate">— DATA</span>}
+          </span>
+          <ChevronDown
+            className={cn("h-4 w-4 shrink-0 transition-transform", adminDataSectionOpen && "rotate-180")}
+            aria-hidden
+          />
+        </button>
+        {adminDataSectionOpen ? (
+          <div
+            id="admin-data-submenu"
+            role="region"
+            aria-labelledby="admin-data-menu-button"
+            className="space-y-1 pl-8"
+          >
+            {adminSelfServiceItems.map((subItem) => {
+              const subActive = isNavActive(subItem.to);
+              const subAttention = navNeedsAttention(subItem.to);
+              const SubIcon = subItem.icon;
+              return (
+                <Link
+                  key={subItem.to}
+                  to={subItem.to}
+                  onClick={() => mobile && setMobileNavOpen(false)}
                   className={cn(
-                    "h-4 w-4 shrink-0 opacity-90",
-                    attention && isAdmin && "text-red-400 opacity-100",
-                    attention && !isAdmin && "text-red-600 dark:text-red-400 opacity-100"
+                    "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors w-full",
+                    subActive
+                      ? "bg-primary/20 font-bold text-primary"
+                      : subAttention
+                        ? "font-semibold text-red-400 hover:bg-slate-800"
+                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   )}
-                />
-                <span className="truncate">{t(item.labelKey)}</span>
-              </span>
-              {item.to === ADMIN_PATHS.solicitudesVacaciones && vacCount > 0 ? (
-                <Badge
-                  variant="secondary"
-                  className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
                 >
-                  {vacCount > 99 ? "99+" : vacCount}
-                </Badge>
-              ) : item.to === ADMIN_PATHS.gastosTrabajadores && expensePendingCount > 0 ? (
-                <Badge
-                  variant="secondary"
-                  className="shrink-0 h-5 min-w-[1.25rem] px-1.5 text-[10px] font-semibold tabular-nums bg-primary/25 text-primary border-0"
-                >
-                  {expensePendingCount > 99 ? "99+" : expensePendingCount}
-                </Badge>
-              ) : null}
-            </Link>
-            {/* Tras «Vacaciones» (resumen admin): «solicitudes-vacaciones» no está en esta lista (va al hub Mensajes). */}
-            {item.to === "/admin/vacaciones" && showAdminDataNav ? (
-              <div className="space-y-1">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <SubIcon className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                    <span className="truncate">{t(subItem.labelKey)}</span>
+                  </span>
+                </Link>
+              );
+            })}
+            {adminHasPersonalTimeClock ? (
+              <div className="space-y-0.5">
                 <button
                   type="button"
-                  onClick={() => setAdminDataSectionOpen((v) => !v)}
-                  aria-expanded={adminDataSectionOpen}
-                  aria-controls="admin-data-submenu"
-                  id="admin-data-menu-button"
+                  id="admin-data-fichaje-button"
+                  onClick={() => setAdminDataFichajeOpen((v) => !v)}
+                  aria-expanded={adminDataFichajeOpen}
+                  aria-controls="admin-data-fichaje-submenu"
                   className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-lg border-l-2 px-3 py-2.5 text-sm transition-colors",
-                    isAdminDataSectionActive
-                      ? "-ml-px border-primary bg-primary/20 pl-[11px] font-bold text-primary"
-                      : "border-transparent font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+                    "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                    isAdminDataFichajeSectionActive
+                      ? "bg-primary/20 font-bold text-primary"
+                      : "font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
                   )}
                 >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <Database className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                    {user ? <AdminDataNavHeading user={user} /> : <span className="truncate">— DATA</span>}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Clock3 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                    <span className="truncate">{t("admin.layout.nav_admin_data_fichaje")}</span>
                   </span>
                   <ChevronDown
-                    className={cn("h-4 w-4 shrink-0 transition-transform", adminDataSectionOpen && "rotate-180")}
+                    className={cn(
+                      "h-4 w-4 shrink-0 transition-transform opacity-80",
+                      adminDataFichajeOpen && "rotate-180"
+                    )}
                     aria-hidden
                   />
                 </button>
-                {adminDataSectionOpen ? (
+                {adminDataFichajeOpen ? (
                   <div
-                    id="admin-data-submenu"
+                    id="admin-data-fichaje-submenu"
                     role="region"
-                    aria-labelledby="admin-data-menu-button"
-                    className="space-y-1 pl-8"
+                    aria-labelledby="admin-data-fichaje-button"
+                    className="ml-1 space-y-0.5 border-l-2 border-slate-600/60 pl-3"
                   >
-                    {adminSelfServiceItems.map((subItem) => {
-                      const subActive = isNavActive(subItem.to);
-                      const subAttention = navNeedsAttention(subItem.to);
-                      const SubIcon = subItem.icon;
-                      return (
-                        <Link
-                          key={subItem.to}
-                          to={subItem.to}
-                          onClick={() => mobile && setMobileNavOpen(false)}
-                          className={cn(
-                            "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors w-full",
-                            subActive
-                              ? "bg-primary/20 font-bold text-primary"
-                              : subAttention
-                                ? "font-semibold text-red-400 hover:bg-slate-800"
-                                : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                          )}
-                        >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <SubIcon className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                            <span className="truncate">{t(subItem.labelKey)}</span>
-                          </span>
-                        </Link>
-                      );
-                    })}
-                    {adminHasPersonalTimeClock ? (
-                      <div className="space-y-0.5">
-                        <button
-                          type="button"
-                          id="admin-data-fichaje-button"
-                          onClick={() => setAdminDataFichajeOpen((v) => !v)}
-                          aria-expanded={adminDataFichajeOpen}
-                          aria-controls="admin-data-fichaje-submenu"
-                          className={cn(
-                            "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
-                            isAdminDataFichajeSectionActive
-                              ? "bg-primary/20 font-bold text-primary"
-                              : "font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
-                          )}
-                        >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <Clock3 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                            <span className="truncate">{t("admin.layout.nav_admin_data_fichaje")}</span>
-                          </span>
-                          <ChevronDown
-                            className={cn(
-                              "h-4 w-4 shrink-0 transition-transform opacity-80",
-                              adminDataFichajeOpen && "rotate-180"
-                            )}
-                            aria-hidden
-                          />
-                        </button>
-                        {adminDataFichajeOpen ? (
-                          <div
-                            id="admin-data-fichaje-submenu"
-                            role="region"
-                            aria-labelledby="admin-data-fichaje-button"
-                            className="ml-1 space-y-0.5 border-l-2 border-slate-600/60 pl-3"
-                          >
-                            {WORKER_TIME_CLOCK_NAV_SUBITEMS.map((sub) => {
-                              const SubIcon = sub.icon;
-                              const subActive = isNavActive(sub.to);
-                              return (
-                                <Link
-                                  key={sub.to}
-                                  to={sub.to}
-                                  onClick={() => mobile && setMobileNavOpen(false)}
-                                  className={cn(
-                                    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-                                    subActive
-                                      ? "bg-primary/15 font-semibold text-primary"
-                                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                                  )}
-                                >
-                                  <SubIcon className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                                  <span className="truncate">{t(sub.labelKey)}</span>
-                                </Link>
-                              );
-                            })}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            {item.to === "/admin/vacaciones" && isAdmin && usersNavItems.length > 0 ? (
-              <div className="space-y-1">
-                <button
-                  type="button"
-                  onClick={() => setUsersSectionOpen((v) => !v)}
-                  aria-expanded={usersSectionOpen}
-                  className={cn(
-                    "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full border-l-2",
-                    isUsersSectionActive
-                      ? "font-bold text-primary bg-primary/20 border-primary -ml-px pl-[11px]"
-                      : "font-medium text-slate-300 hover:bg-slate-800 hover:text-white border-transparent"
-                  )}
-                >
-                  <span className="flex items-center gap-3 min-w-0">
-                    <Users className="h-4 w-4 shrink-0 opacity-90" />
-                    <span className="truncate">{t("admin.layout.nav_users")}</span>
-                  </span>
-                  <ChevronDown
-                    className={cn("h-4 w-4 shrink-0 transition-transform", usersSectionOpen && "rotate-180")}
-                  />
-                </button>
-                {usersSectionOpen ? (
-                  <div className="space-y-1 pl-8">
-                    {usersNavItems.map((sub) => {
+                    {WORKER_TIME_CLOCK_NAV_SUBITEMS.map((sub) => {
+                      const SubIcon = sub.icon;
                       const subActive = isNavActive(sub.to);
                       return (
                         <Link
@@ -599,12 +584,13 @@ const AdminLayout = () => {
                           to={sub.to}
                           onClick={() => mobile && setMobileNavOpen(false)}
                           className={cn(
-                            "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors w-full",
+                            "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
                             subActive
-                              ? "bg-primary/20 text-primary font-bold"
+                              ? "bg-primary/15 font-semibold text-primary"
                               : "text-slate-300 hover:bg-slate-800 hover:text-white"
                           )}
                         >
+                          <SubIcon className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
                           <span className="truncate">{t(sub.labelKey)}</span>
                         </Link>
                       );
@@ -613,91 +599,36 @@ const AdminLayout = () => {
                 ) : null}
               </div>
             ) : null}
-            {item.to === "/admin/control-fichajes" && isAdmin && timeClockNavItems.length > 0 ? (
-              null
-            ) : null}
-          </Fragment>
-        );
-      })}
-      {workerHasTimeClockModule ? (
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
+    const adminUsersSubmenu =
+      usersNavItems.length > 0 ? (
         <div className="space-y-1">
           <button
             type="button"
-            onClick={() => setWorkerTimeClockSectionOpen((v) => !v)}
-            aria-expanded={workerTimeClockSectionOpen}
-            aria-controls="worker-fichajes-submenu"
-            id="worker-fichajes-menu-button"
-            className={cn(
-              "flex w-full items-center justify-between gap-2 rounded-lg border-l-2 px-3 py-2.5 text-sm transition-colors",
-              isWorkerTimeClockSectionActive
-                ? "border-secondary -ml-px bg-secondary pl-[11px] font-bold text-secondary-foreground"
-                : "border-transparent font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <span className="flex min-w-0 items-center gap-3">
-              <Clock3 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-              <span className="truncate">{t("admin.layout.nav_time_clock_worker")}</span>
-            </span>
-            <ChevronDown
-              className={cn("h-4 w-4 shrink-0 transition-transform", workerTimeClockSectionOpen && "rotate-180")}
-              aria-hidden
-            />
-          </button>
-          {workerTimeClockSectionOpen ? (
-            <div
-              id="worker-fichajes-submenu"
-              role="region"
-              aria-labelledby="worker-fichajes-menu-button"
-              className="ml-1 space-y-0.5 border-l-2 border-muted-foreground/25 pl-3"
-            >
-              {WORKER_TIME_CLOCK_NAV_SUBITEMS.map((sub) => {
-                const SubIcon = sub.icon;
-                const subActive = isNavActive(sub.to);
-                return (
-                  <Link
-                    key={sub.to}
-                    to={sub.to}
-                    onClick={() => mobile && setMobileNavOpen(false)}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-                      subActive
-                        ? "bg-secondary font-semibold text-secondary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    <SubIcon className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                    <span className="truncate">{t(sub.labelKey)}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {isAdmin && timeClockNavItems.length > 0 ? (
-        <div className="space-y-1">
-          <button
-            type="button"
-            onClick={() => setTimeClockSectionOpen((v) => !v)}
-            aria-expanded={timeClockSectionOpen}
+            onClick={() => setUsersSectionOpen((v) => !v)}
+            aria-expanded={usersSectionOpen}
             className={cn(
               "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full border-l-2",
-              isTimeClockSectionActive
+              isUsersSectionActive
                 ? "font-bold text-primary bg-primary/20 border-primary -ml-px pl-[11px]"
                 : "font-medium text-slate-300 hover:bg-slate-800 hover:text-white border-transparent"
             )}
           >
             <span className="flex items-center gap-3 min-w-0">
-              <Clock3 className="h-4 w-4 shrink-0 opacity-90" />
-              <span className="truncate">{t("admin.layout.nav_time_clock_hub")}</span>
+              <Users className="h-4 w-4 shrink-0 opacity-90" />
+              <span className="truncate">{t("admin.layout.nav_users")}</span>
             </span>
             <ChevronDown
-              className={cn("h-4 w-4 shrink-0 transition-transform", timeClockSectionOpen && "rotate-180")}
+              className={cn("h-4 w-4 shrink-0 transition-transform", usersSectionOpen && "rotate-180")}
             />
           </button>
-          {timeClockSectionOpen ? (
+          {usersSectionOpen ? (
             <div className="space-y-1 pl-8">
-              {timeClockNavItems.map((sub) => {
+              {usersNavItems.map((sub) => {
                 const subActive = isNavActive(sub.to);
                 return (
                   <Link
@@ -718,8 +649,10 @@ const AdminLayout = () => {
             </div>
           ) : null}
         </div>
-      ) : null}
-      {isAdmin && adminMessageItems.length > 0 ? (
+      ) : null;
+
+    const adminMessagesHub =
+      adminMessageItems.length > 0 ? (
         <div className="space-y-1">
           <button
             type="button"
@@ -819,9 +752,142 @@ const AdminLayout = () => {
             </div>
           ) : null}
         </div>
+      ) : null;
+
+    const adminTimeClockHub =
+      timeClockNavItems.length > 0 ? (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => setTimeClockSectionOpen((v) => !v)}
+            aria-expanded={timeClockSectionOpen}
+            className={cn(
+              "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors w-full border-l-2",
+              isTimeClockSectionActive
+                ? "font-bold text-primary bg-primary/20 border-primary -ml-px pl-[11px]"
+                : "font-medium text-slate-300 hover:bg-slate-800 hover:text-white border-transparent"
+            )}
+          >
+            <span className="flex items-center gap-3 min-w-0">
+              <Clock3 className="h-4 w-4 shrink-0 opacity-90" />
+              <span className="truncate">{t("admin.layout.nav_time_clock_hub")}</span>
+            </span>
+            <ChevronDown
+              className={cn("h-4 w-4 shrink-0 transition-transform", timeClockSectionOpen && "rotate-180")}
+            />
+          </button>
+          {timeClockSectionOpen ? (
+            <div className="space-y-1 pl-8">
+              {timeClockNavItems.map((sub) => {
+                const subActive = isNavActive(sub.to);
+                return (
+                  <Link
+                    key={sub.to}
+                    to={sub.to}
+                    onClick={() => mobile && setMobileNavOpen(false)}
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors w-full",
+                      subActive
+                        ? "bg-primary/20 text-primary font-bold"
+                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    )}
+                  >
+                    <span className="truncate">{t(sub.labelKey)}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null;
+
+    if (isAdmin) {
+      return (
+        <>
+          {adminSidebarPanelItem ? (
+            <Fragment key="admin-panel-personal">
+              {renderTopNavItem(adminSidebarPanelItem)}
+              {adminPersonalSubmenu}
+            </Fragment>
+          ) : null}
+          {adminMessagesHub}
+          {adminTimeClockHub}
+          {adminSidebarDmsItem ? (
+            <Fragment key={adminSidebarDmsItem.to}>{renderTopNavItem(adminSidebarDmsItem)}</Fragment>
+          ) : null}
+          {adminSidebarRestItems.map((item) => (
+            <Fragment key={item.to}>
+              {renderTopNavItem(item)}
+              {item.to === "/admin/vacaciones" ? adminUsersSubmenu : null}
+            </Fragment>
+          ))}
+        </>
+      );
+    }
+
+    return (
+      <>
+        {navItemsWithoutAdminMessages.map((item) => (
+          <Fragment key={item.to}>{renderTopNavItem(item)}</Fragment>
+        ))}
+        {workerHasTimeClockModule ? (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => setWorkerTimeClockSectionOpen((v) => !v)}
+            aria-expanded={workerTimeClockSectionOpen}
+            aria-controls="worker-fichajes-submenu"
+            id="worker-fichajes-menu-button"
+            className={cn(
+              "flex w-full items-center justify-between gap-2 rounded-lg border-l-2 px-3 py-2.5 text-sm transition-colors",
+              isWorkerTimeClockSectionActive
+                ? "border-secondary -ml-px bg-secondary pl-[11px] font-bold text-secondary-foreground"
+                : "border-transparent font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <Clock3 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+              <span className="truncate">{t("admin.layout.nav_time_clock_worker")}</span>
+            </span>
+            <ChevronDown
+              className={cn("h-4 w-4 shrink-0 transition-transform", workerTimeClockSectionOpen && "rotate-180")}
+              aria-hidden
+            />
+          </button>
+          {workerTimeClockSectionOpen ? (
+            <div
+              id="worker-fichajes-submenu"
+              role="region"
+              aria-labelledby="worker-fichajes-menu-button"
+              className="ml-1 space-y-0.5 border-l-2 border-muted-foreground/25 pl-3"
+            >
+              {WORKER_TIME_CLOCK_NAV_SUBITEMS.map((sub) => {
+                const SubIcon = sub.icon;
+                const subActive = isNavActive(sub.to);
+                return (
+                  <Link
+                    key={sub.to}
+                    to={sub.to}
+                    onClick={() => mobile && setMobileNavOpen(false)}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                      subActive
+                        ? "bg-secondary font-semibold text-secondary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <SubIcon className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                    <span className="truncate">{t(sub.labelKey)}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </>
-  );
+    );
+  };
 
   /* ——— Vista ADMIN: shell oscuro + área clara ——— */
   if (isAdmin && user) {
@@ -840,6 +906,7 @@ const AdminLayout = () => {
             <NavLinks
               vacationNotifyCount={pendingVacationRequestCount}
               expensePendingCount={pendingExpenseSheetCount}
+              assignedDocsPendingCount={pendingAssignedDocsCount}
             />
           </nav>
           <div className="p-4 border-t border-slate-800/80">
@@ -909,6 +976,7 @@ const AdminLayout = () => {
                   mobile
                   vacationNotifyCount={pendingVacationRequestCount}
                   expensePendingCount={pendingExpenseSheetCount}
+                  assignedDocsPendingCount={pendingAssignedDocsCount}
                 />
                 </nav>
               </div>
@@ -975,6 +1043,7 @@ const AdminLayout = () => {
             <NavLinks
               vacationNotifyCount={pendingVacationRequestCount}
               expensePendingCount={pendingExpenseSheetCount}
+              assignedDocsPendingCount={pendingAssignedDocsCount}
             />
           </nav>
         </aside>
@@ -986,6 +1055,7 @@ const AdminLayout = () => {
                   mobile
                   vacationNotifyCount={pendingVacationRequestCount}
                   expensePendingCount={pendingExpenseSheetCount}
+                  assignedDocsPendingCount={pendingAssignedDocsCount}
                 />
             </nav>
           </div>

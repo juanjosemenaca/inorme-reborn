@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FACTURA {{FECHA_FACTURA}} — {{NUMERO_FACTURA}}</title>
+    <style>
+      :root {
+        --ink: #1a1a1a;
+        --muted: #5c5c5c;
+        --border: #d0d0d0;
+        --accent: #0f3d2e;
+        --bg-soft: #f6f7f8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        color: var(--ink);
+        font-size: 11pt;
+        line-height: 1.45;
+        margin: 0;
+        padding: 28px 36px 48px;
+        min-height: 100vh;
+        position: relative;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 24px;
+        border-bottom: 2px solid var(--accent);
+        padding-bottom: 18px;
+        margin-bottom: 22px;
+      }
+      .issuer {
+        max-width: 55%;
+      }
+      .issuer-logo {
+        max-width: 240px;
+        max-height: 72px;
+        object-fit: contain;
+        display: block;
+        margin: 0 0 10px;
+      }
+      .issuer-name {
+        font-weight: 700;
+        font-size: 12pt;
+        color: var(--accent);
+        margin: 0 0 8px;
+        letter-spacing: 0.02em;
+      }
+      .issuer-line {
+        margin: 0;
+        font-size: 9.5pt;
+        color: var(--muted);
+      }
+      .invoice-title-block {
+        text-align: right;
+      }
+      .invoice-title {
+        font-size: 22pt;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        margin: 0;
+        color: var(--ink);
+      }
+      .invoice-meta {
+        margin-top: 10px;
+        font-size: 10pt;
+        color: var(--muted);
+      }
+      .invoice-meta strong {
+        color: var(--ink);
+      }
+      .section-title {
+        font-size: 9pt;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+        margin: 22px 0 8px;
+      }
+      .client-box {
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 14px 16px;
+      }
+      .client-box p {
+        margin: 4px 0;
+        font-size: 10.5pt;
+      }
+      .detail-grid {
+        display: grid;
+        grid-template-columns: 160px 1fr;
+        gap: 6px 16px;
+        font-size: 10pt;
+        margin-top: 6px;
+      }
+      .detail-grid dt {
+        font-weight: 600;
+        color: var(--muted);
+        margin: 0;
+      }
+      .detail-grid dd {
+        margin: 0;
+      }
+      table.economics {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+        font-size: 10pt;
+      }
+      table.economics th,
+      table.economics td {
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        text-align: left;
+      }
+      table.economics th {
+        background: var(--bg-soft);
+        font-weight: 600;
+        color: var(--muted);
+        font-size: 9pt;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      table.economics td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      table.economics tr.total-row td {
+        font-weight: 700;
+        font-size: 11pt;
+        background: #eef4f1;
+        border-top: 2px solid var(--accent);
+      }
+      .legal {
+        margin-top: 36px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        font-size: 7.5pt;
+        line-height: 1.5;
+        color: var(--muted);
+        text-align: justify;
+        page-break-inside: avoid;
+      }
+      @media print {
+        body {
+          padding: 20px 28px 40px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="issuer">
+        <img class="issuer-logo" src="{{LOGO_URL}}" alt="" onerror="this.style.display='none'" />
+        <p class="issuer-name">SLAM DANCING PRODUCTIONS, SL.</p>
+        <p class="issuer-line">CIF: B01915263</p>
+        <p class="issuer-line">Calle Rosselló, número 254, 2º 1ª · 08037 Barcelona</p>
+        <p class="issuer-line">Teléfono: 662480321</p>
+        <p class="issuer-line">
+          Registro Mercantil de Barcelona · Tomo 47466, Folio 53, Hoja 552670 · Insc. 1ª
+        </p>
+      </div>
+      <div class="invoice-title-block">
+        <h1 class="invoice-title">FACTURA</h1>
+        <div class="invoice-meta">
+          <div>Nº <strong>{{NUMERO_FACTURA}}</strong></div>
+          <div>Fecha <strong>{{FECHA_FACTURA}}</strong></div>
+        </div>
+      </div>
+    </header>
+
+    <section>
+      <h2 class="section-title">Cliente</h2>
+      <div class="client-box">
+        <p><strong>{{NOMBRE_ALUMNO}}</strong></p>
+        <p>DNI / NIF: {{DNI_ALUMNO}}</p>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="section-title">Detalle</h2>
+      <dl class="detail-grid">
+        <dt>Concepto</dt>
+        <dd>{{CONCEPTO}}</dd>
+        <dt>Tipo de cuota</dt>
+        <dd>{{TIPO_CUOTA}}</dd>
+        <dt>Método de pago</dt>
+        <dd>{{METODO_PAGO}}</dd>
+        <dt>Cajero</dt>
+        <dd>{{CAJERO}}</dd>
+      </dl>
+    </section>
+
+    <section>
+      <h2 class="section-title">Importes</h2>
+      <table class="economics">
+        <thead>
+          <tr>
+            <th>Base imponible</th>
+            <th>Impuesto</th>
+            <th>Descuento</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="num">{{BASE_IMPONIBLE}}</td>
+            <td class="num">{{IMPUESTO}}</td>
+            <td class="num">{{DESCUENTO}}</td>
+            <td class="num">{{TOTAL_IMPORTE}}</td>
+          </tr>
+          <tr class="total-row">
+            <td colspan="3">Total factura</td>
+            <td class="num">{{TOTAL_IMPORTE}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <footer class="legal">
+      De conformidad con lo que establece la Ley Orgánica 15/1999 de Protección de Datos de Carácter Personal, le
+      informamos que sus datos personales serán incorporados a un fichero bajo la responsabilidad de SLAM DANCING
+      PRODUCTIONS, SL., con la finalidad de poder atender los compromisos derivados de la relación que mantenemos
+      con usted. Puede ejercer sus derechos de acceso, cancelación, rectificación y oposición mediante un escrito a
+      la dirección: C/ ROSSELLÓ, 254, 2º 1ª 08037 BARCELONA.
+    </footer>
+  </body>
+</html>

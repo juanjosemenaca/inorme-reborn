@@ -26,13 +26,7 @@ import {
 } from "@/hooks/useWorkerProfileChangeRequests";
 import { updateMyWorkCalendarSite } from "@/api/companyWorkersApi";
 import { submitWorkerProfileChangeRequest } from "@/api/workerProfileChangeRequestsApi";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { queryKeys } from "@/lib/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import type { WorkerPersonalDataSuggestion } from "@/types/workerProfileChangeRequests";
@@ -222,22 +216,14 @@ const WorkerMyProfile = () => {
             <label className="text-sm font-medium leading-none" htmlFor="worker-calendar-site">
               {t("admin.workers.field_calendar")}
             </label>
-            <Select
+            <SearchableSelect
+              id="worker-calendar-site"
               value={calendarSiteId}
               onValueChange={setCalendarSiteId}
+              options={calendarSites.map((s) => ({ value: s.id, label: s.name }))}
               disabled={calendarMutation.isPending || calendarSites.length === 0}
-            >
-              <SelectTrigger id="worker-calendar-site" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {calendarSites.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              className="w-full"
+            />
           </div>
           <div className="space-y-1 max-w-md">
             <p className="text-sm font-medium">{t("admin.workerProfile.vacation_days_readonly")}</p>

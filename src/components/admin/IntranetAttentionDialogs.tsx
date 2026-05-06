@@ -87,8 +87,7 @@ export function IntranetAttentionDialogs() {
     enabledModules.includes("TIME_CLOCK") &&
     !!companyWorkerId;
 
-  const hasMessages =
-    (userRole === "WORKER" || userRole === "ADMIN") && enabledModules.includes("MESSAGES");
+  const hasMessages = userRole === "WORKER" || userRole === "ADMIN";
 
   const { data: workers = [] } = useCompanyWorkers();
   const worker = useMemo(

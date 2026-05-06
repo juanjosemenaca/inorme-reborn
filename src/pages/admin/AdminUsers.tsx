@@ -27,13 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SortableTableHead } from "@/components/admin/SortableTableHead";
 import { sortRows, toggleColumnSort, type ColumnSort } from "@/lib/adminListUtils";
 import {
@@ -381,29 +375,31 @@ const AdminUsers = () => {
             </div>
             <div className="space-y-1 min-w-[140px]">
               <label className="text-xs text-muted-foreground">{t("admin.users.filter_role")}</label>
-              <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as "all" | UserRole)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
-                  <SelectItem value="ADMIN">{t("admin.users.filter_role_admin")}</SelectItem>
-                  <SelectItem value="WORKER">{t("admin.users.filter_role_worker")}</SelectItem>
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={roleFilter}
+                onValueChange={(v) => setRoleFilter(v as "all" | UserRole)}
+                options={[
+                  { value: "all", label: t("admin.common.filter_all") },
+                  { value: "ADMIN", label: t("admin.users.filter_role_admin") },
+                  { value: "WORKER", label: t("admin.users.filter_role_worker") },
+                ]}
+                searchable={false}
+                className="h-9"
+              />
             </div>
             <div className="space-y-1 min-w-[140px]">
               <label className="text-xs text-muted-foreground">{t("admin.common.status")}</label>
-              <Select value={activeFilter} onValueChange={(v) => setActiveFilter(v as typeof activeFilter)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
-                  <SelectItem value="active">{t("admin.common.filter_active")}</SelectItem>
-                  <SelectItem value="inactive">{t("admin.common.filter_inactive")}</SelectItem>
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={activeFilter}
+                onValueChange={(v) => setActiveFilter(v as typeof activeFilter)}
+                options={[
+                  { value: "all", label: t("admin.common.filter_all") },
+                  { value: "active", label: t("admin.common.filter_active") },
+                  { value: "inactive", label: t("admin.common.filter_inactive") },
+                ]}
+                searchable={false}
+                className="h-9"
+              />
             </div>
           </div>
         </CardHeader>

@@ -22,13 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -1189,18 +1183,16 @@ const AdminBilling = () => {
                   <div className="flex flex-col gap-4 xl:hidden">
                     <div className="space-y-1.5">
                       <Label htmlFor="billing-series-issuer-sm">{t("admin.billing.series_issuer")}</Label>
-                      <Select value={newSeriesIssuerId} onValueChange={setNewSeriesIssuerId}>
-                        <SelectTrigger id="billing-series-issuer-sm" className="h-10 w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {activeIssuers.map((i) => (
-                            <SelectItem key={i.id} value={i.id}>
-                              {i.code} · {i.legalName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        id="billing-series-issuer-sm"
+                        value={newSeriesIssuerId}
+                        onValueChange={setNewSeriesIssuerId}
+                        options={activeIssuers.map((i) => ({
+                          value: i.id,
+                          label: `${i.code} · ${i.legalName}`,
+                        }))}
+                        className="h-10 w-full"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="billing-series-code-sm">{t("admin.billing.col_series")}</Label>
@@ -1245,18 +1237,16 @@ const AdminBilling = () => {
                     </Label>
                     <span className="block min-h-[1.25rem] select-none" aria-hidden />
 
-                    <Select value={newSeriesIssuerId} onValueChange={setNewSeriesIssuerId}>
-                      <SelectTrigger id="billing-series-issuer" className="h-10 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeIssuers.map((i) => (
-                          <SelectItem key={i.id} value={i.id}>
-                            {i.code} · {i.legalName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      id="billing-series-issuer"
+                      value={newSeriesIssuerId}
+                      onValueChange={setNewSeriesIssuerId}
+                      options={activeIssuers.map((i) => ({
+                        value: i.id,
+                        label: `${i.code} · ${i.legalName}`,
+                      }))}
+                      className="h-10 w-full"
+                    />
                     <Input
                       id="billing-series-code"
                       placeholder={t("admin.billing.series_code_ph")}
@@ -1521,48 +1511,36 @@ const AdminBilling = () => {
               <CardContent className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>{t("admin.billing.col_issuer")}</Label>
-                  <Select value={newIssuerId} onValueChange={setNewIssuerId}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeIssuers.map((i) => (
-                        <SelectItem key={i.id} value={i.id}>
-                          {i.code} · {i.legalName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={newIssuerId}
+                    onValueChange={setNewIssuerId}
+                    options={activeIssuers.map((i) => ({
+                      value: i.id,
+                      label: `${i.code} · ${i.legalName}`,
+                    }))}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t("admin.billing.col_series")}</Label>
-                  <Select value={newSeriesId} onValueChange={setNewSeriesId}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {seriesForNewDraft.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.code} · {s.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={newSeriesId}
+                    onValueChange={setNewSeriesId}
+                    options={seriesForNewDraft.map((s) => ({
+                      value: s.id,
+                      label: `${s.code} · ${s.label}`,
+                    }))}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t("admin.billing.col_client")}</Label>
-                  <Select value={newClientId} onValueChange={setNewClientId}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {(c.companyName || c.tradeName || c.cif).trim()} · {c.cif}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={newClientId}
+                    onValueChange={setNewClientId}
+                    options={clients.map((c) => ({
+                      value: c.id,
+                      label: `${(c.companyName || c.tradeName || c.cif).trim()} · ${c.cif}`,
+                    }))}
+                  />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>{t("admin.billing.new_draft_copy_lines_label")}</Label>
@@ -1570,19 +1548,24 @@ const AdminBilling = () => {
                   {invoicesForNewDraftLineCopy.length === 0 ? (
                     <p className="text-sm text-muted-foreground">{t("admin.billing.new_draft_copy_lines_empty")}</p>
                   ) : (
-                    <Select value={newCopyLinesFromInvoiceId} onValueChange={setNewCopyLinesFromInvoiceId}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NEW_DRAFT_COPY_LINES_NONE}>{t("admin.billing.new_draft_copy_lines_none")}</SelectItem>
-                        {invoicesForNewDraftLineCopy.map((inv) => (
-                          <SelectItem key={inv.id} value={inv.id}>
-                            {formatInvoiceCopySourceLabel(inv, localeTag, t("admin.billing.copy_source_draft_marker"))}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={newCopyLinesFromInvoiceId}
+                      onValueChange={setNewCopyLinesFromInvoiceId}
+                      options={[
+                        {
+                          value: NEW_DRAFT_COPY_LINES_NONE,
+                          label: t("admin.billing.new_draft_copy_lines_none"),
+                        },
+                        ...invoicesForNewDraftLineCopy.map((inv) => ({
+                          value: inv.id,
+                          label: formatInvoiceCopySourceLabel(
+                            inv,
+                            localeTag,
+                            t("admin.billing.copy_source_draft_marker")
+                          ),
+                        })),
+                      ]}
+                    />
                   )}
                 </div>
                 <div className="space-y-1.5">
@@ -1637,35 +1620,31 @@ const AdminBilling = () => {
               </div>
               <div className="space-y-1.5">
                 <Label>{t("admin.billing.col_issuer")}</Label>
-                <Select value={issuedIssuerIdFilter} onValueChange={setIssuedIssuerIdFilter}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
-                    {issuers.map((i) => (
-                      <SelectItem key={i.id} value={i.id}>
-                        {i.code} · {i.legalName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={issuedIssuerIdFilter}
+                  onValueChange={setIssuedIssuerIdFilter}
+                  options={[
+                    { value: "all", label: t("admin.common.filter_all") },
+                    ...issuers.map((i) => ({
+                      value: i.id,
+                      label: `${i.code} · ${i.legalName}`,
+                    })),
+                  ]}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>{t("admin.billing.col_client")}</Label>
-                <Select value={issuedClientIdFilter} onValueChange={setIssuedClientIdFilter}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
-                    {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {(c.companyName || c.tradeName || c.cif).trim()}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={issuedClientIdFilter}
+                  onValueChange={setIssuedClientIdFilter}
+                  options={[
+                    { value: "all", label: t("admin.common.filter_all") },
+                    ...clients.map((c) => ({
+                      value: c.id,
+                      label: (c.companyName || c.tradeName || c.cif).trim(),
+                    })),
+                  ]}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>{t("admin.billing.filter_from")}</Label>
@@ -1843,7 +1822,7 @@ const AdminBilling = () => {
                 <>
                   <div className="space-y-1.5">
                     <Label>{t("admin.billing.col_issuer")}</Label>
-                    <Select
+                    <SearchableSelect
                       value={draftIssuerId}
                       onValueChange={(v) => {
                         setDraftIssuerId(v);
@@ -1856,23 +1835,15 @@ const AdminBilling = () => {
                           }).then(() => qc.invalidateQueries({ queryKey: queryKeys.billingInvoices }));
                         }
                       }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {issuersSelectableForDraft.map((i) => (
-                          <SelectItem key={i.id} value={i.id}>
-                            {i.code} · {i.legalName}
-                            {!i.active ? ` (${t("admin.billing.issuer_inactive_label")})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={issuersSelectableForDraft.map((i) => ({
+                        value: i.id,
+                        label: `${i.code} · ${i.legalName}${!i.active ? ` (${t("admin.billing.issuer_inactive_label")})` : ""}`,
+                      }))}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label>{t("admin.billing.col_series")}</Label>
-                    <Select
+                    <SearchableSelect
                       value={draftSeriesId}
                       onValueChange={(v) => {
                         setDraftSeriesId(v);
@@ -1882,19 +1853,11 @@ const AdminBilling = () => {
                           );
                         }
                       }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {seriesSelectableForDraft.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.code} · {s.label}
-                            {!s.active ? ` (${t("admin.billing.series_status_inactive")})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={seriesSelectableForDraft.map((s) => ({
+                        value: s.id,
+                        label: `${s.code} · ${s.label}${!s.active ? ` (${t("admin.billing.series_status_inactive")})` : ""}`,
+                      }))}
+                    />
                   </div>
                 </>
               ) : (
@@ -1952,22 +1915,17 @@ const AdminBilling = () => {
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>{t("admin.billing.invoice_addressee_label")}</Label>
                   <p className="text-xs text-muted-foreground">{t("admin.billing.invoice_addressee_hint")}</p>
-                  <Select
+                  <SearchableSelect
                     value={draftRecipientAddresseeLine ? draftRecipientAddresseeLine : "__none__"}
                     onValueChange={(v) => setDraftRecipientAddresseeLine(v === "__none__" ? "" : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{t("admin.billing.invoice_addressee_none")}</SelectItem>
-                      {invoiceAddresseeSelectOptions.map((opt) => (
-                        <SelectItem key={opt} value={opt}>
-                          {opt.length > 96 ? `${opt.slice(0, 93)}…` : opt}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={[
+                      { value: "__none__", label: t("admin.billing.invoice_addressee_none") },
+                      ...invoiceAddresseeSelectOptions.map((opt) => ({
+                        value: opt,
+                        label: opt.length > 96 ? `${opt.slice(0, 93)}…` : opt,
+                      })),
+                    ]}
+                  />
                 </div>
               ) : !editable && selectedInvoice.recipientAddresseeLine?.trim() ? (
                 <div className="space-y-1 sm:col-span-2 text-sm">
@@ -1997,7 +1955,7 @@ const AdminBilling = () => {
                   {draftLines.map((line, idx) => (
                     <TableRow key={idx}>
                       <TableCell>
-                        <Select
+                        <SearchableSelect
                           value={line.lineType}
                           disabled={!editable}
                           onValueChange={(v) =>
@@ -2025,17 +1983,14 @@ const AdminBilling = () => {
                               )
                             )
                           }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="BILLABLE">{t("admin.billing.line_type_billable")}</SelectItem>
-                            <SelectItem value="BLOCK_TITLE">{t("admin.billing.line_type_block_title")}</SelectItem>
-                            <SelectItem value="BLOCK_SUBTITLE">{t("admin.billing.line_type_block_subtitle")}</SelectItem>
-                            <SelectItem value="CONCEPT">{t("admin.billing.line_type_concept")}</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          options={[
+                            { value: "BILLABLE", label: t("admin.billing.line_type_billable") },
+                            { value: "BLOCK_TITLE", label: t("admin.billing.line_type_block_title") },
+                            { value: "BLOCK_SUBTITLE", label: t("admin.billing.line_type_block_subtitle") },
+                            { value: "CONCEPT", label: t("admin.billing.line_type_concept") },
+                          ]}
+                          searchable={false}
+                        />
                       </TableCell>
                       <TableCell>
                         <Textarea
@@ -2113,7 +2068,7 @@ const AdminBilling = () => {
                         />
                       </TableCell>
                       <TableCell>
-                        <Select
+                        <SearchableSelect
                           value={String(line.vatRate)}
                           onValueChange={(v) =>
                             setDraftLines((prev) =>
@@ -2121,16 +2076,13 @@ const AdminBilling = () => {
                             )
                           }
                           disabled={!editable || line.lineType !== "BILLABLE"}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="21">21</SelectItem>
-                            <SelectItem value="10">10</SelectItem>
-                            <SelectItem value="4">4</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          options={[
+                            { value: "21", label: "21" },
+                            { value: "10", label: "10" },
+                            { value: "4", label: "4" },
+                          ]}
+                          searchable={false}
+                        />
                       </TableCell>
                       <TableCell>
                         <Input
@@ -2334,18 +2286,14 @@ const AdminBilling = () => {
                   </div>
                   <div className="space-y-1.5 max-w-md">
                     <Label className="text-xs">{t("admin.billing.rectificative_series")}</Label>
-                    <Select value={rectificativeSeriesId} onValueChange={setRectificativeSeriesId}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {seriesForRectificative.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.code} · {s.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={rectificativeSeriesId}
+                      onValueChange={setRectificativeSeriesId}
+                      options={seriesForRectificative.map((s) => ({
+                        value: s.id,
+                        label: `${s.code} · ${s.label}`,
+                      }))}
+                    />
                   </div>
                 </div>
               )}

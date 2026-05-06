@@ -8,13 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PasswordInputWithToggle } from "@/components/ui/password-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table,
   TableBody,
@@ -183,15 +177,15 @@ const AdminUsersBulk = () => {
           </div>
           <div className="space-y-2 min-w-[180px]">
             <Label>{t("admin.usersBulk.role_label")}</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="WORKER">{t("admin.users.filter_role_worker")}</SelectItem>
-                <SelectItem value="ADMIN">{t("admin.users.filter_role_admin")}</SelectItem>
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={role}
+              onValueChange={(v) => setRole(v as UserRole)}
+              options={[
+                { value: "WORKER", label: t("admin.users.filter_role_worker") },
+                { value: "ADMIN", label: t("admin.users.filter_role_admin") },
+              ]}
+              searchable={false}
+            />
           </div>
         </CardContent>
       </Card>

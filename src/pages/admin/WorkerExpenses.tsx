@@ -7,13 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table,
   TableBody,
@@ -295,33 +289,26 @@ const WorkerExpenses = () => {
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
                 <Label>{t("admin.expenses.year")}</Label>
-                <Select value={String(selYear)} onValueChange={(v) => setSelYear(Number(v))}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {yearOptions.map((y) => (
-                      <SelectItem key={y} value={String(y)}>
-                        {y}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={String(selYear)}
+                  onValueChange={(v) => setSelYear(Number(v))}
+                  options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+                  className="w-[120px]"
+                  searchable={false}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>{t("admin.expenses.month")}</Label>
-                <Select value={String(selMonth)} onValueChange={(v) => setSelMonth(Number(v))}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                      <SelectItem key={m} value={String(m)}>
-                        {new Date(2000, m - 1, 1).toLocaleString(localeTag, { month: "long" })}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={String(selMonth)}
+                  onValueChange={(v) => setSelMonth(Number(v))}
+                  options={Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({
+                    value: String(m),
+                    label: new Date(2000, m - 1, 1).toLocaleString(localeTag, { month: "long" }),
+                  }))}
+                  className="w-[140px]"
+                  searchable={false}
+                />
               </div>
               <div className="flex gap-2">
                 <Button

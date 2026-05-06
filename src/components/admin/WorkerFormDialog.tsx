@@ -27,17 +27,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { optionalEmail } from "@/lib/zodOptional";
+import { EntityDocumentsSection } from "@/components/admin/EntityDocumentsSection";
 
 const employmentEnum = z.enum([
   "FIJO",
@@ -108,6 +103,8 @@ type Props = {
   /** Sedes laborales (calendarios); debe estar cargado antes de abrir el diálogo. */
   calendarSites: WorkCalendarSiteRecord[];
   onSubmit: (values: WorkerFormValues) => void | Promise<void>;
+  /** Tras subir o borrar adjuntos (p. ej. invalidar semáforo CV en listado). */
+  onEntityDocumentsChanged?: () => void;
 };
 
 export function WorkerFormDialog({
@@ -118,6 +115,7 @@ export function WorkerFormDialog({
   providerOptions,
   calendarSites,
   onSubmit,
+  onEntityDocumentsChanged,
 }: Props) {
   const { t } = useLanguage();
   const defaultSiteId =
@@ -318,28 +316,19 @@ export function WorkerFormDialog({
                   <FormItem className="sm:col-span-2">
                     <FormLabel>{t("admin.workers.field_calendar")}</FormLabel>
                     <p className="text-sm text-muted-foreground mb-1.5">{t("admin.workers.field_calendar_desc")}</p>
-                    <Select
-                      onValueChange={(id) => {
-                        field.onChange(id);
-                        const s = calendarSites.find((x) => x.id === id);
-                        if (s) form.setValue("vacationDays", s.vacationDaysDefault);
-                      }}
-                      value={field.value}
-                      disabled={calendarSites.length === 0}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={t("admin.workers.field_calendar")} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {calendarSites.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={(id) => {
+                          field.onChange(id);
+                          const s = calendarSites.find((x) => x.id === id);
+                          if (s) form.setValue("vacationDays", s.vacationDaysDefault);
+                        }}
+                        options={calendarSites.map((s) => ({ value: s.id, label: s.name }))}
+                        placeholder={t("admin.workers.field_calendar")}
+                        disabled={calendarSites.length === 0}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -366,22 +355,16 @@ export function WorkerFormDialog({
                 render={({ field }) => (
                   <FormItem className="sm:col-span-2">
                     <FormLabel>Tipo de relación</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {(Object.keys(COMPANY_WORKER_EMPLOYMENT_LABELS) as CompanyWorkerEmploymentType[]).map(
-                          (k) => (
-                            <SelectItem key={k} value={k}>
-                              {COMPANY_WORKER_EMPLOYMENT_LABELS[k]}
-                            </SelectItem>
-                          )
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={(Object.keys(COMPANY_WORKER_EMPLOYMENT_LABELS) as CompanyWorkerEmploymentType[]).map(
+                          (k) => ({ value: k, label: COMPANY_WORKER_EMPLOYMENT_LABELS[k] })
                         )}
-                      </SelectContent>
-                    </Select>
+                        searchable={false}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -431,24 +414,17 @@ export function WorkerFormDialog({
                         Alta en{" "}
                         <strong>Proveedores</strong> con los mismos datos que un cliente.
                       </p>
-                      <Select
-                        value={field.value ? field.value : NONE_VALUE}
-                        onValueChange={(v) => field.onChange(v === NONE_VALUE ? "" : v)}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar proveedor…" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={NONE_VALUE}>—</SelectItem>
-                          {providerOptions.map((opt) => (
-                            <SelectItem key={opt.id} value={opt.id}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value ? field.value : NONE_VALUE}
+                          onValueChange={(v) => field.onChange(v === NONE_VALUE ? "" : v)}
+                          options={[
+                            { value: NONE_VALUE, label: "—" },
+                            ...providerOptions.map((opt) => ({ value: opt.id, label: opt.label })),
+                          ]}
+                          placeholder="Seleccionar proveedor…"
+                        />
+                      </FormControl>
                       {providerOptions.length === 0 && (
                         <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                           No hay proveedores activos. Da de alta uno en Administración → Proveedores.
@@ -476,6 +452,11 @@ export function WorkerFormDialog({
                 )}
               />
             </div>
+            <EntityDocumentsSection
+              ownerType="COMPANY_WORKER"
+              ownerId={mode === "edit" && initial ? initial.id : null}
+              onDocumentsChanged={onEntityDocumentsChanged}
+            />
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar

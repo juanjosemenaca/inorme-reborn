@@ -10,13 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { WorkerExpenseSheetAttachmentRecord } from "@/types/workerExpenses";
 
 type TFn = (key: string) => string;
@@ -323,23 +317,22 @@ export function ExpenseSheetAttachmentsEditor(props: {
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-end">
           <div className="space-y-1.5 min-w-[200px]">
             <Label className="text-xs">{t("admin.expenses.attachments_link_day")}</Label>
-            <Select value={attachDay} onValueChange={setAttachDay}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={WHOLE_PERIOD}>{t("admin.expenses.attachments_period_wide")}</SelectItem>
-                {periodDates.map((d) => (
-                  <SelectItem key={d} value={d}>
-                    {new Date(`${d}T12:00:00`).toLocaleDateString(localeTag, {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={attachDay}
+              onValueChange={setAttachDay}
+              options={[
+                { value: WHOLE_PERIOD, label: t("admin.expenses.attachments_period_wide") },
+                ...periodDates.map((d) => ({
+                  value: d,
+                  label: new Date(`${d}T12:00:00`).toLocaleDateString(localeTag, {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                  }),
+                })),
+              ]}
+              className="h-9"
+            />
           </div>
           <div className="flex flex-wrap gap-2">
             <input

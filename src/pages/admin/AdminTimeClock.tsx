@@ -15,7 +15,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -283,16 +283,15 @@ const AdminTimeClock = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid gap-3 md:grid-cols-[180px_220px_1fr]">
-                <Select value={newKind} onValueChange={(v) => setNewKind(v as TimeClockEventKind)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EVENT_KINDS.map((k) => (
-                      <SelectItem key={k} value={k}>{t(`admin.timeClock.kind_${k.toLowerCase()}`)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={newKind}
+                  onValueChange={(v) => setNewKind(v as TimeClockEventKind)}
+                  options={EVENT_KINDS.map((k) => ({
+                    value: k,
+                    label: t(`admin.timeClock.kind_${k.toLowerCase()}`),
+                  }))}
+                  searchable={false}
+                />
                 <Input type="datetime-local" value={newAt} onChange={(e) => setNewAt(e.target.value)} />
                 <Input
                   value={newKind === "ABSENCE" ? newAbsenceReason : newComment}
@@ -424,23 +423,20 @@ const AdminTimeClock = () => {
                                               <p className="text-[11px] text-muted-foreground mt-1">{formatDt(e.eventAt)}</p>
                                             </TableCell>
                                             <TableCell className="min-w-[180px]">
-                                              <Select
+                                              <SearchableSelect
                                                 value={d.kind}
                                                 onValueChange={(v) =>
-                                                  setDraftById((prev) => ({ ...prev, [e.id]: { ...d, kind: v as TimeClockEventKind } }))
+                                                  setDraftById((prev) => ({
+                                                    ...prev,
+                                                    [e.id]: { ...d, kind: v as TimeClockEventKind },
+                                                  }))
                                                 }
-                                              >
-                                                <SelectTrigger>
-                                                  <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  {EVENT_KINDS.map((k) => (
-                                                    <SelectItem key={k} value={k}>
-                                                      {t(`admin.timeClock.kind_${k.toLowerCase()}`)}
-                                                    </SelectItem>
-                                                  ))}
-                                                </SelectContent>
-                                              </Select>
+                                                options={EVENT_KINDS.map((k) => ({
+                                                  value: k,
+                                                  label: t(`admin.timeClock.kind_${k.toLowerCase()}`),
+                                                }))}
+                                                searchable={false}
+                                              />
                                               <Badge variant="outline" className="mt-2">
                                                 {e.source}
                                               </Badge>

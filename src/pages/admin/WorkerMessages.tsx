@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Archive } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, Loader2, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,12 +17,15 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useBackofficeUsers } from "@/hooks/useBackofficeUsers";
 import type { BackofficeMessageRecord } from "@/types/backofficeMessages";
+import { DmsWorkerReviewPanel } from "@/components/admin/DmsWorkerReviewPanel";
 
 const WorkerMessages = () => {
   const { t, language } = useLanguage();
   const { user } = useAdminAuth();
   const myUserId = user?.userId ?? "";
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const threadFromUrl = searchParams.get("thread");
   const { data: users = [] } = useBackofficeUsers();
   const { data: messages = [], isLoading, isError, error } = useMyBackofficeMessages();
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -67,10 +72,23 @@ const WorkerMessages = () => {
       setActiveThreadId(null);
       return;
     }
+    if (threadFromUrl && threads.some((th) => th.threadId === threadFromUrl)) {
+      setActiveThreadId(threadFromUrl);
+      return;
+    }
     setActiveThreadId((prev) => (prev && threads.some((t) => t.threadId === prev) ? prev : threads[0]!.threadId));
-  }, [threads]);
+  }, [threads, threadFromUrl]);
 
   const activeThread = threads.find((x) => x.threadId === activeThreadId) ?? null;
+
+  const dmsReviewIdFromThread = useMemo(() => {
+    if (!activeThread) return null;
+    for (const m of activeThread.messages) {
+      const p = m.payload as Record<string, unknown>;
+      if (p?.kind === "dms_document_review" && typeof p.reviewId === "string") return p.reviewId;
+    }
+    return null;
+  }, [activeThread]);
 
   const markReadMutation = useMutation({
     mutationFn: (threadId: string) => markBackofficeThreadAsRead(threadId),
@@ -144,6 +162,14 @@ const WorkerMessages = () => {
                     type="button"
                     onClick={() => {
                       setActiveThreadId(th.threadId);
+                      setSearchParams(
+                        (prev) => {
+                          const p = new URLSearchParams(prev);
+                          p.set("thread", th.threadId);
+                          return p;
+                        },
+                        { replace: true }
+                      );
                       if (th.unreadCount > 0 && !markReadMutation.isPending) {
                         markReadMutation.mutate(th.threadId);
                       }
@@ -168,6 +194,22 @@ const WorkerMessages = () => {
                     <p className="font-medium">{activeThread.title}</p>
                     <p className="text-xs text-muted-foreground">{activeThread.counterpartName}</p>
                   </div>
+                  {dmsReviewIdFromThread ? (
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+                      <p className="text-xs font-semibold flex items-center gap-2">
+                        <Archive className="h-4 w-4" aria-hidden />
+                        {t("admin.dms.worker_embed_title")}
+                      </p>
+                      <DmsWorkerReviewPanel
+                        reviewId={dmsReviewIdFromThread}
+                        onUpdated={async () => {
+                          await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
+                          await queryClient.invalidateQueries({ queryKey: queryKeys.myDmsDocumentReviews });
+                        }}
+                      />
+                    </div>
+                  ) : null}
+
                   <div className="space-y-2 max-h-[48vh] overflow-y-auto pr-1">
                     {activeThread.messages.map((m) => {
                       const mine = m.senderBackofficeUserId === myUserId;

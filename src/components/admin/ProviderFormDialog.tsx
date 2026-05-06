@@ -26,6 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { optionalEmail } from "@/lib/zodOptional";
 import { mergeTradeAndCompanyName } from "@/lib/tradeCompanyName";
+import { EntityDocumentsSection } from "@/components/admin/EntityDocumentsSection";
 
 const schema = z
   .object({
@@ -255,6 +256,10 @@ export function ProviderFormDialog({ open, onOpenChange, mode, initial, onSubmit
                 )}
               />
             </div>
+            <EntityDocumentsSection
+              ownerType="PROVIDER"
+              ownerId={mode === "edit" && initial ? initial.id : null}
+            />
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar

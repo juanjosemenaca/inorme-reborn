@@ -36,8 +36,11 @@ export interface CompanyWorkerRecord {
   city: string;
   employmentType: CompanyWorkerEmploymentType;
   /**
-   * Proveedor (empresa) cuando es subcontratado o autónomo por empresa.
-   * Null si fijo, temporal, prácticas, o autónomo por cuenta propia.
+   * Proveedor (empresa):
+   * - FIJO/TEMPORAL/PRACTICAS -> proveedor INORME (asignación automática)
+   * - SUBCONTRATADO -> proveedor obligatorio
+   * - AUTONOMO por EMPRESA -> proveedor obligatorio
+   * - AUTONOMO por cuenta propia -> null
    */
   providerId: string | null;
   /** Solo si `employmentType === "AUTONOMO"` */

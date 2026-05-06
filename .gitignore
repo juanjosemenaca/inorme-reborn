@@ -15,6 +15,9 @@ dist-ssr
 .env.*
 !.env.example
 .vite
+scripts/bulk-invoice-generator/output
+scripts/bulk-invoice-generator/node_modules
+server/bulk-invoice-api/node_modules
 
 # Editor directories and files
 .vscode/*

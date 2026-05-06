@@ -17,7 +17,9 @@
     "db:link": "supabase link --project-ref grasrjavkbeboynacvzp",
     "db:push": "supabase db push",
     "db:migration:new": "supabase migration new",
-    "parse-work-calendar": "node scripts/parse-work-calendar-xlsx.mjs"
+    "parse-work-calendar": "node scripts/parse-work-calendar-xlsx.mjs",
+    "bulk-invoices": "node scripts/bulk-invoice-generator/index.js",
+    "bulk-invoice-api": "node server/bulk-invoice-api/server.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

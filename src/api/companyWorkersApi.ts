@@ -2,6 +2,7 @@ import { requireSupabase } from "@/api/supabaseRequire";
 import { getProfileByAuthUserId } from "@/api/backofficeUsersApi";
 import { getWorkCalendarSiteById } from "@/api/workCalendarSitesApi";
 import { getProviderById } from "@/api/providersApi";
+import { fetchProviders } from "@/api/providersApi";
 import { sortByLocaleKey } from "@/lib/sortAlpha";
 import { companyWorkerRecordToRowInsert, companyWorkerRowToDomain } from "@/lib/supabase/mappers";
 import type { CompanyWorkerRow } from "@/types/database";
@@ -12,13 +13,35 @@ import {
   type CompanyWorkerRecord,
 } from "@/types/companyWorkers";
 
+async function findDefaultInormeProviderId(): Promise<string> {
+  const providers = await fetchProviders();
+  const inorme = providers.find((p) => {
+    const trade = p.tradeName.trim().toUpperCase();
+    const company = p.companyName.trim().toUpperCase();
+    return (
+      p.active &&
+      (trade.includes("INORME") ||
+        company.includes("INORME") ||
+        trade.includes("INFORME") ||
+        company.includes("INFORME"))
+    );
+  });
+  if (!inorme) {
+    throw new Error(
+      "No existe un proveedor activo INORME. Crea/activa el proveedor INORME en Administración -> Proveedores."
+    );
+  }
+  return inorme.id;
+}
+
 async function normalizeEmploymentFields(
   employmentType: CompanyWorkerEmploymentType,
   providerId: string | null | undefined,
   autonomoVia: AutonomoVia | null | undefined
 ): Promise<{ providerId: string | null; autonomoVia: AutonomoVia | null }> {
   if (employmentType === "FIJO" || employmentType === "TEMPORAL" || employmentType === "PRACTICAS") {
-    return { providerId: null, autonomoVia: null };
+    const inormeProviderId = await findDefaultInormeProviderId();
+    return { providerId: inormeProviderId, autonomoVia: null };
   }
   if (employmentType === "SUBCONTRATADO") {
     const pid = (providerId ?? "").trim();

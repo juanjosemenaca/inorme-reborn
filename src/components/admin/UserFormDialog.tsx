@@ -41,13 +41,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { nextPasswordRenewalDeadline } from "@/lib/passwordPolicy";
@@ -380,17 +374,17 @@ function UserFormDialogInner({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Rol</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="WORKER">Trabajador</SelectItem>
-                        <SelectItem value="ADMIN">Administrador</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={[
+                          { value: "WORKER", label: "Trabajador" },
+                          { value: "ADMIN", label: "Administrador" },
+                        ]}
+                        searchable={false}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -617,17 +611,17 @@ function UserFormDialogInner({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Rol</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="WORKER">Trabajador</SelectItem>
-                        <SelectItem value="ADMIN">Administrador</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={[
+                          { value: "WORKER", label: "Trabajador" },
+                          { value: "ADMIN", label: "Administrador" },
+                        ]}
+                        searchable={false}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

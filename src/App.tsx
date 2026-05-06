@@ -26,6 +26,7 @@ import AdminChangePassword from "./pages/admin/AdminChangePassword";
 import WorkerMyProfile from "./pages/admin/WorkerMyProfile";
 import WorkerMyCalendar from "./pages/admin/WorkerMyCalendar";
 import WorkerMessages from "./pages/admin/WorkerMessages";
+import WorkerPendingDocuments from "./pages/admin/WorkerPendingDocuments";
 import AdminWorkerMessages from "./pages/admin/AdminWorkerMessages";
 import AdminWorkerProfileRequests from "./pages/admin/AdminWorkerProfileRequests";
 import WorkerTimeClockLayout from "./pages/admin/WorkerTimeClockLayout";
@@ -41,12 +42,8 @@ import AdminWorkerAgenda from "./pages/admin/AdminWorkerAgenda";
 import WorkerExpenses from "./pages/admin/WorkerExpenses";
 import AdminWorkerExpenses from "./pages/admin/AdminWorkerExpenses";
 import AdminBilling from "./pages/admin/AdminBilling";
-import LegalGrupoLayout from "./pages/admin/legal-grupo/LegalGrupoLayout";
-import LegalGrupoDashboard from "./pages/admin/legal-grupo/LegalGrupoDashboard";
-import LegalGrupoClientsPage from "./pages/admin/legal-grupo/LegalGrupoClientsPage";
-import LegalGrupoMattersPage from "./pages/admin/legal-grupo/LegalGrupoMattersPage";
-import LegalGrupoMatterDetailPage from "./pages/admin/legal-grupo/LegalGrupoMatterDetailPage";
-import LegalGrupoInvoicesPage from "./pages/admin/legal-grupo/LegalGrupoInvoicesPage";
+import AdminDms from "./pages/admin/AdminDms";
+import AdminBulkInvoices from "./pages/admin/AdminBulkInvoices";
 import { ADMIN_ROUTE_SEG } from "@/constants/adminPaths";
 
 const queryClient = new QueryClient();
@@ -132,8 +129,16 @@ const App = () => (
                 <Route
                   path="mensajes"
                   element={
-                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="MESSAGES">
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]}>
                       <WorkerMessages />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="documentos-pendientes"
+                  element={
+                    <RoleRoute allowedRoles={["WORKER"]}>
+                      <WorkerPendingDocuments />
                     </RoleRoute>
                   }
                 />
@@ -145,20 +150,6 @@ const App = () => (
                     </RoleRoute>
                   }
                 />
-                <Route
-                  path="grupo-legal"
-                  element={
-                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="LEGAL">
-                      <LegalGrupoLayout />
-                    </RoleRoute>
-                  }
-                >
-                  <Route index element={<LegalGrupoDashboard />} />
-                  <Route path="clientes" element={<LegalGrupoClientsPage />} />
-                  <Route path="expedientes" element={<LegalGrupoMattersPage />} />
-                  <Route path="expedientes/:matterId" element={<LegalGrupoMatterDetailPage />} />
-                  <Route path="facturas" element={<LegalGrupoInvoicesPage />} />
-                </Route>
                 <Route
                   path="fichajes"
                   element={
@@ -245,6 +236,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="documentos"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN", "WORKER"]} requiredModule="DMS">
+                      <AdminDms />
+                    </RoleRoute>
+                  }
+                />
+                <Route
                   path="proveedores"
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
@@ -257,6 +256,14 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
                       <AdminCompanyWorkers />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="generador-facturas-masivas"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN"]}>
+                      <AdminBulkInvoices />
                     </RoleRoute>
                   }
                 />

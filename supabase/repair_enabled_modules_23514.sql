@@ -1,7 +1,5 @@
--- Si la migración legal_grupo falló con:
---   ERROR: check constraint "backoffice_users_enabled_modules_valid" ... is violated
--- ejecuta este script en el SQL Editor de Supabase (una vez) y vuelve a aplicar migraciones
--- o ejecuta solo el resto de 20260420180000_legal_grupo_module.sql a partir de CREATE TABLE legal_*.
+-- Si falla el CHECK de `backoffice_users.enabled_modules`, ejecuta en SQL Editor (una vez).
+-- Versión alineada con módulos vigentes (sin LEGAL / Grupo legal).
 
 ALTER TABLE public.backoffice_users
   DROP CONSTRAINT IF EXISTS backoffice_users_enabled_modules_valid;
@@ -17,14 +15,14 @@ SET enabled_modules = COALESCE(
       'TIME_CLOCK',
       'AGENDA',
       'GASTOS',
-      'LEGAL'
+      'DMS'
     )
   ),
   ARRAY[]::text[]
 );
 
 UPDATE public.backoffice_users
-SET enabled_modules = ARRAY['VACATIONS', 'MESSAGES', 'TIME_CLOCK', 'AGENDA', 'GASTOS', 'LEGAL']::text[]
+SET enabled_modules = ARRAY['VACATIONS', 'MESSAGES', 'TIME_CLOCK', 'AGENDA', 'GASTOS']::text[]
 WHERE cardinality(enabled_modules) = 0;
 
 ALTER TABLE public.backoffice_users
@@ -36,7 +34,7 @@ ALTER TABLE public.backoffice_users
       'TIME_CLOCK',
       'AGENDA',
       'GASTOS',
-      'LEGAL'
+      'DMS'
     ]::text[]
   );
 

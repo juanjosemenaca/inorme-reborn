@@ -38,6 +38,10 @@ import {
 import type { ProjectMemberInput } from "@/api/projectsApi";
 import { PROJECT_MEMBER_ROLES, type ProjectMemberRole } from "@/types/projects";
 import { queryKeys } from "@/lib/queryKeys";
+import {
+  completenessDotClass,
+  getProjectCompleteness,
+} from "@/lib/adminEntityCompleteness";
 import type { ProjectWithDocuments } from "@/types/projects";
 import { ProjectFormDialog, type ProjectFormValues } from "@/components/admin/ProjectFormDialog";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -235,6 +239,17 @@ const AdminProjects = () => {
     }
   };
 
+  const projectCompletenessMeta = (p: ProjectWithDocuments, client: (typeof clients)[number] | undefined) => {
+    const comp = getProjectCompleteness(p, client);
+    const label =
+      comp.level === "green"
+        ? t("admin.workers.completeness_green")
+        : comp.level === "yellow"
+          ? t("admin.workers.completeness_yellow")
+          : t("admin.workers.completeness_red");
+    return { dotClass: completenessDotClass(comp.level), label };
+  };
+
   const formLabels = {
     titleCreate: t("admin.projects.dialog_title_create"),
     titleEdit: t("admin.projects.dialog_title_edit"),
@@ -402,18 +417,30 @@ const AdminProjects = () => {
                 {sorted.map((p) => {
                   const cl = clients.find((c) => c.id === p.clientId);
                   const showFinal = cl?.clientKind === "INTERMEDIARIO";
+                  const sem = projectCompletenessMeta(p, cl);
                   return (
                     <TableRow key={p.id}>
                       <TableCell className="font-mono text-xs tabular-nums text-muted-foreground whitespace-nowrap">
                         {p.projectCode}
                       </TableCell>
                       <TableCell className="font-medium max-w-[220px]">
-                        <div className="truncate" title={p.title}>
-                          {p.title}
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span
+                            className={`inline-block h-3.5 w-3.5 rounded-full ${sem.dotClass} ring-1 ring-black/10 dark:ring-white/20 shrink-0 mt-1`}
+                            title={sem.label}
+                            aria-label={sem.label}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate" title={p.title}>
+                              {p.title}
+                            </div>
+                            {p.description && (
+                              <div className="text-xs text-muted-foreground font-normal line-clamp-1 mt-0.5">
+                                {p.description}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        {p.description && (
-                          <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{p.description}</div>
-                        )}
                       </TableCell>
                       <TableCell className="text-sm">{clientLabel(p.clientId)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">

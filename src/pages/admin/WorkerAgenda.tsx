@@ -13,13 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -770,18 +764,15 @@ const WorkerAgenda = () => {
             </div>
             <div className="space-y-2">
               <Label>{t("admin.agenda.field_type")}</Label>
-              <Select value={formType} onValueChange={(v) => setFormType(v as WorkerAgendaItemType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {WORKER_TYPES.map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {t(`admin.agenda.type_${k}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={formType}
+                onValueChange={(v) => setFormType(v as WorkerAgendaItemType)}
+                options={WORKER_TYPES.map((k) => ({
+                  value: k,
+                  label: t(`admin.agenda.type_${k}`),
+                }))}
+                searchable={false}
+              />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">

@@ -12,13 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SortableTableHead } from "@/components/admin/SortableTableHead";
 import { sortRows, toggleColumnSort, type ColumnSort } from "@/lib/adminListUtils";
 import { useAdminVacationSummaries } from "@/hooks/useAdminVacationSummaries";
@@ -255,19 +249,17 @@ const AdminVacations = () => {
                 className="pl-9"
               />
             </div>
-            <Select
+            <SearchableSelect
               value={activeFilter}
               onValueChange={(v) => setActiveFilter(v as typeof activeFilter)}
-            >
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("admin.vacations.filter_all")}</SelectItem>
-                <SelectItem value="active">{t("admin.vacations.filter_active")}</SelectItem>
-                <SelectItem value="inactive">{t("admin.vacations.filter_inactive")}</SelectItem>
-              </SelectContent>
-            </Select>
+              options={[
+                { value: "all", label: t("admin.vacations.filter_all") },
+                { value: "active", label: t("admin.vacations.filter_active") },
+                { value: "inactive", label: t("admin.vacations.filter_inactive") },
+              ]}
+              className="w-full sm:w-[200px]"
+              searchable={false}
+            />
           </div>
 
           {isLoading ? (

@@ -13,13 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
@@ -291,21 +285,16 @@ const AdminWorkerAgenda = () => {
           {loadingWorkers ? (
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : (
-            <Select
+            <SearchableSelect
               value={workerId ?? ""}
               onValueChange={(v) => setWorkerId(v || null)}
-            >
-              <SelectTrigger className="max-w-md">
-                <SelectValue placeholder={t("admin.agenda.admin_select_placeholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {activeWorkers.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>
-                    {companyWorkerDisplayName(w)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={activeWorkers.map((w) => ({
+                value: w.id,
+                label: companyWorkerDisplayName(w),
+              }))}
+              placeholder={t("admin.agenda.admin_select_placeholder")}
+              className="max-w-md"
+            />
           )}
         </CardContent>
       </Card>
@@ -320,21 +309,15 @@ const AdminWorkerAgenda = () => {
             <CardContent className="space-y-3 max-w-xl">
               <div className="space-y-2">
                 <Label>{t("admin.agenda.field_type")}</Label>
-                <Select
+                <SearchableSelect
                   value={adminAgendaType}
                   onValueChange={(v) => setAdminAgendaType(v as WorkerAgendaItemType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ADMIN_WORKER_AGENDA_CREATE_TYPES.map((k) => (
-                      <SelectItem key={k} value={k}>
-                        {t(`admin.agenda.type_${k}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={ADMIN_WORKER_AGENDA_CREATE_TYPES.map((k) => ({
+                    value: k,
+                    label: t(`admin.agenda.type_${k}`),
+                  }))}
+                  searchable={false}
+                />
               </div>
               <div className="space-y-2">
                 <Label>{t("admin.agenda.field_title")}</Label>

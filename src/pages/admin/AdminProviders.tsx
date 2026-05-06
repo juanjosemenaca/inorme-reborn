@@ -13,13 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SortableTableHead } from "@/components/admin/SortableTableHead";
 import { sortRows, toggleColumnSort, type ColumnSort } from "@/lib/adminListUtils";
 import {
@@ -40,6 +34,10 @@ import {
 } from "@/api/providersApi";
 import { clearProviderLinksFromWorkers } from "@/api/companyWorkersApi";
 import { queryKeys } from "@/lib/queryKeys";
+import {
+  completenessDotClass,
+  getProviderCompleteness,
+} from "@/lib/adminEntityCompleteness";
 import type { ProviderRecord } from "@/types/providers";
 import { ProviderFormDialog, type ProviderFormValues } from "@/components/admin/ProviderFormDialog";
 import { ProviderContactsDialog } from "@/components/admin/ProviderContactsDialog";
@@ -66,6 +64,17 @@ const AdminProviders = () => {
     () => providers.find((p) => p.id === contactsId) ?? null,
     [providers, contactsId]
   );
+
+  const providerCompletenessMeta = (p: ProviderRecord) => {
+    const c = getProviderCompleteness(p);
+    const label =
+      c.level === "green"
+        ? t("admin.workers.completeness_green")
+        : c.level === "yellow"
+          ? t("admin.workers.completeness_yellow")
+          : t("admin.workers.completeness_red");
+    return { dotClass: completenessDotClass(c.level), label };
+  };
 
   useEffect(() => {
     if (contactsId && !contactsProvider) {
@@ -234,16 +243,17 @@ const AdminProviders = () => {
             </div>
             <div className="space-y-1 min-w-[140px]">
               <label className="text-xs text-muted-foreground">{t("admin.common.status")}</label>
-              <Select value={activeFilter} onValueChange={(v) => setActiveFilter(v as typeof activeFilter)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("admin.common.filter_all")}</SelectItem>
-                  <SelectItem value="active">{t("admin.common.filter_active")}</SelectItem>
-                  <SelectItem value="inactive">{t("admin.common.filter_inactive")}</SelectItem>
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={activeFilter}
+                onValueChange={(v) => setActiveFilter(v as typeof activeFilter)}
+                options={[
+                  { value: "all", label: t("admin.common.filter_all") },
+                  { value: "active", label: t("admin.common.filter_active") },
+                  { value: "inactive", label: t("admin.common.filter_inactive") },
+                ]}
+                searchable={false}
+                className="h-9"
+              />
             </div>
           </div>
         </CardHeader>
@@ -292,9 +302,20 @@ const AdminProviders = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sorted.map((p) => (
+                {sorted.map((p) => {
+                  const sem = providerCompletenessMeta(p);
+                  return (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.tradeName}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-block h-3.5 w-3.5 rounded-full ${sem.dotClass} ring-1 ring-black/10 dark:ring-white/20 shrink-0`}
+                          title={sem.label}
+                          aria-label={sem.label}
+                        />
+                        <span>{p.tradeName}</span>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground max-w-[200px] truncate">
                       {p.companyName}
                     </TableCell>
@@ -343,9 +364,10 @@ const AdminProviders = () => {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </TableCell>
+                      </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}
