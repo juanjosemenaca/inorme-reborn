@@ -1216,7 +1216,7 @@
   },
   "moduleActivation": {
     "title": "Activació de mòduls",
-    "subtitle": "Activa o desactiva quins mòduls pot utilitzar cada treballador al backoffice.",
+    "subtitle": "Activa o desactiva els mòduls d'intranet i, si escau, l'accés als mestres (treballadors, clients, projectes i proveïdors) per a cada treballador.",
     "load_error": "No s'han pogut carregar els usuaris.",
     "bulk_title": "Configuració massiva",
     "bulk_desc": "Aplica la mateixa configuració de mòduls a diversos treballadors alhora.",
@@ -1237,7 +1237,13 @@
     "mod_time_clock": "Control de fitxatges",
     "mod_agenda": "Agenda",
     "mod_expenses": "Despeses",
-    "mod_dms": "Gestor documental"
+    "mod_dms": "Gestor documental",
+    "bulk_section_intranet": "Intranet i eines",
+    "bulk_section_masters": "Mestres (catàlegs)",
+    "mod_company_workers": "Treballadors (mestre)",
+    "mod_clients": "Clients (mestre)",
+    "mod_projects": "Projectes (mestre)",
+    "mod_providers": "Proveïdors (mestre)"
   },
   "workerProfileRequests": {
     "title": "Sol·licituds de modificació de fitxa",

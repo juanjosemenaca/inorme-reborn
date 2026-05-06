@@ -222,7 +222,7 @@ const App = () => (
                 <Route
                   path="clientes"
                   element={
-                    <RoleRoute allowedRoles={["ADMIN"]}>
+                    <RoleRoute allowedRoles={["ADMIN", "WORKER"]} requiredModule="ADMIN_CLIENTS">
                       <AdminClients />
                     </RoleRoute>
                   }
@@ -230,7 +230,7 @@ const App = () => (
                 <Route
                   path="proyectos"
                   element={
-                    <RoleRoute allowedRoles={["ADMIN"]}>
+                    <RoleRoute allowedRoles={["ADMIN", "WORKER"]} requiredModule="ADMIN_PROJECTS">
                       <AdminProjects />
                     </RoleRoute>
                   }
@@ -246,7 +246,7 @@ const App = () => (
                 <Route
                   path="proveedores"
                   element={
-                    <RoleRoute allowedRoles={["ADMIN"]}>
+                    <RoleRoute allowedRoles={["ADMIN", "WORKER"]} requiredModule="ADMIN_PROVIDERS">
                       <AdminProviders />
                     </RoleRoute>
                   }
@@ -254,7 +254,7 @@ const App = () => (
                 <Route
                   path="trabajadores"
                   element={
-                    <RoleRoute allowedRoles={["ADMIN"]}>
+                    <RoleRoute allowedRoles={["ADMIN", "WORKER"]} requiredModule="ADMIN_COMPANY_WORKERS">
                       <AdminCompanyWorkers />
                     </RoleRoute>
                   }

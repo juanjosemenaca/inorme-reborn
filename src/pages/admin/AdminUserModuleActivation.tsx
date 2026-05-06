@@ -14,9 +14,13 @@ import {
   bulkUpdateWorkerModules,
   updateWorkerModules,
 } from "@/api/backofficeUsersApi";
-import { ALL_WORKER_MODULES, type WorkerModuleKey } from "@/types/backoffice";
+import {
+  ALL_WORKER_MODULES,
+  REGISTRY_MODULE_KEYS,
+  type WorkerModuleKey,
+} from "@/types/backoffice";
 
-const MODULE_ORDER: WorkerModuleKey[] = [
+const INTRANET_MODULE_ORDER: WorkerModuleKey[] = [
   "VACATIONS",
   "MESSAGES",
   "TIME_CLOCK",
@@ -31,6 +35,10 @@ function moduleLabel(module: WorkerModuleKey, t: (key: string) => string): strin
   if (module === "TIME_CLOCK") return t("admin.moduleActivation.mod_time_clock");
   if (module === "AGENDA") return t("admin.moduleActivation.mod_agenda");
   if (module === "DMS") return t("admin.moduleActivation.mod_dms");
+  if (module === "ADMIN_COMPANY_WORKERS") return t("admin.moduleActivation.mod_company_workers");
+  if (module === "ADMIN_CLIENTS") return t("admin.moduleActivation.mod_clients");
+  if (module === "ADMIN_PROJECTS") return t("admin.moduleActivation.mod_projects");
+  if (module === "ADMIN_PROVIDERS") return t("admin.moduleActivation.mod_providers");
   return t("admin.moduleActivation.mod_expenses");
 }
 
@@ -145,17 +153,37 @@ const AdminUserModuleActivation = () => {
               {t("admin.moduleActivation.bulk_active_workers")}
             </Button>
           </div>
-          <div className="flex flex-wrap gap-4">
-            {MODULE_ORDER.map((mod) => (
-              <label key={mod} className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={bulkModules.includes(mod)}
-                  onChange={() => toggleBulkModule(mod)}
-                />
-                {moduleLabel(mod, t)}
-              </label>
-            ))}
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">{t("admin.moduleActivation.bulk_section_intranet")}</p>
+              <div className="flex flex-wrap gap-4">
+                {INTRANET_MODULE_ORDER.map((mod) => (
+                  <label key={mod} className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={bulkModules.includes(mod)}
+                      onChange={() => toggleBulkModule(mod)}
+                    />
+                    {moduleLabel(mod, t)}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">{t("admin.moduleActivation.bulk_section_masters")}</p>
+              <div className="flex flex-wrap gap-4">
+                {REGISTRY_MODULE_KEYS.map((mod) => (
+                  <label key={mod} className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={bulkModules.includes(mod)}
+                      onChange={() => toggleBulkModule(mod)}
+                    />
+                    {moduleLabel(mod, t)}
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="flex justify-end">
             <Button type="button" disabled={bulkSaving} onClick={applyBulk}>
@@ -210,24 +238,45 @@ const AdminUserModuleActivation = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-3">
-                          {MODULE_ORDER.map((mod) => {
-                            const checked = u.enabledModules.includes(mod);
-                            const next = checked
-                              ? u.enabledModules.filter((m) => m !== mod)
-                              : [...u.enabledModules, mod];
-                            return (
-                              <label key={`${u.id}-${mod}`} className="inline-flex items-center gap-2 text-sm">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  disabled={savingUserId === u.id}
-                                  onChange={() => updateOne(u.id, next)}
-                                />
-                                {moduleLabel(mod, t)}
-                              </label>
-                            );
-                          })}
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap gap-3">
+                            {INTRANET_MODULE_ORDER.map((mod) => {
+                              const checked = u.enabledModules.includes(mod);
+                              const next = checked
+                                ? u.enabledModules.filter((m) => m !== mod)
+                                : [...u.enabledModules, mod];
+                              return (
+                                <label key={`${u.id}-${mod}`} className="inline-flex items-center gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={savingUserId === u.id}
+                                    onChange={() => updateOne(u.id, next)}
+                                  />
+                                  {moduleLabel(mod, t)}
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <div className="flex flex-wrap gap-3 border-t border-border/60 pt-2">
+                            {REGISTRY_MODULE_KEYS.map((mod) => {
+                              const checked = u.enabledModules.includes(mod);
+                              const next = checked
+                                ? u.enabledModules.filter((m) => m !== mod)
+                                : [...u.enabledModules, mod];
+                              return (
+                                <label key={`${u.id}-${mod}`} className="inline-flex items-center gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={savingUserId === u.id}
+                                    onChange={() => updateOne(u.id, next)}
+                                  />
+                                  {moduleLabel(mod, t)}
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">

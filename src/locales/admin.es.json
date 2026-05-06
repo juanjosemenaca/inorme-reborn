@@ -1216,7 +1216,7 @@
   },
   "moduleActivation": {
     "title": "Activación de módulos",
-    "subtitle": "Activa o desactiva qué módulos puede usar cada trabajador en su backoffice.",
+    "subtitle": "Activa o desactiva los módulos de intranet y, si procede, el acceso a los maestros (trabajadores, clientes, proyectos y proveedores) para cada trabajador.",
     "load_error": "No se pudieron cargar los usuarios.",
     "bulk_title": "Configuración masiva",
     "bulk_desc": "Aplica una misma configuración de módulos a varios trabajadores de una sola vez.",
@@ -1237,7 +1237,13 @@
     "mod_time_clock": "Control de fichajes",
     "mod_agenda": "Agenda",
     "mod_expenses": "Gastos",
-    "mod_dms": "Gestor documental"
+    "mod_dms": "Gestor documental",
+    "bulk_section_intranet": "Intranet y herramientas",
+    "bulk_section_masters": "Maestros (catálogos)",
+    "mod_company_workers": "Trabajadores (maestro)",
+    "mod_clients": "Clientes (maestro)",
+    "mod_projects": "Proyectos (maestro)",
+    "mod_providers": "Proveedores (maestro)"
   },
   "workerProfileRequests": {
     "title": "Solicitudes de modificación de ficha",

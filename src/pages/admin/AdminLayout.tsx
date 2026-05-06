@@ -49,6 +49,7 @@ import { useMyDmsDocumentReviewsAsAssignee } from "@/hooks/useMyDmsDocumentRevie
 import { ADMIN_PATHS } from "@/constants/adminPaths";
 import { IntranetAttentionDialogs } from "@/components/admin/IntranetAttentionDialogs";
 import { runProjectEndNotices } from "@/api/projectsApi";
+import { isRegistryWorkerModule } from "@/types/backoffice";
 
 const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
@@ -154,10 +155,10 @@ const NAV_KEYS = [
     icon: Layers,
     roles: ["ADMIN"] as const,
   },
-  { to: "/admin/trabajadores", labelKey: "admin.layout.nav_workers", icon: Contact2, roles: ["ADMIN"] as const },
-  { to: "/admin/proveedores", labelKey: "admin.layout.nav_providers", icon: Truck, roles: ["ADMIN"] as const },
-  { to: "/admin/clientes", labelKey: "admin.layout.nav_clients", icon: Building2, roles: ["ADMIN"] as const },
-  { to: "/admin/proyectos", labelKey: "admin.layout.nav_projects", icon: FolderKanban, roles: ["ADMIN"] as const },
+  { to: "/admin/trabajadores", labelKey: "admin.layout.nav_workers", icon: Contact2, roles: ["ADMIN", "WORKER"] as const, requiredModule: "ADMIN_COMPANY_WORKERS" as const },
+  { to: "/admin/proveedores", labelKey: "admin.layout.nav_providers", icon: Truck, roles: ["ADMIN", "WORKER"] as const, requiredModule: "ADMIN_PROVIDERS" as const },
+  { to: "/admin/clientes", labelKey: "admin.layout.nav_clients", icon: Building2, roles: ["ADMIN", "WORKER"] as const, requiredModule: "ADMIN_CLIENTS" as const },
+  { to: "/admin/proyectos", labelKey: "admin.layout.nav_projects", icon: FolderKanban, roles: ["ADMIN", "WORKER"] as const, requiredModule: "ADMIN_PROJECTS" as const },
   { to: "/admin/documentos", labelKey: "admin.layout.nav_dms", icon: Archive, roles: ["ADMIN", "WORKER"] as const, requiredModule: "DMS" as const },
   { to: "/admin/calendarios-laborales", labelKey: "admin.layout.nav_calendars", icon: CalendarDays, roles: ["ADMIN"] as const },
   {
@@ -242,6 +243,7 @@ const AdminLayout = () => {
     if (userRole === null || !item.roles.includes(userRole)) return false;
     if ("requiredModule" in item && item.requiredModule) {
       if (userRole === "ADMIN" && item.requiredModule === "DMS") return true;
+      if (userRole === "ADMIN" && isRegistryWorkerModule(item.requiredModule)) return true;
       return enabledModules.includes(item.requiredModule);
     }
     return true;

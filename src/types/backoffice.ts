@@ -9,8 +9,13 @@ export type WorkerModuleKey =
   | "TIME_CLOCK"
   | "AGENDA"
   | "GASTOS"
-  | "DMS";
+  | "DMS"
+  | "ADMIN_COMPANY_WORKERS"
+  | "ADMIN_CLIENTS"
+  | "ADMIN_PROJECTS"
+  | "ADMIN_PROVIDERS";
 
+/** Módulos de intranet (personales / colaboración); por defecto se asignan todos si el array en BD está vacío. */
 export const ALL_WORKER_MODULES: WorkerModuleKey[] = [
   "VACATIONS",
   "MESSAGES",
@@ -19,6 +24,18 @@ export const ALL_WORKER_MODULES: WorkerModuleKey[] = [
   "GASTOS",
   "DMS",
 ];
+
+/** Maestros de datos: acceso a pantallas de administración de catálogos (solo si el rol es WORKER y el módulo está en enabled_modules). */
+export const REGISTRY_MODULE_KEYS: readonly WorkerModuleKey[] = [
+  "ADMIN_COMPANY_WORKERS",
+  "ADMIN_CLIENTS",
+  "ADMIN_PROJECTS",
+  "ADMIN_PROVIDERS",
+] as const;
+
+export function isRegistryWorkerModule(m: WorkerModuleKey): boolean {
+  return (REGISTRY_MODULE_KEYS as readonly WorkerModuleKey[]).includes(m);
+}
 
 /**
  * Tipo de relación laboral / contrato (alineado con ficha de trabajador)

@@ -1216,7 +1216,7 @@
   },
   "moduleActivation": {
     "title": "Module activation",
-    "subtitle": "Enable or disable which modules each worker can access in backoffice.",
+    "subtitle": "Enable or disable intranet modules and, when needed, access to master data (workers, clients, projects, and suppliers) for each worker.",
     "load_error": "Could not load users.",
     "bulk_title": "Bulk configuration",
     "bulk_desc": "Apply the same module configuration to multiple workers at once.",
@@ -1237,7 +1237,13 @@
     "mod_time_clock": "Time clock",
     "mod_agenda": "Agenda",
     "mod_expenses": "Expenses",
-    "mod_dms": "Document management"
+    "mod_dms": "Document management",
+    "bulk_section_intranet": "Intranet and tools",
+    "bulk_section_masters": "Master data",
+    "mod_company_workers": "Workers (directory)",
+    "mod_clients": "Clients (directory)",
+    "mod_projects": "Projects (directory)",
+    "mod_providers": "Suppliers (directory)"
   },
   "workerProfileRequests": {
     "title": "Staff profile change requests",

@@ -15,7 +15,11 @@ SET enabled_modules = COALESCE(
       'TIME_CLOCK',
       'AGENDA',
       'GASTOS',
-      'DMS'
+      'DMS',
+      'ADMIN_COMPANY_WORKERS',
+      'ADMIN_CLIENTS',
+      'ADMIN_PROJECTS',
+      'ADMIN_PROVIDERS'
     )
   ),
   ARRAY[]::text[]
@@ -34,7 +38,11 @@ ALTER TABLE public.backoffice_users
       'TIME_CLOCK',
       'AGENDA',
       'GASTOS',
-      'DMS'
+      'DMS',
+      'ADMIN_COMPANY_WORKERS',
+      'ADMIN_CLIENTS',
+      'ADMIN_PROJECTS',
+      'ADMIN_PROVIDERS'
     ]::text[]
   );
 

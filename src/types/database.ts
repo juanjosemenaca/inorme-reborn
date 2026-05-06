@@ -11,7 +11,11 @@ export type DbWorkerModuleKey =
   | "TIME_CLOCK"
   | "AGENDA"
   | "GASTOS"
-  | "DMS";
+  | "DMS"
+  | "ADMIN_COMPANY_WORKERS"
+  | "ADMIN_CLIENTS"
+  | "ADMIN_PROJECTS"
+  | "ADMIN_PROVIDERS";
 
 export type DbEmploymentType =
   | "FIJO"
