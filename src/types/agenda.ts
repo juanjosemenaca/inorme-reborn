@@ -12,7 +12,11 @@ export type WorkerAgendaItemSource = "WORKER" | "ADMIN";
 
 export interface WorkerAgendaItemRecord {
   id: string;
-  companyWorkerId: string;
+  /** Null cuando la entrada aplica a todos los trabajadores o a un proyecto */
+  companyWorkerId: string | null;
+  appliesToAllCompanyWorkers: boolean;
+  /** Responsable + miembros del proyecto ven esta entrada */
+  projectId: string | null;
   title: string;
   description: string | null;
   startsAt: string;

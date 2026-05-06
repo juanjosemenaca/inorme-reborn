@@ -23,6 +23,7 @@ import { useWorkCalendarSummerDays } from "@/hooks/useWorkCalendarSummerDays";
 import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
 import { useWorkerVacationDays } from "@/hooks/useWorkerVacationDays";
 import { useWorkerAgendaItems } from "@/hooks/useWorkerAgenda";
+import { useProjects } from "@/hooks/useProjects";
 import { WorkCalendarYearGrid } from "@/components/admin/WorkCalendarYearGrid";
 import {
   AgendaMonthView,
@@ -99,6 +100,9 @@ const WorkerAgenda = () => {
     [workers, workerId]
   );
   const siteName = worker ? sites.find((s) => s.id === worker.workCalendarSiteId)?.name ?? "" : "";
+
+  const { data: projects = [] } = useProjects();
+  const projectTitleById = useMemo(() => new Map(projects.map((p) => [p.id, p.title])), [projects]);
 
   const holidayYears = useMemo(() => {
     if (viewMode === "year") return { a: editYear, b: editYear };
@@ -531,6 +535,19 @@ const WorkerAgenda = () => {
                           {t("admin.agenda.badge_admin")}
                         </Badge>
                       ) : null}
+                      {it.appliesToAllCompanyWorkers ? (
+                        <Badge className="bg-sky-700 text-[10px] hover:bg-sky-700">
+                          {t("admin.agenda.badge_all_workers")}
+                        </Badge>
+                      ) : null}
+                      {it.projectId ? (
+                        <Badge className="bg-amber-800 text-[10px] hover:bg-amber-800">
+                          {t("admin.agenda.badge_project")}
+                          {projectTitleById.get(it.projectId)
+                            ? `: ${projectTitleById.get(it.projectId)}`
+                            : ""}
+                        </Badge>
+                      ) : null}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {new Date(it.startsAt).toLocaleString(dateLocale, {
@@ -602,6 +619,17 @@ const WorkerAgenda = () => {
                   <Badge variant="outline">{t(`admin.agenda.type_${detailItem.itemType}`)}</Badge>
                   {detailItem.source === "ADMIN" ? (
                     <Badge variant="secondary">{t("admin.agenda.badge_admin")}</Badge>
+                  ) : null}
+                  {detailItem.appliesToAllCompanyWorkers ? (
+                    <Badge className="bg-sky-700 hover:bg-sky-700">{t("admin.agenda.badge_all_workers")}</Badge>
+                  ) : null}
+                  {detailItem.projectId ? (
+                    <Badge className="bg-amber-800 hover:bg-amber-800">
+                      {t("admin.agenda.badge_project")}
+                      {projectTitleById.get(detailItem.projectId)
+                        ? `: ${projectTitleById.get(detailItem.projectId)}`
+                        : ""}
+                    </Badge>
                   ) : null}
                 </div>
                 <p className="text-sm text-muted-foreground">

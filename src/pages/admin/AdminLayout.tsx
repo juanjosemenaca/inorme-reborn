@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -87,6 +88,7 @@ const NAV_KEYS = [
     labelKey: "admin.layout.nav_billing",
     icon: FileText,
     roles: ["WORKER", "ADMIN"] as const,
+    requiredModule: "FACTURACION" as const,
   },
   {
     to: "/admin/mensajes",
@@ -169,6 +171,57 @@ const NAV_KEYS = [
   },
 ] as const;
 
+/** Orden del lateral para trabajadores: bloque personal → separador → módulos activables (operativos). */
+type WorkerSidebarSegment = { kind: "link"; path: string } | { kind: "time_clock" };
+
+const WORKER_SIDEBAR_PERSONAL_SEGMENTS: WorkerSidebarSegment[] = [
+  { kind: "link", path: "/admin" },
+  { kind: "link", path: "/admin/mi-ficha" },
+  { kind: "link", path: "/admin/mi-calendario" },
+  { kind: "time_clock" },
+  { kind: "link", path: "/admin/mi-agenda" },
+  { kind: "link", path: "/admin/mis-gastos" },
+  { kind: "link", path: "/admin/mensajes" },
+  { kind: "link", path: "/admin/documentos-pendientes" },
+];
+
+const WORKER_SIDEBAR_OPERATIONAL_PATHS: readonly string[] = [
+  "/admin/facturacion",
+  "/admin/documentos",
+  "/admin/trabajadores",
+  "/admin/clientes",
+  "/admin/proyectos",
+  "/admin/proveedores",
+];
+
+/** Orden del menú principal (lado oscuro) para administradores; tras el separador va el bloque personal «DATA». */
+type AdminMainNavSegment =
+  | { kind: "panel" }
+  | { kind: "messages_hub" }
+  | { kind: "users_submenu" }
+  | { kind: "link"; path: string }
+  | { kind: "time_clock_hub" }
+  | { kind: "dms" }
+  | { kind: "bulk_invoices" };
+
+const ADMIN_MAIN_NAV_SEGMENTS: AdminMainNavSegment[] = [
+  { kind: "panel" },
+  { kind: "messages_hub" },
+  { kind: "users_submenu" },
+  { kind: "link", path: "/admin/trabajadores" },
+  { kind: "link", path: "/admin/proveedores" },
+  { kind: "link", path: "/admin/clientes" },
+  { kind: "link", path: "/admin/proyectos" },
+  { kind: "link", path: "/admin/vacaciones" },
+  { kind: "link", path: "/admin/calendarios-laborales" },
+  { kind: "link", path: "/admin/facturacion" },
+  { kind: "link", path: ADMIN_PATHS.gastosTrabajadores },
+  { kind: "link", path: "/admin/agendas-trabajadores" },
+  { kind: "time_clock_hub" },
+  { kind: "dms" },
+  { kind: "bulk_invoices" },
+];
+
 const ADMIN_MESSAGE_CHILD_ROUTES = [
   ADMIN_PATHS.solicitudesVacaciones,
   ADMIN_PATHS.solicitudesFicha,
@@ -188,7 +241,6 @@ const ADMIN_SELF_SERVICE_PATHS = [
   "/admin/mi-calendario",
   "/admin/mi-agenda",
   "/admin/mis-gastos",
-  "/admin/facturacion",
   "/admin/mensajes",
 ] as const;
 /** Submenú solo bajo «Fichajes» (no van en NAV_KEYS para no duplicar enlaces de primer nivel). */
@@ -243,6 +295,7 @@ const AdminLayout = () => {
     if (userRole === null || !item.roles.includes(userRole)) return false;
     if ("requiredModule" in item && item.requiredModule) {
       if (userRole === "ADMIN" && item.requiredModule === "DMS") return true;
+      if (userRole === "ADMIN" && item.requiredModule === "FACTURACION") return true;
       if (userRole === "ADMIN" && isRegistryWorkerModule(item.requiredModule)) return true;
       return enabledModules.includes(item.requiredModule);
     }
@@ -312,9 +365,6 @@ const AdminLayout = () => {
   const adminSidebarDmsItem = isAdmin
     ? (navItemsWithoutAdminMessages.find((i) => i.to === "/admin/documentos") ?? null)
     : null;
-  const adminSidebarRestItems = isAdmin
-    ? navItemsWithoutAdminMessages.filter((i) => i.to !== "/admin" && i.to !== "/admin/documentos")
-    : [];
   const isAdminMessagesSectionActive = ADMIN_MESSAGE_CHILD_ROUTES.some(
     (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
   );
@@ -804,35 +854,57 @@ const AdminLayout = () => {
       ) : null;
 
     if (isAdmin) {
+      const adminMainSeparatorClass =
+        "my-3 h-0.5 rounded-full bg-slate-400/45 shrink-0";
+
       return (
         <>
-          {adminSidebarPanelItem ? (
-            <Fragment key="admin-panel-personal">
-              {renderTopNavItem(adminSidebarPanelItem)}
+          {ADMIN_MAIN_NAV_SEGMENTS.map((seg) => {
+            if (seg.kind === "panel") {
+              return adminSidebarPanelItem ? (
+                <Fragment key="admin-panel">{renderTopNavItem(adminSidebarPanelItem)}</Fragment>
+              ) : null;
+            }
+            if (seg.kind === "messages_hub") {
+              return <Fragment key="admin-messages-hub">{adminMessagesHub}</Fragment>;
+            }
+            if (seg.kind === "users_submenu") {
+              return <Fragment key="admin-users-submenu">{adminUsersSubmenu}</Fragment>;
+            }
+            if (seg.kind === "time_clock_hub") {
+              return <Fragment key="admin-time-clock-hub">{adminTimeClockHub}</Fragment>;
+            }
+            if (seg.kind === "dms") {
+              return adminSidebarDmsItem ? (
+                <Fragment key={adminSidebarDmsItem.to}>{renderTopNavItem(adminSidebarDmsItem)}</Fragment>
+              ) : null;
+            }
+            if (seg.kind === "bulk_invoices") {
+              const item = navItems.find((i) => i.to === "/admin/generador-facturas-masivas");
+              return item ? <Fragment key={item.to}>{renderTopNavItem(item)}</Fragment> : null;
+            }
+            if (seg.kind === "link") {
+              const item = navItems.find((i) => i.to === seg.path);
+              return item ? <Fragment key={seg.path}>{renderTopNavItem(item)}</Fragment> : null;
+            }
+            return null;
+          })}
+          {showAdminDataNav ? (
+            <>
+              <Separator className={adminMainSeparatorClass} />
               {adminPersonalSubmenu}
-            </Fragment>
+            </>
           ) : null}
-          {adminMessagesHub}
-          {adminTimeClockHub}
-          {adminSidebarDmsItem ? (
-            <Fragment key={adminSidebarDmsItem.to}>{renderTopNavItem(adminSidebarDmsItem)}</Fragment>
-          ) : null}
-          {adminSidebarRestItems.map((item) => (
-            <Fragment key={item.to}>
-              {renderTopNavItem(item)}
-              {item.to === "/admin/vacaciones" ? adminUsersSubmenu : null}
-            </Fragment>
-          ))}
         </>
       );
     }
 
-    return (
-      <>
-        {navItemsWithoutAdminMessages.map((item) => (
-          <Fragment key={item.to}>{renderTopNavItem(item)}</Fragment>
-        ))}
-        {workerHasTimeClockModule ? (
+    const workerOperationalNavItems = WORKER_SIDEBAR_OPERATIONAL_PATHS.map((path) =>
+      navItems.find((i) => i.to === path)
+    ).filter((x): x is NavItem => x != null);
+
+    const renderWorkerTimeClockHub = () =>
+      workerHasTimeClockModule ? (
         <div className="space-y-1">
           <button
             type="button"
@@ -886,8 +958,33 @@ const AdminLayout = () => {
             </div>
           ) : null}
         </div>
-      ) : null}
-    </>
+      ) : null;
+
+    return (
+      <>
+        {WORKER_SIDEBAR_PERSONAL_SEGMENTS.map((seg, segIdx) => {
+          if (seg.kind === "time_clock") {
+            return (
+              <Fragment key={`worker-nav-tc-${segIdx}`}>{renderWorkerTimeClockHub()}</Fragment>
+            );
+          }
+          const item = navItems.find((i) => i.to === seg.path);
+          if (!item) return null;
+          return (
+            <Fragment key={seg.path}>
+              {renderTopNavItem(item)}
+            </Fragment>
+          );
+        })}
+        {workerOperationalNavItems.length > 0 ? (
+          <>
+            <Separator className="my-3 h-0.5 rounded-full bg-muted-foreground/55 dark:bg-muted-foreground/45" />
+            {workerOperationalNavItems.map((item) => (
+              <Fragment key={item.to}>{renderTopNavItem(item)}</Fragment>
+            ))}
+          </>
+        ) : null}
+      </>
     );
   };
 

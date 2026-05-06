@@ -26,6 +26,7 @@ const INTRANET_MODULE_ORDER: WorkerModuleKey[] = [
   "TIME_CLOCK",
   "AGENDA",
   "GASTOS",
+  "FACTURACION",
   "DMS",
 ];
 
@@ -34,6 +35,7 @@ function moduleLabel(module: WorkerModuleKey, t: (key: string) => string): strin
   if (module === "MESSAGES") return t("admin.moduleActivation.mod_messages");
   if (module === "TIME_CLOCK") return t("admin.moduleActivation.mod_time_clock");
   if (module === "AGENDA") return t("admin.moduleActivation.mod_agenda");
+  if (module === "FACTURACION") return t("admin.moduleActivation.mod_billing");
   if (module === "DMS") return t("admin.moduleActivation.mod_dms");
   if (module === "ADMIN_COMPANY_WORKERS") return t("admin.moduleActivation.mod_company_workers");
   if (module === "ADMIN_CLIENTS") return t("admin.moduleActivation.mod_clients");
@@ -241,17 +243,25 @@ const AdminUserModuleActivation = () => {
                         <div className="space-y-3">
                           <div className="flex flex-wrap gap-3">
                             {INTRANET_MODULE_ORDER.map((mod) => {
-                              const checked = u.enabledModules.includes(mod);
+                              const adminBillingLocked = u.role === "ADMIN" && mod === "FACTURACION";
+                              const checked = adminBillingLocked ? true : u.enabledModules.includes(mod);
                               const next = checked
                                 ? u.enabledModules.filter((m) => m !== mod)
                                 : [...u.enabledModules, mod];
                               return (
-                                <label key={`${u.id}-${mod}`} className="inline-flex items-center gap-2 text-sm">
+                                <label
+                                  key={`${u.id}-${mod}`}
+                                  className="inline-flex items-center gap-2 text-sm"
+                                  title={adminBillingLocked ? t("admin.moduleActivation.admin_billing_locked_hint") : undefined}
+                                >
                                   <input
                                     type="checkbox"
                                     checked={checked}
-                                    disabled={savingUserId === u.id}
-                                    onChange={() => updateOne(u.id, next)}
+                                    disabled={savingUserId === u.id || adminBillingLocked}
+                                    onChange={() => {
+                                      if (adminBillingLocked) return;
+                                      void updateOne(u.id, next);
+                                    }}
                                   />
                                   {moduleLabel(mod, t)}
                                 </label>

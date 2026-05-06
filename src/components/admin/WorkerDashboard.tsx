@@ -4,11 +4,13 @@ import { Clock3, Euro, Inbox, Loader2, MessageSquare, NotebookPen, CalendarRange
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useMyTimeClockEvents } from "@/hooks/useTimeTracking";
 import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
 import { useWorkerAgendaItems } from "@/hooks/useWorkerAgenda";
+import { useProjects } from "@/hooks/useProjects";
 import { useWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
 import { computeSheetTotal } from "@/api/workerExpenseSheetsApi";
 import { addDays, dateToLocalYmd, startOfWeekMonday } from "@/components/admin/WorkerAgendaTimeViews";
@@ -32,11 +34,13 @@ function AgendaEntryList({
   localeTag,
   formatTime,
   t,
+  projectTitleById,
 }: {
   items: WorkerAgendaItemRecord[];
   localeTag: string;
   formatTime: (iso: string) => string;
   t: (key: string) => string;
+  projectTitleById?: ReadonlyMap<string, string>;
 }) {
   return (
     <ul className="space-y-2">
@@ -63,6 +67,15 @@ function AgendaEntryList({
             {it.source === "ADMIN" ? (
               <Badge variant="secondary" className="h-5 text-[10px]">
                 {t("admin.agenda.badge_admin")}
+              </Badge>
+            ) : null}
+            {it.appliesToAllCompanyWorkers ? (
+              <Badge className="h-5 bg-sky-700 text-[10px] hover:bg-sky-700">{t("admin.agenda.badge_all_workers")}</Badge>
+            ) : null}
+            {it.projectId ? (
+              <Badge className="h-5 bg-amber-800 text-[10px] hover:bg-amber-800">
+                {t("admin.agenda.badge_project")}
+                {projectTitleById?.get(it.projectId) ? `: ${projectTitleById.get(it.projectId)}` : ""}
               </Badge>
             ) : null}
           </div>
@@ -95,6 +108,9 @@ export function WorkerDashboard() {
   const hasGastos = modules.includes("GASTOS");
   const companyWorkerId = user?.companyWorkerId ?? null;
 
+  const { data: projects = [] } = useProjects();
+  const projectTitleById = useMemo(() => new Map(projects.map((p) => [p.id, p.title])), [projects]);
+
   const today = new Date();
   const agendaWeekMonday = startOfWeekMonday(today);
   const isFriday = today.getDay() === 5;
@@ -104,6 +120,16 @@ export function WorkerDashboard() {
 
   const nextWeekFromIso = dateToLocalYmd(addDays(agendaWeekMonday, 7));
   const nextWeekToIso = dateToLocalYmd(addDays(agendaWeekMonday, 13));
+
+  const agendaHorizonFromIso = dateToLocalYmd(today);
+  const agendaHorizonToIso = dateToLocalYmd(addDays(today, 400));
+
+  const { data: rawAgendaHorizon = [], isLoading: agendaHorizonLoading } = useWorkerAgendaItems(
+    companyWorkerId,
+    agendaHorizonFromIso,
+    agendaHorizonToIso,
+    hasAgenda && !!companyWorkerId
+  );
 
   const { data: rawCurrentWeek = [], isLoading: agendaLoading } = useWorkerAgendaItems(
     companyWorkerId,
@@ -121,6 +147,23 @@ export function WorkerDashboard() {
 
   const currentWeekItems = useMemo(() => sortAgendaByTime(rawCurrentWeek), [rawCurrentWeek]);
   const nextWeekItems = useMemo(() => sortAgendaByTime(rawNextWeek), [rawNextWeek]);
+
+  const agendaFutureNotInDashboard = useMemo(() => {
+    const shown = new Set<string>();
+    for (const it of currentWeekItems) shown.add(it.id);
+    if (isFriday) for (const it of nextWeekItems) shown.add(it.id);
+    return (rawAgendaHorizon ?? []).filter((it) => {
+      if (shown.has(it.id)) return false;
+      const d = dateToLocalYmd(new Date(it.startsAt));
+      return d > currentWeekToIso;
+    });
+  }, [
+    rawAgendaHorizon,
+    currentWeekItems,
+    nextWeekItems,
+    isFriday,
+    currentWeekToIso,
+  ]);
 
   const month = useMemo(() => {
     const d = new Date();
@@ -198,11 +241,18 @@ export function WorkerDashboard() {
 
   const showMessagesCard = !msgLoading && unreadCount > 0;
   const showAssignedDocsCard = !pendingDocsLoading && pendingDocReviews.length > 0;
+  const showAgendaFutureNotice =
+    hasAgenda &&
+    !!companyWorkerId &&
+    !agendaHorizonLoading &&
+    !agendaLoading &&
+    !(isFriday && nextWeekLoading) &&
+    agendaFutureNotInDashboard.length > 0;
   const showAgendaWeekCard =
     hasAgenda && !!companyWorkerId && !agendaLoading && currentWeekItems.length > 0;
   const showAgendaFridayCard =
     isFriday && hasAgenda && !!companyWorkerId && !nextWeekLoading && nextWeekItems.length > 0;
-  const showAgendaSection = showAgendaWeekCard || showAgendaFridayCard;
+  const showAgendaSection = showAgendaWeekCard || showAgendaFridayCard || showAgendaFutureNotice;
 
   const expenseStatusLabel = (status: string): string => {
     if (status === "DRAFT") return t("admin.expenses.status_draft");
@@ -391,6 +441,18 @@ export function WorkerDashboard() {
 
         {showAgendaSection ? (
           <div className="flex flex-col gap-3">
+            {showAgendaFutureNotice ? (
+              <Alert className="border-violet-400/50 bg-violet-50/90 dark:border-violet-700/50 dark:bg-violet-950/35">
+                <NotebookPen className="h-4 w-4 text-violet-700 dark:text-violet-300" aria-hidden />
+                <AlertTitle>{t("admin.dashboard.worker_agenda_future_notice_title")}</AlertTitle>
+                <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-muted-foreground">{t("admin.dashboard.worker_agenda_future_notice_description")}</p>
+                  <Button variant="secondary" size="sm" className="shrink-0 border-violet-300/60 dark:border-violet-700/60" asChild>
+                    <Link to="/admin/mi-agenda">{t("admin.dashboard.worker_agenda_link")}</Link>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {showAgendaWeekCard ? (
               <Card className="flex flex-col overflow-hidden border-2 shadow-sm xl:aspect-square xl:min-h-0">
                 <CardHeader className="pb-2 shrink-0">
@@ -403,7 +465,13 @@ export function WorkerDashboard() {
                 </CardHeader>
                 <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
                   <div className="flex min-h-0 flex-1 overflow-y-auto pr-1">
-                    <AgendaEntryList items={currentWeekItems} localeTag={localeTag} formatTime={formatTime} t={t} />
+                    <AgendaEntryList
+                      items={currentWeekItems}
+                      localeTag={localeTag}
+                      formatTime={formatTime}
+                      t={t}
+                      projectTitleById={projectTitleById}
+                    />
                   </div>
                   <div className="mt-auto shrink-0 pt-1">
                     <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
@@ -428,7 +496,13 @@ export function WorkerDashboard() {
                 </CardHeader>
                 <CardContent className="space-y-2 pb-3 pt-0">
                   <div className="max-h-48 overflow-y-auto pr-1">
-                    <AgendaEntryList items={nextWeekItems} localeTag={localeTag} formatTime={formatTime} t={t} />
+                    <AgendaEntryList
+                      items={nextWeekItems}
+                      localeTag={localeTag}
+                      formatTime={formatTime}
+                      t={t}
+                      projectTitleById={projectTitleById}
+                    />
                   </div>
                 </CardContent>
               </Card>

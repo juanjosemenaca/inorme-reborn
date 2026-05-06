@@ -9,6 +9,7 @@ export type WorkerModuleKey =
   | "TIME_CLOCK"
   | "AGENDA"
   | "GASTOS"
+  | "FACTURACION"
   | "DMS"
   | "ADMIN_COMPANY_WORKERS"
   | "ADMIN_CLIENTS"
@@ -22,6 +23,7 @@ export const ALL_WORKER_MODULES: WorkerModuleKey[] = [
   "TIME_CLOCK",
   "AGENDA",
   "GASTOS",
+  "FACTURACION",
   "DMS",
 ];
 

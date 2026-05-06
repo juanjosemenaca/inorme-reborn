@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
 import { useWorkCalendarHolidays } from "@/hooks/useWorkCalendarHolidays";
@@ -22,6 +23,7 @@ import { useWorkCalendarSummerDays } from "@/hooks/useWorkCalendarSummerDays";
 import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
 import { useWorkerVacationDays } from "@/hooks/useWorkerVacationDays";
 import { useWorkerAgendaItems } from "@/hooks/useWorkerAgenda";
+import { useProjects } from "@/hooks/useProjects";
 import { WorkCalendarYearGrid } from "@/components/admin/WorkCalendarYearGrid";
 import {
   AgendaMonthView,
@@ -62,6 +64,8 @@ function buildAgendaCountByIso(items: WorkerAgendaItemRecord[]): Map<string, num
 
 type AgendaViewMode = "year" | "month" | "week";
 
+type AdminAgendaAudience = "worker" | "all" | "project";
+
 const AdminWorkerAgenda = () => {
   const { t, language } = useLanguage();
   const { toast } = useToast();
@@ -80,8 +84,17 @@ const AdminWorkerAgenda = () => {
   const [noteDate, setNoteDate] = useState(() => dateToLocalYmd(now));
   const [noteTime, setNoteTime] = useState("12:00");
   const [adminAgendaType, setAdminAgendaType] = useState<WorkerAgendaItemType>("note");
+  const [agendaAudience, setAgendaAudience] = useState<AdminAgendaAudience>("worker");
+  const [agendaProjectId, setAgendaProjectId] = useState<string>("");
   const [detailItem, setDetailItem] = useState<WorkerAgendaItemRecord | null>(null);
   const [summaryIso, setSummaryIso] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (adminAgendaType === "todo") {
+      setAgendaAudience("worker");
+      setAgendaProjectId("");
+    }
+  }, [adminAgendaType]);
 
   useEffect(() => {
     if (workerId !== null || activeWorkers.length === 0) return;
@@ -99,6 +112,9 @@ const AdminWorkerAgenda = () => {
   const { data: sites = [] } = useWorkCalendarSites();
   const worker = workerId ? activeWorkers.find((w) => w.id === workerId) : undefined;
   const siteName = worker ? sites.find((s) => s.id === worker.workCalendarSiteId)?.name ?? "" : "";
+
+  const { data: projects = [] } = useProjects();
+  const projectTitleById = useMemo(() => new Map(projects.map((p) => [p.id, p.title])), [projects]);
 
   const holidayYears = useMemo(() => {
     if (viewMode === "year") return { a: editYear, b: editYear };
@@ -223,12 +239,33 @@ const AdminWorkerAgenda = () => {
 
   const noteMutation = useMutation({
     mutationFn: async () => {
-      if (!workerId) throw new Error("worker");
+      if (agendaAudience === "worker" && !workerId) throw new Error("worker");
+      if (agendaAudience === "project" && !agendaProjectId) throw new Error("project");
       const [hh, mm] = noteTime.split(":").map(Number);
       const start = new Date(noteDate + "T12:00:00");
       start.setHours(hh, mm, 0, 0);
+      if (agendaAudience === "all") {
+        return createWorkerAgendaItem({
+          appliesToAllCompanyWorkers: true,
+          title: noteTitle.trim(),
+          description: noteBody.trim() || null,
+          startsAt: start.toISOString(),
+          endsAt: null,
+          itemType: adminAgendaType,
+        });
+      }
+      if (agendaAudience === "project") {
+        return createWorkerAgendaItem({
+          projectId: agendaProjectId,
+          title: noteTitle.trim(),
+          description: noteBody.trim() || null,
+          startsAt: start.toISOString(),
+          endsAt: null,
+          itemType: adminAgendaType,
+        });
+      }
       return createWorkerAgendaItem({
-        companyWorkerId: workerId,
+        companyWorkerId: workerId!,
         title: noteTitle.trim(),
         description: noteBody.trim() || null,
         startsAt: start.toISOString(),
@@ -241,6 +278,8 @@ const AdminWorkerAgenda = () => {
       toast({ title: t("admin.agenda.toast_saved") });
       setNoteTitle("");
       setNoteBody("");
+      setAgendaAudience("worker");
+      setAgendaProjectId("");
     },
     onError: (e) => {
       toast({
@@ -279,22 +318,84 @@ const AdminWorkerAgenda = () => {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{t("admin.agenda.admin_select_worker")}</CardTitle>
+          <CardTitle className="text-base">{t("admin.agenda.field_audience")}</CardTitle>
+          <CardDescription>{t("admin.agenda.audience_card_desc")}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4 max-w-xl">
           {loadingWorkers ? (
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : (
-            <SearchableSelect
-              value={workerId ?? ""}
-              onValueChange={(v) => setWorkerId(v || null)}
-              options={activeWorkers.map((w) => ({
-                value: w.id,
-                label: companyWorkerDisplayName(w),
-              }))}
-              placeholder={t("admin.agenda.admin_select_placeholder")}
-              className="max-w-md"
-            />
+            <>
+              <RadioGroup
+                value={agendaAudience}
+                onValueChange={(v) => {
+                  const next = v as AdminAgendaAudience;
+                  setAgendaAudience(next);
+                  if (next !== "project") setAgendaProjectId("");
+                }}
+                className="grid gap-3"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <RadioGroupItem value="worker" id="ag-aud-worker" className="mt-0.5" />
+                    <Label htmlFor="ag-aud-worker" className="cursor-pointer font-normal leading-snug">
+                      {t("admin.agenda.audience_worker")}
+                    </Label>
+                  </div>
+                  {agendaAudience === "worker" ? (
+                    <div className="ml-7 space-y-2 rounded-md border bg-muted/20 p-3 max-w-md">
+                      <Label>{t("admin.agenda.admin_select_worker")}</Label>
+                      <SearchableSelect
+                        value={workerId ?? ""}
+                        onValueChange={(v) => setWorkerId(v || null)}
+                        options={activeWorkers.map((w) => ({
+                          value: w.id,
+                          label: companyWorkerDisplayName(w),
+                        }))}
+                        placeholder={t("admin.agenda.admin_select_placeholder")}
+                        className="max-w-full"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem
+                    value="all"
+                    id="ag-aud-all"
+                    className="mt-0.5"
+                    disabled={adminAgendaType === "todo"}
+                  />
+                  <Label htmlFor="ag-aud-all" className="cursor-pointer font-normal leading-snug">
+                    {t("admin.agenda.audience_all")}
+                  </Label>
+                </div>
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem
+                    value="project"
+                    id="ag-aud-proj"
+                    className="mt-0.5"
+                    disabled={adminAgendaType === "todo"}
+                  />
+                  <Label htmlFor="ag-aud-proj" className="cursor-pointer font-normal leading-snug">
+                    {t("admin.agenda.audience_project")}
+                  </Label>
+                </div>
+              </RadioGroup>
+
+              {agendaAudience === "project" ? (
+                <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                  <Label>{t("admin.agenda.field_project")}</Label>
+                  <SearchableSelect
+                    value={agendaProjectId}
+                    onValueChange={(v) => setAgendaProjectId(v)}
+                    options={projects.map((p) => ({ value: p.id, label: p.title }))}
+                    placeholder={t("admin.agenda.field_project")}
+                    className="max-w-md"
+                  />
+                  <p className="text-xs text-muted-foreground">{t("admin.agenda.field_project_hint")}</p>
+                </div>
+              ) : null}
+            </>
           )}
         </CardContent>
       </Card>
@@ -344,7 +445,13 @@ const AdminWorkerAgenda = () => {
               <Button
                 type="button"
                 className="gap-2"
-                disabled={!noteTitle.trim() || !noteDate || noteMutation.isPending}
+                disabled={
+                  !noteTitle.trim() ||
+                  !noteDate ||
+                  noteMutation.isPending ||
+                  (agendaAudience === "worker" && !workerId) ||
+                  (agendaAudience === "project" && !agendaProjectId)
+                }
                 onClick={() => noteMutation.mutate()}
               >
                 {noteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -520,6 +627,19 @@ const AdminWorkerAgenda = () => {
                               {t("admin.agenda.badge_admin")}
                             </Badge>
                           ) : null}
+                          {it.appliesToAllCompanyWorkers ? (
+                            <Badge className="bg-sky-700 text-[10px] hover:bg-sky-700">
+                              {t("admin.agenda.badge_all_workers")}
+                            </Badge>
+                          ) : null}
+                          {it.projectId ? (
+                            <Badge className="bg-amber-800 text-[10px] hover:bg-amber-800">
+                              {t("admin.agenda.badge_project")}
+                              {projectTitleById.get(it.projectId)
+                                ? `: ${projectTitleById.get(it.projectId)}`
+                                : ""}
+                            </Badge>
+                          ) : null}
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {new Date(it.startsAt).toLocaleString(dateLocale, {
@@ -553,6 +673,17 @@ const AdminWorkerAgenda = () => {
                       <Badge variant="outline">{t(`admin.agenda.type_${detailItem.itemType}`)}</Badge>
                       {detailItem.source === "ADMIN" ? (
                         <Badge variant="secondary">{t("admin.agenda.badge_admin")}</Badge>
+                      ) : null}
+                      {detailItem.appliesToAllCompanyWorkers ? (
+                        <Badge className="bg-sky-700 hover:bg-sky-700">{t("admin.agenda.badge_all_workers")}</Badge>
+                      ) : null}
+                      {detailItem.projectId ? (
+                        <Badge className="bg-amber-800 hover:bg-amber-800">
+                          {t("admin.agenda.badge_project")}
+                          {projectTitleById.get(detailItem.projectId)
+                            ? `: ${projectTitleById.get(detailItem.projectId)}`
+                            : ""}
+                        </Badge>
                       ) : null}
                     </div>
                     <p className="text-sm text-muted-foreground">

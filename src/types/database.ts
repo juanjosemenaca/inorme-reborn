@@ -11,6 +11,7 @@ export type DbWorkerModuleKey =
   | "TIME_CLOCK"
   | "AGENDA"
   | "GASTOS"
+  | "FACTURACION"
   | "DMS"
   | "ADMIN_COMPANY_WORKERS"
   | "ADMIN_CLIENTS"
@@ -365,7 +366,9 @@ export interface WorkerTimeClockEventRow {
 
 export interface WorkerAgendaItemRow {
   id: string;
-  company_worker_id: string;
+  company_worker_id: string | null;
+  applies_to_all_company_workers: boolean;
+  project_id: string | null;
   title: string;
   description: string | null;
   starts_at: string;

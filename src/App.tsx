@@ -145,7 +145,7 @@ const App = () => (
                 <Route
                   path="facturacion"
                   element={
-                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]}>
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]} requiredModule="FACTURACION">
                       <AdminBilling />
                     </RoleRoute>
                   }
