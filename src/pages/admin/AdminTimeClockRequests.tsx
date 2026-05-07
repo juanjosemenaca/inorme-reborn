@@ -16,6 +16,7 @@ import {
   updateBackofficeMessageRequestStatus,
 } from "@/api/backofficeMessagesApi";
 import { queryKeys } from "@/lib/queryKeys";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 
 const AdminTimeClockRequests = () => {
   const { t, language } = useLanguage();
@@ -26,6 +27,7 @@ const AdminTimeClockRequests = () => {
   const { data: workers = [] } = useCompanyWorkers();
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
   const [reviewNote, setReviewNote] = useState("");
+  const [deleteTimeClockRequestId, setDeleteTimeClockRequestId] = useState<string | null>(null);
   const workerNameById = useMemo(
     () => new Map(workers.map((w) => [w.id, `${w.firstName} ${w.lastName}`.trim()] as const)),
     [workers]
@@ -242,6 +244,19 @@ const AdminTimeClockRequests = () => {
           )}
         </CardContent>
       </Card>
+
+      <DoubleConfirmAlertDialog
+        open={deleteTimeClockRequestId != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTimeClockRequestId(null);
+        }}
+        onConfirm={() => {
+          if (deleteTimeClockRequestId) deleteMutation.mutate(deleteTimeClockRequestId);
+        }}
+        title={t("admin.timeClock.request_delete_confirm_title")}
+        description={t("admin.timeClock.request_delete_confirm_desc")}
+        disabled={deleteMutation.isPending}
+      />
     </div>
   );
 };

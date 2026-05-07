@@ -34,6 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { useClients } from "@/hooks/useClients";
@@ -308,6 +309,8 @@ const AdminBilling = () => {
   const afterDraftSaveNavRef = useRef<null | { type: "select"; id: string } | { type: "tab"; next: BillingTab }>(null);
   const [draftLeaveDialogOpen, setDraftLeaveDialogOpen] = useState(false);
   const [pendingDraftLeave, setPendingDraftLeave] = useState<DraftLeaveIntent | null>(null);
+  const [deleteDraftConfirmId, setDeleteDraftConfirmId] = useState<string | null>(null);
+  const [deleteTestInvoiceOpen, setDeleteTestInvoiceOpen] = useState(false);
 
   const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [receiptAmount, setReceiptAmount] = useState("");
@@ -826,6 +829,7 @@ const AdminBilling = () => {
   const deleteDraftMutation = useMutation({
     mutationFn: (invoiceId: string) => deleteBillingInvoiceDraft(invoiceId),
     onSuccess: async (_, invoiceId) => {
+      setDeleteDraftConfirmId(null);
       await invalidateAll();
       if (selectedInvoiceId === invoiceId) setSelectedInvoiceId(null);
       toast({ title: t("admin.billing.toast_draft_deleted") });
@@ -841,11 +845,10 @@ const AdminBilling = () => {
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!selectedInvoice) throw new Error("Factura no encontrada.");
-      const ok = window.confirm(t("admin.billing.delete_confirm_test_mode"));
-      if (!ok) return;
       await deleteBillingInvoiceForTests(selectedInvoice.id);
     },
     onSuccess: async () => {
+      setDeleteTestInvoiceOpen(false);
       const prevId = selectedInvoiceId;
       await invalidateAll();
       if (prevId === selectedInvoiceId) setSelectedInvoiceId(null);
@@ -1456,10 +1459,7 @@ const AdminBilling = () => {
                                                                 size="sm"
                                                                 variant="outline"
                                                                 className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                                                                onClick={() => {
-                                                                  if (!window.confirm(t("admin.billing.delete_draft_confirm"))) return;
-                                                                  deleteDraftMutation.mutate(inv.id);
-                                                                }}
+                                                                onClick={() => setDeleteDraftConfirmId(inv.id)}
                                                                 disabled={deleteDraftMutation.isPending}
                                                                 title={t("admin.billing.action_delete_draft")}
                                                               >
@@ -2218,11 +2218,7 @@ const AdminBilling = () => {
                     type="button"
                     variant="outline"
                     className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                    onClick={() => {
-                      if (!selectedInvoice) return;
-                      if (!window.confirm(t("admin.billing.delete_draft_confirm"))) return;
-                      deleteDraftMutation.mutate(selectedInvoice.id);
-                    }}
+                    onClick={() => selectedInvoice && setDeleteDraftConfirmId(selectedInvoice.id)}
                     disabled={deleteDraftMutation.isPending || !selectedInvoice}
                   >
                     {deleteDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
@@ -2279,7 +2275,7 @@ const AdminBilling = () => {
                         {t("admin.billing.action_cancel")}
                       </Button>
                     ) : null}
-                    <Button type="button" variant="destructive" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
+                    <Button type="button" variant="destructive" onClick={() => setDeleteTestInvoiceOpen(true)} disabled={deleteMutation.isPending}>
                       {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
                       {t("admin.billing.action_delete_test_mode")}
                     </Button>
@@ -2326,6 +2322,30 @@ const AdminBilling = () => {
         </Card>
       ) : null}
     </div>
+
+      <DoubleConfirmAlertDialog
+        open={!!deleteDraftConfirmId}
+        onOpenChange={(o) => {
+          if (!o) setDeleteDraftConfirmId(null);
+        }}
+        onConfirm={() => {
+          if (deleteDraftConfirmId) deleteDraftMutation.mutate(deleteDraftConfirmId);
+        }}
+        title={t("admin.billing.action_delete_draft")}
+        description={t("admin.billing.delete_draft_confirm")}
+        disabled={deleteDraftMutation.isPending}
+      />
+
+      <DoubleConfirmAlertDialog
+        open={deleteTestInvoiceOpen}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTestInvoiceOpen(false);
+        }}
+        onConfirm={() => deleteMutation.mutate()}
+        title={t("admin.billing.action_delete_test_mode")}
+        description={t("admin.billing.delete_confirm_test_mode")}
+        disabled={deleteMutation.isPending}
+      />
     </>
   );
 };

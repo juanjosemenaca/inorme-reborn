@@ -33,16 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 
 const NONE_VALUE = "__none__";
 
@@ -668,30 +659,20 @@ export function ProjectFormDialog({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!docToDelete} onOpenChange={() => !deletingDoc && setDocToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{labels.deleteDocTitle}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {labels.deleteDocDesc}{" "}
-              <strong>{docToDelete?.originalFilename}</strong>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingDoc}>{labels.cancel}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                void confirmDeleteDoc();
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deletingDoc}
-            >
-              {deletingDoc ? <Loader2 className="h-4 w-4 animate-spin" /> : labels.deleteDoc}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DoubleConfirmAlertDialog
+        open={!!docToDelete}
+        onOpenChange={(o) => {
+          if (!o && !deletingDoc) setDocToDelete(null);
+        }}
+        onConfirm={() => void confirmDeleteDoc()}
+        title={labels.deleteDocTitle}
+        description={
+          <>
+            {labels.deleteDocDesc} <strong>{docToDelete?.originalFilename}</strong>
+          </>
+        }
+        disabled={deletingDoc}
+      />
     </>
   );
 }

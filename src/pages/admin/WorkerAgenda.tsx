@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
@@ -45,6 +47,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import type { WorkCalendarHolidayKind } from "@/types/workCalendars";
 import type { WorkerAgendaItemRecord, WorkerAgendaItemType } from "@/types/agenda";
 import { cn } from "@/lib/utils";
+import { useWriteAgendaFutureDashboardNoticeAck } from "@/hooks/useWorkerAgendaFutureNoticeAck";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
 import { isWeekendIso } from "@/lib/calendarIso";
 
@@ -70,12 +73,16 @@ function buildAgendaCountByIso(items: WorkerAgendaItemRecord[]): Map<string, num
 
 type AgendaViewMode = "year" | "month" | "week";
 
+type WorkerFormAudience = "personal" | "project";
+
 const WorkerAgenda = () => {
   const { t, language } = useLanguage();
   const { user } = useAdminAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const workerId = user?.companyWorkerId ?? null;
+  const modules = user?.enabledModules ?? [];
+  const hasAgendaModule = modules.includes("AGENDA");
   const now = new Date();
   const defaultYear = now.getFullYear();
   const [viewMode, setViewMode] = useState<AgendaViewMode>("month");
@@ -90,8 +97,11 @@ const WorkerAgenda = () => {
   const [formTime, setFormTime] = useState("09:00");
   const [formEndTime, setFormEndTime] = useState("");
   const [formType, setFormType] = useState<WorkerAgendaItemType>("event");
+  const [formAudience, setFormAudience] = useState<WorkerFormAudience>("personal");
+  const [formProjectId, setFormProjectId] = useState("");
   const [detailItem, setDetailItem] = useState<WorkerAgendaItemRecord | null>(null);
   const [summaryIso, setSummaryIso] = useState<string | null>(null);
+  const [deleteAgendaId, setDeleteAgendaId] = useState<string | null>(null);
 
   const { data: workers = [] } = useCompanyWorkers();
   const { data: sites = [] } = useWorkCalendarSites();
@@ -103,6 +113,12 @@ const WorkerAgenda = () => {
 
   const { data: projects = [] } = useProjects();
   const projectTitleById = useMemo(() => new Map(projects.map((p) => [p.id, p.title])), [projects]);
+
+  const responsibleProjects = useMemo(
+    () =>
+      workerId ? projects.filter((p) => p.responsibleCompanyWorkerId === workerId) : [],
+    [projects, workerId]
+  );
 
   const holidayYears = useMemo(() => {
     if (viewMode === "year") return { a: editYear, b: editYear };
@@ -159,6 +175,8 @@ const WorkerAgenda = () => {
     agendaRange.toIso,
     !!workerId
   );
+
+  useWriteAgendaFutureDashboardNoticeAck(workerId, hasAgendaModule);
 
   const siteHolidays = useMemo(() => {
     if (!worker) return [];
@@ -246,6 +264,16 @@ const WorkerAgenda = () => {
           itemType: formType,
         });
       }
+      if (formAudience === "project" && formProjectId) {
+        return createWorkerAgendaItem({
+          projectId: formProjectId,
+          title: formTitle,
+          description: formDesc || null,
+          startsAt: start.toISOString(),
+          endsAt,
+          itemType: formType,
+        });
+      }
       return createWorkerAgendaItem({
         companyWorkerId: workerId,
         title: formTitle,
@@ -276,6 +304,7 @@ const WorkerAgenda = () => {
       await queryClient.invalidateQueries({ queryKey: ["workerAgendaItems"] });
       toast({ title: t("admin.agenda.toast_deleted") });
       setDetailItem(null);
+      setDeleteAgendaId(null);
     },
     onError: (e) => {
       toast({
@@ -308,6 +337,8 @@ const WorkerAgenda = () => {
     setEditing(null);
     setFormTitle("");
     setFormDesc("");
+    setFormAudience("personal");
+    setFormProjectId("");
     const tday = new Date();
     setFormDate(
       `${tday.getFullYear()}-${String(tday.getMonth() + 1).padStart(2, "0")}-${String(tday.getDate()).padStart(2, "0")}`
@@ -323,6 +354,13 @@ const WorkerAgenda = () => {
     setEditing(item);
     setFormTitle(item.title);
     setFormDesc(item.description ?? "");
+    if (item.projectId) {
+      setFormAudience("project");
+      setFormProjectId(item.projectId);
+    } else {
+      setFormAudience("personal");
+      setFormProjectId("");
+    }
     setFormDate(toLocalYmd(item.startsAt));
     const s = new Date(item.startsAt);
     setFormTime(`${String(s.getHours()).padStart(2, "0")}:${String(s.getMinutes()).padStart(2, "0")}`);
@@ -330,7 +368,8 @@ const WorkerAgenda = () => {
       const e = new Date(item.endsAt);
       setFormEndTime(`${String(e.getHours()).padStart(2, "0")}:${String(e.getMinutes()).padStart(2, "0")}`);
     } else setFormEndTime("");
-    setFormType(item.itemType === "admin_note" ? "event" : item.itemType);
+    const nextType = WORKER_TYPES.includes(item.itemType) ? item.itemType : "event";
+    setFormType(nextType);
     setDialogOpen(true);
   };
 
@@ -591,7 +630,7 @@ const WorkerAgenda = () => {
                           size="icon"
                           variant="ghost"
                           className="text-destructive"
-                          onClick={() => deleteMutation.mutate(it.id)}
+                          onClick={() => setDeleteAgendaId(it.id)}
                           disabled={deleteMutation.isPending}
                           aria-label="Delete"
                         >
@@ -667,7 +706,7 @@ const WorkerAgenda = () => {
                     <Button
                       type="button"
                       variant="destructive"
-                      onClick={() => deleteMutation.mutate(detailItem.id)}
+                      onClick={() => detailItem && setDeleteAgendaId(detailItem.id)}
                       disabled={deleteMutation.isPending}
                     >
                       {t("admin.common.delete")}
@@ -710,6 +749,17 @@ const WorkerAgenda = () => {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <DoubleConfirmAlertDialog
+        open={deleteAgendaId != null}
+        onOpenChange={(o) => !o && setDeleteAgendaId(null)}
+        onConfirm={() => {
+          if (deleteAgendaId) deleteMutation.mutate(deleteAgendaId);
+        }}
+        title={t("admin.agenda.worker_delete_title")}
+        description={t("admin.agenda.worker_delete_desc")}
+        disabled={deleteMutation.isPending}
+      />
 
       <Dialog open={!!summaryIso} onOpenChange={(open) => !open && setSummaryIso(null)}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
@@ -786,6 +836,56 @@ const WorkerAgenda = () => {
             <DialogTitle>{editing ? t("admin.agenda.dialog_edit") : t("admin.agenda.dialog_new")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
+            {!editing && responsibleProjects.length > 0 ? (
+              <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                <Label>{t("admin.agenda.worker_agenda_audience")}</Label>
+                <RadioGroup
+                  value={formAudience}
+                  onValueChange={(v) => {
+                    const next = v as WorkerFormAudience;
+                    setFormAudience(next);
+                    if (next === "personal") setFormProjectId("");
+                    else if (responsibleProjects.length === 1) setFormProjectId(responsibleProjects[0]!.id);
+                  }}
+                  className="grid gap-2"
+                >
+                  <div className="flex items-start gap-2">
+                    <RadioGroupItem value="personal" id="wag-aud-me" className="mt-0.5" />
+                    <Label htmlFor="wag-aud-me" className="cursor-pointer font-normal leading-snug">
+                      {t("admin.agenda.worker_agenda_audience_personal")}
+                    </Label>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <RadioGroupItem value="project" id="wag-aud-proj" className="mt-0.5" />
+                    <Label htmlFor="wag-aud-proj" className="cursor-pointer font-normal leading-snug">
+                      {t("admin.agenda.worker_agenda_audience_project")}
+                    </Label>
+                  </div>
+                </RadioGroup>
+                {formAudience === "project" ? (
+                  <div className="space-y-2 pt-1">
+                    <SearchableSelect
+                      value={formProjectId}
+                      onValueChange={(v) => setFormProjectId(v)}
+                      options={responsibleProjects.map((p) => ({ value: p.id, label: p.title }))}
+                      placeholder={t("admin.agenda.worker_agenda_select_project")}
+                      className="max-w-full"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("admin.agenda.worker_agenda_responsible_hint")}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {editing?.projectId ? (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                {t("admin.agenda.worker_agenda_edit_project_scope")}:{" "}
+                <span className="font-medium text-foreground">
+                  {projectTitleById.get(editing.projectId) ?? editing.projectId}
+                </span>
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label>{t("admin.agenda.field_title")}</Label>
               <Input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} maxLength={500} />
@@ -827,7 +927,11 @@ const WorkerAgenda = () => {
             </Button>
             <Button
               type="button"
-              disabled={!formTitle.trim() || saveMutation.isPending}
+              disabled={
+                !formTitle.trim() ||
+                saveMutation.isPending ||
+                (!editing && formAudience === "project" && !formProjectId)
+              }
               onClick={() => saveMutation.mutate()}
             >
               {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

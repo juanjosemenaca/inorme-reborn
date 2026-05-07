@@ -32,6 +32,7 @@ import {
 import type { WorkCalendarHolidayKind } from "@/types/workCalendars";
 import { getErrorMessage } from "@/lib/errorMessage";
 import type { VacationDayEntry } from "@/types/vacationDays";
+import { useWriteAgendaFutureDashboardNoticeAck } from "@/hooks/useWorkerAgendaFutureNoticeAck";
 
 function countStandardAndCarry(entries: VacationDayEntry[], calendarYear: number) {
   const src = calendarYear - 1;
@@ -64,6 +65,9 @@ const WorkerMyCalendar = () => {
   const { data: workers = [], isLoading: loadingWorkers } = useCompanyWorkers();
   const { data: sites = [] } = useWorkCalendarSites();
   const workerId = user?.companyWorkerId ?? null;
+  const hasAgendaModule = (user?.enabledModules ?? []).includes("AGENDA");
+  useWriteAgendaFutureDashboardNoticeAck(workerId, hasAgendaModule);
+
   const worker = useMemo(
     () => (workerId ? workers.find((w) => w.id === workerId) : undefined),
     [workers, workerId]
@@ -312,6 +316,11 @@ const WorkerMyCalendar = () => {
 
   const calendarLoading = holidaysLoading || summerLoading || vacationLoading;
 
+  const carryoverCardDesc = t("admin.workerMyCalendar.carryover_card_desc")
+    .replace(/\{\{prev\}\}/g, String(sourceYear))
+    .replace(/\{\{next\}\}/g, String(year))
+    .trim();
+
   return (
     <div className="space-y-6 max-w-6xl">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -409,11 +418,7 @@ const WorkerMyCalendar = () => {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">{t("admin.workerMyCalendar.carryover_card_title")}</CardTitle>
-          <CardDescription>
-            {t("admin.workerMyCalendar.carryover_card_desc")
-              .replace(/\{\{prev\}\}/g, String(sourceYear))
-              .replace(/\{\{next\}\}/g, String(year))}
-          </CardDescription>
+          {carryoverCardDesc ? <CardDescription>{carryoverCardDesc}</CardDescription> : null}
         </CardHeader>
         <CardContent className="space-y-3 max-w-lg">
           <p className="text-sm text-muted-foreground">

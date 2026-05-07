@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
 import { useAllWorkerProfileChangeRequests } from "@/hooks/useWorkerProfileChangeRequests";
@@ -44,6 +45,7 @@ const AdminWorkerProfileRequests = () => {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<WorkerProfileChangeRequestRecord | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [deleteProfileRequestId, setDeleteProfileRequestId] = useState<string | null>(null);
 
   const localeTag =
     language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
@@ -220,7 +222,7 @@ const AdminWorkerProfileRequests = () => {
                           variant="ghost"
                           className="gap-1 text-destructive"
                           disabled={deleteMutation.isPending}
-                          onClick={() => deleteMutation.mutate(req.id)}
+                          onClick={() => setDeleteProfileRequestId(req.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           {t("admin.common.delete")}
@@ -264,6 +266,19 @@ const AdminWorkerProfileRequests = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DoubleConfirmAlertDialog
+        open={deleteProfileRequestId != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteProfileRequestId(null);
+        }}
+        onConfirm={() => {
+          if (deleteProfileRequestId) deleteMutation.mutate(deleteProfileRequestId);
+        }}
+        title={t("admin.workerProfileRequests.delete_confirm_title")}
+        description={t("admin.workerProfileRequests.delete_confirm_desc")}
+        disabled={deleteMutation.isPending}
+      />
     </div>
   );
 };

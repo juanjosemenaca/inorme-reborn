@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
 import { useWorkerTimeClockEvents } from "@/hooks/useTimeTracking";
@@ -80,6 +81,8 @@ const AdminTimeClock = () => {
   const [newAbsenceReason, setNewAbsenceReason] = useState("");
   const [expandedDayIso, setExpandedDayIso] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Record<string, { kind: TimeClockEventKind; at: string; comment: string; absenceReason: string }>>({});
+  const [pendingDeleteDayIso, setPendingDeleteDayIso] = useState<string | null>(null);
+  const [pendingDeleteEventId, setPendingDeleteEventId] = useState<string | null>(null);
   const workers = useMemo(() => (workersQuery.data ?? []).filter((w) => w.active), [workersQuery.data]);
   const selectedWorker = useMemo(() => workers.find((w) => w.id === workerId), [workers, workerId]);
   const { from, to } = useMemo(() => monthRange(month), [month]);
@@ -188,6 +191,7 @@ const AdminTimeClock = () => {
   }, [events]);
 
   return (
+    <>
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -375,13 +379,7 @@ const AdminTimeClock = () => {
                                   size="sm"
                                   variant="destructive"
                                   disabled={deleteDayMutation.isPending}
-                                  onClick={() => {
-                                    const ok = window.confirm(
-                                      t("admin.timeClock.delete_day_confirm").replace("{{day}}", day.dayIso)
-                                    );
-                                    if (!ok) return;
-                                    deleteDayMutation.mutate(day.dayIso);
-                                  }}
+                                  onClick={() => setPendingDeleteDayIso(day.dayIso)}
                                 >
                                   {t("admin.timeClock.delete_day_action")}
                                 </Button>
@@ -505,7 +503,7 @@ const AdminTimeClock = () => {
                                                   size="icon"
                                                   variant="ghost"
                                                   className="text-destructive"
-                                                  onClick={() => deleteMutation.mutate(e.id)}
+                                                  onClick={() => setPendingDeleteEventId(e.id)}
                                                 >
                                                   <Trash2 className="h-4 w-4" />
                                                 </Button>
@@ -537,6 +535,37 @@ const AdminTimeClock = () => {
         </Card>
       )}
     </div>
+
+    <DoubleConfirmAlertDialog
+        open={!!pendingDeleteDayIso}
+        onOpenChange={(o) => {
+          if (!o) setPendingDeleteDayIso(null);
+        }}
+        onConfirm={() => {
+          if (pendingDeleteDayIso) deleteDayMutation.mutate(pendingDeleteDayIso);
+        }}
+        title={t("admin.timeClock.delete_day_action")}
+        description={
+          pendingDeleteDayIso
+            ? t("admin.timeClock.delete_day_confirm").replace("{{day}}", pendingDeleteDayIso)
+            : ""
+        }
+        disabled={deleteDayMutation.isPending}
+      />
+
+    <DoubleConfirmAlertDialog
+        open={!!pendingDeleteEventId}
+        onOpenChange={(o) => {
+          if (!o) setPendingDeleteEventId(null);
+        }}
+        onConfirm={() => {
+          if (pendingDeleteEventId) deleteMutation.mutate(pendingDeleteEventId);
+        }}
+        title={t("admin.timeClock.delete_event_title")}
+        description={t("admin.timeClock.delete_event_desc")}
+        disabled={deleteMutation.isPending}
+      />
+    </>
   );
 };
 

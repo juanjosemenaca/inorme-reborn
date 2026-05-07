@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SortableTableHead } from "@/components/admin/SortableTableHead";
 import { sortRows, toggleColumnSort, type ColumnSort } from "@/lib/adminListUtils";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -600,29 +601,23 @@ const AdminUsers = () => {
         onSubmitEdit={handleSubmitEdit}
       />
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("admin.users.delete_title")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("admin.users.delete_desc")}{" "}
-              <strong>
-                {deleteTarget ? getResolvedDisplayName(deleteTarget, companyWorkers) : ""}
-              </strong>
-              . {t("admin.users.delete_desc_suffix")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void confirmDelete()}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {t("admin.common.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DoubleConfirmAlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null);
+        }}
+        onConfirm={() => void confirmDelete()}
+        title={t("admin.users.delete_title")}
+        description={
+          <>
+            {t("admin.users.delete_desc")}{" "}
+            <strong>
+              {deleteTarget ? getResolvedDisplayName(deleteTarget, companyWorkers) : ""}
+            </strong>
+            . {t("admin.users.delete_desc_suffix")}
+          </>
+        }
+      />
 
       <AlertDialog open={!!initialPasswordReveal} onOpenChange={(o) => !o && setInitialPasswordReveal(null)}>
         <AlertDialogContent>

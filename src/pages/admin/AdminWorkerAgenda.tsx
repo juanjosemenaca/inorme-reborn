@@ -35,6 +35,7 @@ import {
 } from "@/components/admin/WorkerAgendaTimeViews";
 import { expandSummerRangesToWeekdayIsoSet } from "@/lib/workCalendarSummerRange";
 import { useToast } from "@/hooks/use-toast";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import { createWorkerAgendaItem, deleteWorkerAgendaItem, updateWorkerAgendaItem } from "@/api/workerAgendaApi";
 import { useAdminAgendaAuditItems } from "@/hooks/useAdminAgendaAudit";
 import { useBackofficeUsers } from "@/hooks/useBackofficeUsers";
@@ -139,6 +140,7 @@ const AdminWorkerAgenda = () => {
   const [editTime, setEditTime] = useState("12:00");
   const [editItemType, setEditItemType] = useState<WorkerAgendaItemType>("note");
   const [summaryIso, setSummaryIso] = useState<string | null>(null);
+  const [adminAgendaDeleteConfirmOpen, setAdminAgendaDeleteConfirmOpen] = useState(false);
 
   useEffect(() => {
     setDetailEditing(false);
@@ -918,11 +920,7 @@ const AdminWorkerAgenda = () => {
                             variant="destructive"
                             className="w-full sm:w-auto mr-auto gap-2"
                             disabled={adminDeleteMutation.isPending}
-                            onClick={() => {
-                              if (window.confirm(t("admin.agenda.delete_confirm"))) {
-                                adminDeleteMutation.mutate(detailItem.id);
-                              }
-                            }}
+                            onClick={() => setAdminAgendaDeleteConfirmOpen(true)}
                           >
                             {adminDeleteMutation.isPending ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -951,6 +949,19 @@ const AdminWorkerAgenda = () => {
               ) : null}
             </DialogContent>
           </Dialog>
+
+          <DoubleConfirmAlertDialog
+            open={adminAgendaDeleteConfirmOpen}
+            onOpenChange={setAdminAgendaDeleteConfirmOpen}
+            onConfirm={() => {
+              if (detailItem?.source === "ADMIN") {
+                adminDeleteMutation.mutate(detailItem.id);
+              }
+            }}
+            title={t("admin.agenda.delete_admin_entry")}
+            description={t("admin.agenda.delete_confirm")}
+            disabled={adminDeleteMutation.isPending}
+          />
 
           <Dialog open={!!summaryIso} onOpenChange={(open) => !open && setSummaryIso(null)}>
             <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">

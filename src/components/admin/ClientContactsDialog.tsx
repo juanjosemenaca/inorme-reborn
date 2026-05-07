@@ -9,16 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import type { ClientContactPerson, ClientRecord } from "@/types/clients";
 import { contactDisplayName } from "@/types/clients";
 import { addContact, removeContact, updateContact } from "@/api/clientsApi";
@@ -166,25 +157,19 @@ export function ClientContactsDialog({ client, open, onOpenChange }: Props) {
         onSubmit={handleSubmit}
       />
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar contacto?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará a <strong>{deleteTarget ? contactDisplayName(deleteTarget) : ""}</strong>.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void confirmDelete()}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DoubleConfirmAlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null);
+        }}
+        onConfirm={() => void confirmDelete()}
+        title="¿Eliminar contacto?"
+        description={
+          <>
+            Se eliminará a <strong>{deleteTarget ? contactDisplayName(deleteTarget) : ""}</strong>.
+          </>
+        }
+      />
     </>
   );
 }

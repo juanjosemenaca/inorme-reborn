@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, FileUp, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +33,7 @@ export function EntityDocumentsSection({ ownerType, ownerId, onDocumentsChanged 
   const [uploading, setUploading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [docPendingDelete, setDocPendingDelete] = useState<EntityDocumentRecord | null>(null);
   const [nextUploadKind, setNextUploadKind] = useState<EntityDocumentKind>("CV");
 
   useEffect(() => {
@@ -104,8 +106,7 @@ export function EntityDocumentsSection({ ownerType, ownerId, onDocumentsChanged 
     }
   };
 
-  const handleDelete = async (doc: EntityDocumentRecord) => {
-    if (!window.confirm(`¿Eliminar documento «${doc.originalFilename}»?`)) return;
+  const runDeleteDoc = async (doc: EntityDocumentRecord) => {
     try {
       setDeleteId(doc.id);
       await deleteEntityDocument(doc);
@@ -194,7 +195,7 @@ export function EntityDocumentsSection({ ownerType, ownerId, onDocumentsChanged 
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive"
-                      onClick={() => void handleDelete(doc)}
+                      onClick={() => setDocPendingDelete(doc)}
                       disabled={deleteId === doc.id}
                       aria-label="Eliminar"
                     >
@@ -231,6 +232,26 @@ export function EntityDocumentsSection({ ownerType, ownerId, onDocumentsChanged 
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
             {uploading ? "Subiendo…" : "Añadir documentos"}
           </Button>
+
+          <DoubleConfirmAlertDialog
+            open={!!docPendingDelete}
+            onOpenChange={(o) => {
+              if (!o) setDocPendingDelete(null);
+            }}
+            onConfirm={() => {
+              if (docPendingDelete) void runDeleteDoc(docPendingDelete);
+            }}
+            title="¿Eliminar documento?"
+            description={
+              docPendingDelete ? (
+                <>
+                  Se eliminará <strong className="text-foreground">«{docPendingDelete.originalFilename}»</strong>. Esta acción no se
+                  puede deshacer.
+                </>
+              ) : null
+            }
+            disabled={!!deleteId}
+          />
         </>
       )}
     </div>

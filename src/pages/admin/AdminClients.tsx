@@ -16,16 +16,7 @@ import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SortableTableHead } from "@/components/admin/SortableTableHead";
 import { sortRows, toggleColumnSort, type ColumnSort } from "@/lib/adminListUtils";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import { useClients } from "@/hooks/useClients";
 import { createClient, deleteClient, updateClient } from "@/api/clientsApi";
 import { queryKeys } from "@/lib/queryKeys";
@@ -478,26 +469,20 @@ const AdminClients = () => {
         }}
       />
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("admin.clients.delete_title")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("admin.clients.delete_desc")} <strong>{deleteTarget?.tradeName}</strong>{" "}
-              {t("admin.clients.delete_desc_suffix")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void confirmDelete()}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {t("admin.common.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DoubleConfirmAlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null);
+        }}
+        onConfirm={() => void confirmDelete()}
+        title={t("admin.clients.delete_title")}
+        description={
+          <>
+            {t("admin.clients.delete_desc")} <strong>{deleteTarget?.tradeName}</strong>{" "}
+            {t("admin.clients.delete_desc_suffix")}
+          </>
+        }
+      />
     </div>
   );
 };

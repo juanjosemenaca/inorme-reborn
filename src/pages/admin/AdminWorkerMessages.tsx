@@ -29,6 +29,7 @@ import {
 import { queryKeys } from "@/lib/queryKeys";
 import type { BackofficeMessageRecord } from "@/types/backofficeMessages";
 import { cn } from "@/lib/utils";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 
 const AdminWorkerMessages = () => {
   const { t, language } = useLanguage();
@@ -46,6 +47,7 @@ const AdminWorkerMessages = () => {
   const [threadQuery, setThreadQuery] = useState("");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
+  const [deleteThreadIdConfirm, setDeleteThreadIdConfirm] = useState<string | null>(null);
 
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const formatDt = (iso: string) =>
@@ -415,7 +417,7 @@ const AdminWorkerMessages = () => {
                         variant="ghost"
                         className="gap-1 text-destructive"
                         disabled={deleteMutation.isPending}
-                        onClick={() => deleteMutation.mutate(activeThread.threadId)}
+                        onClick={() => setDeleteThreadIdConfirm(activeThread.threadId)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         {t("admin.messages.delete_thread")}
@@ -467,6 +469,19 @@ const AdminWorkerMessages = () => {
           )}
         </CardContent>
       </Card>
+
+      <DoubleConfirmAlertDialog
+        open={deleteThreadIdConfirm != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteThreadIdConfirm(null);
+        }}
+        onConfirm={() => {
+          if (deleteThreadIdConfirm) deleteMutation.mutate(deleteThreadIdConfirm);
+        }}
+        title={t("admin.messages.delete_thread_confirm_title")}
+        description={t("admin.messages.delete_thread_confirm_desc")}
+        disabled={deleteMutation.isPending}
+      />
     </div>
   );
 };

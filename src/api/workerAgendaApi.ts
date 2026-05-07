@@ -55,6 +55,39 @@ async function requireProfile(): Promise<Profile> {
 const workerTypeSet = new Set<WorkerAgendaItemType>(WORKER_AGENDA_ITEM_TYPES);
 const adminCreateTypeSet = new Set<WorkerAgendaItemType>(ADMIN_WORKER_AGENDA_CREATE_TYPES);
 
+function isPersonalWorkerAgendaItem(domain: WorkerAgendaItemRecord): boolean {
+  return (
+    !domain.appliesToAllCompanyWorkers &&
+    domain.projectId == null &&
+    domain.companyWorkerId != null
+  );
+}
+
+function isWorkerOwnedProjectAgendaItem(domain: WorkerAgendaItemRecord): boolean {
+  return (
+    domain.projectId != null &&
+    !domain.appliesToAllCompanyWorkers &&
+    domain.companyWorkerId == null &&
+    domain.source === "WORKER"
+  );
+}
+
+async function assertCompanyWorkerIsProjectResponsible(projectId: string, companyWorkerId: string): Promise<void> {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("responsible_company_worker_id", companyWorkerId)
+    .maybeSingle();
+  if (error) throwErr(error);
+  if (!data) {
+    throw new Error(
+      "Solo el responsable del proyecto puede crear o gestionar entradas de equipo para este proyecto."
+    );
+  }
+}
+
 async function listProjectIdsForCompanyWorker(companyWorkerId: string): Promise<string[]> {
   const sb = requireSupabase();
   const ids = new Set<string>();
@@ -190,38 +223,68 @@ export async function createWorkerAgendaItem(input: CreateWorkerAgendaItemInput)
   }
 
   if (projectIdRaw) {
-    if (profile.role !== "ADMIN") {
-      throw new Error("Solo administración puede crear entradas ligadas a un proyecto.");
-    }
     if (itemType === "todo") {
       throw new Error(
-        "Las tareas (to-do) no pueden ligarse a un proyecto en bloque. Crea un to-do en la agenda de una persona."
+        "Las tareas (to-do) no pueden ligarse a un proyecto en bloque. Crea un to-do en tu agenda personal."
       );
     }
-    source = "ADMIN";
-    if (!adminCreateTypeSet.has(itemType)) {
-      throw new Error("Tipo de entrada no permitido para administración.");
+    if (profile.role === "ADMIN") {
+      if (!adminCreateTypeSet.has(itemType)) {
+        throw new Error("Tipo de entrada no permitido para administración.");
+      }
+      source = "ADMIN";
+      const { data, error } = await sb
+        .from("worker_agenda_items")
+        .insert({
+          company_worker_id: null,
+          applies_to_all_company_workers: false,
+          project_id: projectIdRaw,
+          title: input.title.trim(),
+          description: input.description?.trim() || null,
+          starts_at: input.startsAt,
+          ends_at: input.endsAt ?? null,
+          item_type: itemType,
+          source,
+          created_by_backoffice_user_id: profile.id,
+        })
+        .select("*")
+        .single();
+
+      if (error) throwErr(error);
+      return rowToDomain(data as WorkerAgendaItemRow);
     }
 
-    const { data, error } = await sb
-      .from("worker_agenda_items")
-      .insert({
-        company_worker_id: null,
-        applies_to_all_company_workers: false,
-        project_id: projectIdRaw,
-        title: input.title.trim(),
-        description: input.description?.trim() || null,
-        starts_at: input.startsAt,
-        ends_at: input.endsAt ?? null,
-        item_type: itemType,
-        source,
-        created_by_backoffice_user_id: profile.id,
-      })
-      .select("*")
-      .single();
+    if (profile.role === "WORKER") {
+      if (!profile.companyWorkerId) {
+        throw new Error("No hay ficha de trabajador vinculada.");
+      }
+      await assertCompanyWorkerIsProjectResponsible(projectIdRaw, profile.companyWorkerId);
+      if (!workerTypeSet.has(itemType)) {
+        throw new Error("Tipo de entrada no permitido.");
+      }
+      source = "WORKER";
+      const { data, error } = await sb
+        .from("worker_agenda_items")
+        .insert({
+          company_worker_id: null,
+          applies_to_all_company_workers: false,
+          project_id: projectIdRaw,
+          title: input.title.trim(),
+          description: input.description?.trim() || null,
+          starts_at: input.startsAt,
+          ends_at: input.endsAt ?? null,
+          item_type: itemType,
+          source,
+          created_by_backoffice_user_id: profile.id,
+        })
+        .select("*")
+        .single();
 
-    if (error) throwErr(error);
-    return rowToDomain(data as WorkerAgendaItemRow);
+      if (error) throwErr(error);
+      return rowToDomain(data as WorkerAgendaItemRow);
+    }
+
+    throw new Error("Sin permiso.");
   }
 
   const companyWorkerId = input.companyWorkerId;
@@ -285,14 +348,20 @@ export async function updateWorkerAgendaItem(
   const domain = rowToDomain(row);
 
   if (profile.role === "WORKER") {
-    if (domain.appliesToAllCompanyWorkers || domain.projectId != null || domain.companyWorkerId == null) {
-      throw new Error("No puedes editar esta entrada.");
+    if (!profile.companyWorkerId) {
+      throw new Error("No hay ficha de trabajador vinculada.");
     }
-    if (profile.companyWorkerId !== domain.companyWorkerId) {
+    if (isPersonalWorkerAgendaItem(domain)) {
+      if (profile.companyWorkerId !== domain.companyWorkerId) {
+        throw new Error("No puedes editar esta entrada.");
+      }
+      if (domain.source === "ADMIN") {
+        throw new Error("No puedes editar entradas del administrador.");
+      }
+    } else if (isWorkerOwnedProjectAgendaItem(domain)) {
+      await assertCompanyWorkerIsProjectResponsible(domain.projectId!, profile.companyWorkerId);
+    } else {
       throw new Error("No puedes editar esta entrada.");
-    }
-    if (domain.source === "ADMIN") {
-      throw new Error("No puedes editar entradas del administrador.");
     }
   }
 
@@ -384,14 +453,20 @@ export async function deleteWorkerAgendaItem(id: string): Promise<void> {
   const domain = rowToDomain(existing as WorkerAgendaItemRow);
 
   if (profile.role === "WORKER") {
-    if (domain.appliesToAllCompanyWorkers || domain.projectId != null || domain.companyWorkerId == null) {
-      throw new Error("No puedes eliminar esta entrada.");
+    if (!profile.companyWorkerId) {
+      throw new Error("No hay ficha de trabajador vinculada.");
     }
-    if (profile.companyWorkerId !== domain.companyWorkerId) {
+    if (isPersonalWorkerAgendaItem(domain)) {
+      if (profile.companyWorkerId !== domain.companyWorkerId) {
+        throw new Error("No puedes eliminar esta entrada.");
+      }
+      if (domain.source === "ADMIN") {
+        throw new Error("No puedes eliminar entradas del administrador.");
+      }
+    } else if (isWorkerOwnedProjectAgendaItem(domain)) {
+      await assertCompanyWorkerIsProjectResponsible(domain.projectId!, profile.companyWorkerId);
+    } else {
       throw new Error("No puedes eliminar esta entrada.");
-    }
-    if (domain.source === "ADMIN") {
-      throw new Error("No puedes eliminar entradas del administrador.");
     }
   }
 

@@ -34,6 +34,7 @@ import { fetchCompanyWorkers } from "@/api/companyWorkersApi";
 import { fetchProjectsWithDocuments } from "@/api/projectsApi";
 import { fetchWorkCalendarSites } from "@/api/workCalendarSitesApi";
 import { Button } from "@/components/ui/button";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -111,6 +112,8 @@ function AdminDms() {
   const [reviewAssigneeIds, setReviewAssigneeIds] = useState<string[]>([]);
   const [reviewAssignMode, setReviewAssignMode] = useState<"manual" | "all" | "site" | "project_team">("manual");
   const [reviewSiteId, setReviewSiteId] = useState("");
+  const [dmsDeleteOpen, setDmsDeleteOpen] = useState(false);
+  const [removePermUserIdConfirm, setRemovePermUserIdConfirm] = useState<string | null>(null);
 
   const { data: clients = [] } = useQuery({ queryKey: queryKeys.clients, queryFn: fetchClients });
   const { data: projects = [] } = useQuery({
@@ -335,18 +338,15 @@ function AdminDms() {
   const deleteMut = useMutation({
     mutationFn: async () => {
       if (!actorId || !detailId) return;
-      if (!window.confirm(t("admin.dms.confirm_delete"))) {
-        throw new Error("cancelled");
-      }
       await deleteDmsDocument({ documentId: detailId, actorBackofficeUserId: actorId });
     },
     onSuccess: () => {
       toast({ title: t("admin.dms.toast_deleted") });
+      setDmsDeleteOpen(false);
       setDetailId(null);
       invalidateList();
     },
     onError: (e) => {
-      if (e instanceof Error && e.message === "cancelled") return;
       toast({
         title: t("admin.common.error"),
         description: e instanceof Error ? e.message : t("admin.dms.error_generic"),
@@ -871,7 +871,12 @@ function AdminDms() {
                           {backofficeUsers.find((u) => u.id === p.backofficeUserId)?.email ?? p.backofficeUserId}{" "}
                           <span className="text-muted-foreground">({p.permission})</span>
                         </span>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removePermMut.mutate(p.backofficeUserId)}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setRemovePermUserIdConfirm(p.backofficeUserId)}
+                        >
                           {t("admin.dms.perm_remove")}
                         </Button>
                       </li>
@@ -1068,7 +1073,12 @@ function AdminDms() {
                 </div>
               </div>
 
-              <Button variant="destructive" size="sm" onClick={() => deleteMut.mutate()} disabled={deleteMut.isPending}>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setDmsDeleteOpen(true)}
+                disabled={deleteMut.isPending}
+              >
                 <Trash2 className="h-4 w-4 mr-2" />
                 {t("admin.dms.delete_document")}
               </Button>
@@ -1076,6 +1086,30 @@ function AdminDms() {
           )}
         </SheetContent>
       </Sheet>
+
+      <DoubleConfirmAlertDialog
+        open={dmsDeleteOpen}
+        onOpenChange={(o) => {
+          if (!o) setDmsDeleteOpen(false);
+        }}
+        onConfirm={() => deleteMut.mutate()}
+        title={t("admin.dms.delete_document")}
+        description={t("admin.dms.confirm_delete")}
+        disabled={deleteMut.isPending}
+      />
+
+      <DoubleConfirmAlertDialog
+        open={removePermUserIdConfirm != null}
+        onOpenChange={(o) => {
+          if (!o) setRemovePermUserIdConfirm(null);
+        }}
+        onConfirm={() => {
+          if (removePermUserIdConfirm) removePermMut.mutate(removePermUserIdConfirm);
+        }}
+        title={t("admin.dms.perm_remove_confirm_title")}
+        description={t("admin.dms.perm_remove_confirm_desc")}
+        disabled={removePermMut.isPending}
+      />
     </div>
   );
 }

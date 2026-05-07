@@ -30,16 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import {
   Form,
   FormControl,
@@ -1003,59 +994,38 @@ const AdminWorkCalendars = () => {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteSiteTarget} onOpenChange={() => setDeleteSiteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("admin.workCalendars.sites_delete_title")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("admin.workCalendars.sites_delete_desc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteSiteTarget && deleteSiteMutation.mutate(deleteSiteTarget.id)}
-            >
-              {t("admin.common.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DoubleConfirmAlertDialog
+        open={!!deleteSiteTarget}
+        onOpenChange={(o) => {
+          if (!o) setDeleteSiteTarget(null);
+        }}
+        onConfirm={() => {
+          if (deleteSiteTarget) deleteSiteMutation.mutate(deleteSiteTarget.id);
+        }}
+        title={t("admin.workCalendars.sites_delete_title")}
+        description={t("admin.workCalendars.sites_delete_desc")}
+        disabled={deleteSiteMutation.isPending}
+      />
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("admin.workCalendars.delete_title")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("admin.workCalendars.delete_desc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => void confirmDelete()}
-            >
-              {t("admin.common.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DoubleConfirmAlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null);
+        }}
+        onConfirm={() => void confirmDelete()}
+        title={t("admin.workCalendars.delete_title")}
+        description={t("admin.workCalendars.delete_desc")}
+      />
 
-      <AlertDialog open={!!summerDeleteTarget} onOpenChange={() => setSummerDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("admin.workCalendars.summer_delete_title")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("admin.workCalendars.summer_delete_desc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => void confirmDeleteSummer()}
-            >
-              {t("admin.common.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DoubleConfirmAlertDialog
+        open={!!summerDeleteTarget}
+        onOpenChange={(o) => {
+          if (!o) setSummerDeleteTarget(null);
+        }}
+        onConfirm={() => void confirmDeleteSummer()}
+        title={t("admin.workCalendars.summer_delete_title")}
+        description={t("admin.workCalendars.summer_delete_desc")}
+      />
     </div>
   );
 };

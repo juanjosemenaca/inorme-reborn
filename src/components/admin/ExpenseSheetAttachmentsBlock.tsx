@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import type { WorkerExpenseSheetAttachmentRecord } from "@/types/workerExpenses";
 
 type TFn = (key: string) => string;
@@ -287,7 +288,8 @@ export function ExpenseSheetAttachmentsEditor(props: {
   const WHOLE_PERIOD = "__whole__";
   const [attachDay, setAttachDay] = useState<string>(WHOLE_PERIOD);
   const [busy, setBusy] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const [pendingDeleteConfirmId, setPendingDeleteConfirmId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [webcamOpen, setWebcamOpen] = useState(false);
 
@@ -394,17 +396,12 @@ export function ExpenseSheetAttachmentsEditor(props: {
         t={t}
         onDelete={
           editable
-            ? async (id) => {
-                setDeleteId(id);
-                try {
-                  await onDelete(id);
-                } finally {
-                  setDeleteId(null);
-                }
+            ? (id) => {
+                setPendingDeleteConfirmId(id);
               }
             : undefined
         }
-        deletePendingId={deleteId}
+        deletePendingId={deleteBusyId}
         onOpen={async (a) => {
           setOpenId(a.id);
           try {
@@ -414,6 +411,24 @@ export function ExpenseSheetAttachmentsEditor(props: {
           }
         }}
         openPendingId={openId}
+      />
+
+      <DoubleConfirmAlertDialog
+        open={pendingDeleteConfirmId != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteConfirmId(null);
+        }}
+        onConfirm={() => {
+          const id = pendingDeleteConfirmId;
+          if (!id) return;
+          setDeleteBusyId(id);
+          void onDelete(id).finally(() => {
+            setDeleteBusyId(null);
+          });
+        }}
+        title={t("admin.expenses.attachments_delete_confirm_title")}
+        description={t("admin.expenses.attachments_delete_confirm_desc")}
+        disabled={deleteBusyId != null}
       />
     </div>
   );

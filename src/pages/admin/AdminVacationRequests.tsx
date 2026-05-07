@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { queryKeys } from "@/lib/queryKeys";
@@ -81,6 +82,7 @@ const AdminVacationRequests = () => {
   const [rejectCarryTarget, setRejectCarryTarget] = useState<WorkerVacationCarryoverRequestRecord | null>(null);
   const [rejectCarryReason, setRejectCarryReason] = useState("");
   const [approveDaysById, setApproveDaysById] = useState<Record<string, string>>({});
+  const [deleteVacationRequestId, setDeleteVacationRequestId] = useState<string | null>(null);
 
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const formatDt = (iso: string) =>
@@ -391,7 +393,7 @@ const AdminVacationRequests = () => {
                           variant="ghost"
                           className="gap-1 text-destructive"
                           disabled={deleteMutation.isPending}
-                          onClick={() => deleteMutation.mutate(req.id)}
+                          onClick={() => setDeleteVacationRequestId(req.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           {t("admin.common.delete")}
@@ -471,6 +473,19 @@ const AdminVacationRequests = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DoubleConfirmAlertDialog
+        open={deleteVacationRequestId != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteVacationRequestId(null);
+        }}
+        onConfirm={() => {
+          if (deleteVacationRequestId) deleteMutation.mutate(deleteVacationRequestId);
+        }}
+        title={t("admin.vacationRequests.delete_confirm_title")}
+        description={t("admin.vacationRequests.delete_confirm_desc")}
+        disabled={deleteMutation.isPending}
+      />
     </div>
   );
 };

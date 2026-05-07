@@ -23,6 +23,11 @@ import { cn } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { BackofficeTodayDateCard } from "@/components/admin/BackofficeTodayDateCard";
 import { useMyDmsDocumentReviewsAsAssignee } from "@/hooks/useMyDmsDocumentReviews";
+import {
+  agendaFutureNoticeSignature,
+  computeAgendaFutureBeyondDashboardSummary,
+  readAgendaFutureNoticeAck,
+} from "@/lib/workerAgendaFutureNotice";
 import type { WorkerAgendaItemRecord } from "@/types/agenda";
 
 function sortAgendaByTime(items: WorkerAgendaItemRecord[]): WorkerAgendaItemRecord[] {
@@ -112,6 +117,7 @@ export function WorkerDashboard() {
   const projectTitleById = useMemo(() => new Map(projects.map((p) => [p.id, p.title])), [projects]);
 
   const today = new Date();
+  const todayYmd = dateToLocalYmd(today);
   const agendaWeekMonday = startOfWeekMonday(today);
   const isFriday = today.getDay() === 5;
 
@@ -148,22 +154,17 @@ export function WorkerDashboard() {
   const currentWeekItems = useMemo(() => sortAgendaByTime(rawCurrentWeek), [rawCurrentWeek]);
   const nextWeekItems = useMemo(() => sortAgendaByTime(rawNextWeek), [rawNextWeek]);
 
-  const agendaFutureNotInDashboard = useMemo(() => {
-    const shown = new Set<string>();
-    for (const it of currentWeekItems) shown.add(it.id);
-    if (isFriday) for (const it of nextWeekItems) shown.add(it.id);
-    return (rawAgendaHorizon ?? []).filter((it) => {
-      if (shown.has(it.id)) return false;
-      const d = dateToLocalYmd(new Date(it.startsAt));
-      return d > currentWeekToIso;
-    });
-  }, [
-    rawAgendaHorizon,
-    currentWeekItems,
-    nextWeekItems,
-    isFriday,
-    currentWeekToIso,
-  ]);
+  const agendaFutureNotInDashboard = useMemo(
+    () =>
+      computeAgendaFutureBeyondDashboardSummary({
+        rawAgendaHorizon: rawAgendaHorizon ?? [],
+        referenceLocalYmd: todayYmd,
+      }),
+    [rawAgendaHorizon, todayYmd]
+  );
+  const agendaFutureNoticeSig = agendaFutureNoticeSignature(agendaFutureNotInDashboard);
+  const agendaFutureNoticeAck =
+    companyWorkerId ? readAgendaFutureNoticeAck(companyWorkerId) : null;
 
   const month = useMemo(() => {
     const d = new Date();
@@ -247,7 +248,8 @@ export function WorkerDashboard() {
     !agendaHorizonLoading &&
     !agendaLoading &&
     !(isFriday && nextWeekLoading) &&
-    agendaFutureNotInDashboard.length > 0;
+    agendaFutureNotInDashboard.length > 0 &&
+    agendaFutureNoticeAck !== agendaFutureNoticeSig;
   const showAgendaWeekCard =
     hasAgenda && !!companyWorkerId && !agendaLoading && currentWeekItems.length > 0;
   const showAgendaFridayCard =
