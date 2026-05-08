@@ -53,6 +53,19 @@ export async function createBackofficeMessage(
   if (error) throwErr(error);
 }
 
+/**
+ * Crea el mismo mensaje para varios destinatarios (un hilo independiente por persona).
+ */
+export async function createBackofficeMessagesToRecipients(
+  recipientBackofficeUserIds: string[],
+  input: CreateBackofficeMessageInput
+): Promise<void> {
+  const senderId = await requireCurrentBackofficeProfileId();
+  const unique = [...new Set(recipientBackofficeUserIds.filter((id) => id && id !== senderId))];
+  if (unique.length === 0) return;
+  await Promise.all(unique.map((id) => createBackofficeMessage(id, input)));
+}
+
 async function requireCurrentBackofficeProfileId(): Promise<string> {
   const sb = requireSupabase();
   const {

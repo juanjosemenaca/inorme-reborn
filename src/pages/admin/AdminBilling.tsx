@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BadgeEuro,
@@ -20,6 +21,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -69,11 +71,18 @@ import {
 import { isInormeInformaticaOrganizacionIssuer } from "@/lib/billingPrivacyFooter";
 import {
   draftGroupYearMonth,
+  formatInvoiceMonthHeading,
   formatInvoiceMonthOnly,
   groupInvoicesByIssuerAndMonth,
   issuedGroupYearMonth,
 } from "@/lib/billingInvoiceGroups";
+import {
+  BILLING_COLLECTION_EPS,
+  billingCollectionSemaphore,
+  billingInvoiceHasCollectionOutstanding,
+} from "@/lib/billingCollectionSemaphore";
 import { parseInvoiceAddresseeOptions } from "@/lib/invoiceAddresseeOptions";
+import { cn } from "@/lib/utils";
 import type { ClientRecord } from "@/types/clients";
 import type {
   BillingInvoiceLineInput,
@@ -234,6 +243,23 @@ function mergeProformaHeaderFromForm(
   };
 }
 
+function issuedCollectionSemaphoreTitle(
+  inv: BillingInvoiceRecord,
+  translate: (key: string) => string
+): string {
+  const sem = billingCollectionSemaphore(inv);
+  if (sem === "full") return translate("admin.billing.collection_semaphore_full");
+  if (sem === "partial") return translate("admin.billing.collection_semaphore_partial");
+  if (sem === "none") return translate("admin.billing.collection_semaphore_none");
+  return translate("admin.billing.collection_semaphore_na");
+}
+
+function parseReceiptAmountInput(raw: string): number | null {
+  const n = Number(String(raw).trim().replace(",", "."));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
 function variantByStatus(status: BillingInvoiceRecord["status"]): "outline" | "default" | "destructive" | "secondary" {
   if (status === "PAID") return "default";
   if (status === "CANCELLED") return "destructive";
@@ -245,6 +271,8 @@ const AdminBilling = () => {
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const { data: clients = [] } = useClients();
   const { data: issuers = [] } = useBillingIssuers(true);
@@ -265,6 +293,11 @@ const AdminBilling = () => {
   /** Factura existente (mismo cliente) de la que copiar líneas al crear el borrador; `NEW_DRAFT_COPY_LINES_NONE` = empezar de cero. */
   const [newCopyLinesFromInvoiceId, setNewCopyLinesFromInvoiceId] = useState(NEW_DRAFT_COPY_LINES_NONE);
   const [billingTab, setBillingTab] = useState<BillingTab>("drafts");
+  /** Filtro por mes natural (YYYY-MM), p. ej. desde el panel de control; usa la misma agrupación que el listado. */
+  const [invoiceListDraftYm, setInvoiceListDraftYm] = useState<string | null>(null);
+  const [invoiceListIssuedYm, setInvoiceListIssuedYm] = useState<string | null>(null);
+  /** Desde URL (`collection=outstanding`) o panel: solo facturas con saldo por cobrar. */
+  const [issuedCollectionFilter, setIssuedCollectionFilter] = useState<"all" | "outstanding">("all");
   const [issuedSearch, setIssuedSearch] = useState("");
   const [issuedClientIdFilter, setIssuedClientIdFilter] = useState("all");
   const [issuedIssuerIdFilter, setIssuedIssuerIdFilter] = useState("all");
@@ -297,6 +330,14 @@ const AdminBilling = () => {
   }, [series, selectedInvoice]);
   const editable = selectedInvoice?.status === "DRAFT";
 
+  /** Saldo pendiente de cobro (€) en factura emitida/cobrada parcial; null si borrador o anulada. */
+  const issuedReceiptRemainingEuro = useMemo(() => {
+    if (!selectedInvoice || selectedInvoice.status === "DRAFT" || selectedInvoice.status === "CANCELLED") return null;
+    const gt = Number(selectedInvoice.grandTotal) || 0;
+    const col = Number(selectedInvoice.collectedTotal) || 0;
+    return Math.max(0, Math.round((gt - col) * 100) / 100);
+  }, [selectedInvoice]);
+
   const [draftDueDate, setDraftDueDate] = useState("");
   /** Fecha de factura forzada (borrador). Vacío = al emitir se usará la fecha del momento. */
   const [draftIssueDate, setDraftIssueDate] = useState("");
@@ -314,8 +355,25 @@ const AdminBilling = () => {
 
   const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [receiptAmount, setReceiptAmount] = useState("");
+  /** Cobro del saldo pendiente completo vs importe manual (varios parciales hasta completar). */
+  const [receiptAmountMode, setReceiptAmountMode] = useState<"partial" | "full">("partial");
   const [receiptMethod, setReceiptMethod] = useState("BANK_TRANSFER");
   const [receiptReference, setReceiptReference] = useState("");
+
+  useEffect(() => {
+    setReceiptAmountMode("partial");
+    setReceiptAmount("");
+  }, [selectedInvoiceId]);
+
+  useEffect(() => {
+    if (
+      receiptAmountMode !== "full" ||
+      issuedReceiptRemainingEuro == null ||
+      issuedReceiptRemainingEuro <= BILLING_COLLECTION_EPS
+    )
+      return;
+    setReceiptAmount(issuedReceiptRemainingEuro.toFixed(2));
+  }, [receiptAmountMode, issuedReceiptRemainingEuro]);
 
   const seriesForNewDraft = useMemo(
     () => series.filter((s) => s.active && s.issuerId === newIssuerId),
@@ -332,6 +390,15 @@ const AdminBilling = () => {
     [issuers, draftIssuerId]
   );
   const draftInvoices = useMemo(() => invoices.filter((i) => i.status === "DRAFT"), [invoices]);
+  const draftInvoicesDisplayed = useMemo(() => {
+    if (!invoiceListDraftYm || !/^\d{4}-\d{2}$/.test(invoiceListDraftYm)) return draftInvoices;
+    const ys = Number(invoiceListDraftYm.slice(0, 4));
+    const ms = Number(invoiceListDraftYm.slice(5, 7));
+    return draftInvoices.filter((inv) => {
+      const { y, m } = draftGroupYearMonth(inv);
+      return y === ys && m === ms;
+    });
+  }, [draftInvoices, invoiceListDraftYm]);
   const issuedInvoices = useMemo(() => invoices.filter((i) => i.status !== "DRAFT"), [invoices]);
   /** Facturas del cliente con al menos una línea (emitidas, cobradas o borradores), para reutilizar conceptos/importes. */
   const invoicesForNewDraftLineCopy = useMemo(() => {
@@ -357,10 +424,18 @@ const AdminBilling = () => {
   const issuedInvoicesFiltered = useMemo(() => {
     const q = issuedSearch.trim().toLowerCase();
     return issuedInvoices.filter((inv) => {
+      if (invoiceListIssuedYm && /^\d{4}-\d{2}$/.test(invoiceListIssuedYm)) {
+        const ys = Number(invoiceListIssuedYm.slice(0, 4));
+        const ms = Number(invoiceListIssuedYm.slice(5, 7));
+        const { y, m } = issuedGroupYearMonth(inv);
+        if (y !== ys || m !== ms) return false;
+      } else {
+        if (issuedFromDate && (inv.issueDate ?? "") < issuedFromDate) return false;
+        if (issuedToDate && (inv.issueDate ?? "") > issuedToDate) return false;
+      }
       if (issuedClientIdFilter !== "all" && inv.clientId !== issuedClientIdFilter) return false;
       if (issuedIssuerIdFilter !== "all" && inv.issuerId !== issuedIssuerIdFilter) return false;
-      if (issuedFromDate && (inv.issueDate ?? "") < issuedFromDate) return false;
-      if (issuedToDate && (inv.issueDate ?? "") > issuedToDate) return false;
+      if (issuedCollectionFilter === "outstanding" && !billingInvoiceHasCollectionOutstanding(inv)) return false;
       if (!q) return true;
       const number =
         inv.invoiceNumber && inv.fiscalYear
@@ -371,12 +446,21 @@ const AdminBilling = () => {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [issuedInvoices, issuedSearch, issuedClientIdFilter, issuedIssuerIdFilter, issuedFromDate, issuedToDate]);
+  }, [
+    issuedInvoices,
+    issuedSearch,
+    issuedClientIdFilter,
+    issuedIssuerIdFilter,
+    issuedFromDate,
+    issuedToDate,
+    invoiceListIssuedYm,
+    issuedCollectionFilter,
+  ]);
 
   const issuerOrderForGrouping = useMemo(() => issuers.map((i) => ({ id: i.id, code: i.code })), [issuers]);
   const draftGrouped = useMemo(
-    () => groupInvoicesByIssuerAndMonth(draftInvoices, draftGroupYearMonth, issuerOrderForGrouping),
-    [draftInvoices, issuerOrderForGrouping]
+    () => groupInvoicesByIssuerAndMonth(draftInvoicesDisplayed, draftGroupYearMonth, issuerOrderForGrouping),
+    [draftInvoicesDisplayed, issuerOrderForGrouping]
   );
   const issuedGrouped = useMemo(
     () => groupInvoicesByIssuerAndMonth(issuedInvoicesFiltered, issuedGroupYearMonth, issuerOrderForGrouping),
@@ -426,6 +510,53 @@ const AdminBilling = () => {
   useEffect(() => {
     if (!newClientId && clients.length > 0) setNewClientId(clients[0].id);
   }, [clients, newClientId]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const period = searchParams.get("period");
+    const collectionRaw = searchParams.get("collection");
+    const hasAny =
+      tab !== null || period !== null || collectionRaw !== null;
+
+    if (!hasAny) return;
+
+    const effectiveTab: BillingTab | null =
+      collectionRaw === "outstanding"
+        ? "issued"
+        : tab === "drafts" || tab === "issued" || tab === "series" || tab === "issuers"
+          ? tab
+          : null;
+
+    if (effectiveTab) {
+      setBillingTab(effectiveTab);
+    }
+
+    if (collectionRaw === "outstanding") {
+      setIssuedCollectionFilter("outstanding");
+    } else {
+      setIssuedCollectionFilter("all");
+    }
+
+    if (period && /^\d{4}-\d{2}$/.test(period)) {
+      if (effectiveTab === "drafts") {
+        setInvoiceListDraftYm(period);
+        setInvoiceListIssuedYm(null);
+      } else if (effectiveTab === "issued") {
+        setInvoiceListIssuedYm(period);
+        setInvoiceListDraftYm(null);
+      }
+    } else {
+      if (effectiveTab === "drafts") {
+        setInvoiceListDraftYm(null);
+        setInvoiceListIssuedYm(null);
+      } else if (effectiveTab === "issued") {
+        setInvoiceListIssuedYm(null);
+        setInvoiceListDraftYm(null);
+      }
+    }
+
+    navigate("/admin/facturacion", { replace: true });
+  }, [searchParams, navigate]);
 
   useEffect(() => {
     if (seriesForNewDraft.length === 0) {
@@ -498,7 +629,11 @@ const AdminBilling = () => {
   /** Si el id seleccionado ya no está en la pestaña actual (p. ej. emitido o borrado), limpiar; no auto-abrir el primero. */
   useEffect(() => {
     const scope =
-      billingTab === "drafts" ? draftInvoices : billingTab === "issued" ? issuedInvoicesFiltered : [];
+      billingTab === "drafts"
+        ? draftInvoicesDisplayed
+        : billingTab === "issued"
+          ? issuedInvoicesFiltered
+          : [];
     if (scope.length === 0) {
       setSelectedInvoiceId(null);
       return;
@@ -506,7 +641,7 @@ const AdminBilling = () => {
     if (selectedInvoiceId && !scope.some((x) => x.id === selectedInvoiceId)) {
       setSelectedInvoiceId(null);
     }
-  }, [billingTab, selectedInvoiceId, draftInvoices, issuedInvoicesFiltered]);
+  }, [billingTab, selectedInvoiceId, draftInvoicesDisplayed, issuedInvoicesFiltered]);
 
   useEffect(() => {
     if (!selectedInvoice) {
@@ -865,10 +1000,30 @@ const AdminBilling = () => {
   const receiptMutation = useMutation({
     mutationFn: async () => {
       if (!selectedInvoice) throw new Error("Factura no encontrada.");
+      if (
+        issuedReceiptRemainingEuro == null ||
+        issuedReceiptRemainingEuro <= BILLING_COLLECTION_EPS
+      ) {
+        throw new Error(t("admin.billing.receipt_error_nothing_pending"));
+      }
+      const amountEuro =
+        receiptAmountMode === "full"
+          ? issuedReceiptRemainingEuro
+          : parseReceiptAmountInput(receiptAmount);
+      if (amountEuro == null) {
+        throw new Error(t("admin.billing.receipt_error_invalid_amount"));
+      }
+      if (amountEuro > issuedReceiptRemainingEuro + BILLING_COLLECTION_EPS) {
+        const maxFmt = issuedReceiptRemainingEuro.toLocaleString(localeTag, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        throw new Error(t("admin.billing.receipt_error_exceeds_pending").replace("{{max}}", maxFmt));
+      }
       await registerBillingReceipt({
         invoiceId: selectedInvoice.id,
         receiptDate,
-        amount: Number(receiptAmount.replace(",", ".")),
+        amount: amountEuro,
         method: receiptMethod,
         reference: receiptReference,
       });
@@ -876,6 +1031,7 @@ const AdminBilling = () => {
     onSuccess: async () => {
       await invalidateAll();
       setReceiptAmount("");
+      setReceiptAmountMode("partial");
       setReceiptReference("");
       toast({ title: t("admin.billing.toast_receipt_saved") });
     },
@@ -888,6 +1044,11 @@ const AdminBilling = () => {
   });
 
   const seriesById = useMemo(() => new Map(series.map((s) => [s.id, s] as const)), [series]);
+
+  const receiptCanSubmit =
+    issuedReceiptRemainingEuro != null &&
+    issuedReceiptRemainingEuro > BILLING_COLLECTION_EPS &&
+    (receiptAmountMode === "full" || parseReceiptAmountInput(receiptAmount) != null);
 
   return (
     <>
@@ -1327,6 +1488,27 @@ const AdminBilling = () => {
               <div className="space-y-1">
                 <CardTitle className="text-base">{t("admin.billing.drafts_title")}</CardTitle>
                 <CardDescription>{t("admin.billing.drafts_group_hint")}</CardDescription>
+                {invoiceListDraftYm && /^\d{4}-\d{2}$/.test(invoiceListDraftYm) ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                    <span className="font-medium text-foreground">
+                      {formatInvoiceMonthHeading(
+                        localeTag,
+                        Number(invoiceListDraftYm.slice(0, 4)),
+                        Number(invoiceListDraftYm.slice(5, 7)),
+                        invoiceListDraftYm
+                      )}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 shrink-0"
+                      onClick={() => setInvoiceListDraftYm(null)}
+                    >
+                      {t("admin.billing.month_filter_clear")}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
               <div className="flex shrink-0 gap-2">
                 {newDraftFormOpen ? (
@@ -1348,8 +1530,14 @@ const AdminBilling = () => {
                   <Loader2 className="h-4 w-4 animate-spin" />
                   {t("admin.common.loading")}
                 </div>
-              ) : draftInvoices.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4">{t("admin.billing.empty")}</p>
+              ) : draftInvoicesDisplayed.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">
+                  {draftInvoices.length === 0
+                    ? t("admin.billing.empty")
+                    : invoiceListDraftYm
+                      ? t("admin.billing.empty_month_filter_drafts")
+                      : t("admin.billing.empty")}
+                </p>
               ) : (
                 <div className="space-y-3">
                   {draftGrouped.map((ig, igIdx) => {
@@ -1609,7 +1797,41 @@ const AdminBilling = () => {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">{t("admin.billing.issued_filters_title")}</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <CardContent className="space-y-3">
+              {invoiceListIssuedYm && /^\d{4}-\d{2}$/.test(invoiceListIssuedYm) ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      {formatInvoiceMonthHeading(
+                        localeTag,
+                        Number(invoiceListIssuedYm.slice(0, 4)),
+                        Number(invoiceListIssuedYm.slice(5, 7)),
+                        invoiceListIssuedYm
+                      )}
+                    </span>
+                    <span className="mx-1">·</span>
+                    {t("admin.billing.month_filter_dates_disabled_hint")}
+                  </span>
+                  <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0" onClick={() => setInvoiceListIssuedYm(null)}>
+                    {t("admin.billing.month_filter_clear")}
+                  </Button>
+                </div>
+              ) : null}
+              {issuedCollectionFilter === "outstanding" ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm dark:border-amber-800/40 dark:bg-amber-950/30">
+                  <span className="text-muted-foreground">{t("admin.billing.collection_filter_outstanding_banner")}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 shrink-0"
+                    onClick={() => setIssuedCollectionFilter("all")}
+                  >
+                    {t("admin.billing.collection_filter_clear")}
+                  </Button>
+                </div>
+              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>{t("admin.billing.search_ph")}</Label>
                 <Input
@@ -1648,19 +1870,39 @@ const AdminBilling = () => {
               </div>
               <div className="space-y-1.5">
                 <Label>{t("admin.billing.filter_from")}</Label>
-                <Input type="date" value={issuedFromDate} onChange={(e) => setIssuedFromDate(e.target.value)} />
+                <Input
+                  type="date"
+                  value={issuedFromDate}
+                  disabled={Boolean(invoiceListIssuedYm)}
+                  title={
+                    invoiceListIssuedYm ? t("admin.billing.month_filter_dates_disabled_hint") : undefined
+                  }
+                  onChange={(e) => setIssuedFromDate(e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>{t("admin.billing.filter_to")}</Label>
-                <Input type="date" value={issuedToDate} onChange={(e) => setIssuedToDate(e.target.value)} />
+                <Input
+                  type="date"
+                  value={issuedToDate}
+                  disabled={Boolean(invoiceListIssuedYm)}
+                  title={
+                    invoiceListIssuedYm ? t("admin.billing.month_filter_dates_disabled_hint") : undefined
+                  }
+                  onChange={(e) => setIssuedToDate(e.target.value)}
+                />
               </div>
+            </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-2 space-y-1">
               <CardTitle className="text-base">{t("admin.billing.issued_title")}</CardTitle>
-              <CardDescription>{t("admin.billing.issued_group_hint")}</CardDescription>
+              <CardDescription className="space-y-1">
+                <span>{t("admin.billing.issued_group_hint")}</span>
+                <span className="block text-[11px] text-muted-foreground">{t("admin.billing.collection_semaphore_legend")}</span>
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -1669,7 +1911,15 @@ const AdminBilling = () => {
                   {t("admin.common.loading")}
                 </div>
               ) : issuedInvoicesFiltered.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4">{t("admin.billing.empty")}</p>
+                <p className="text-sm text-muted-foreground py-4">
+                  {issuedInvoices.length === 0
+                    ? t("admin.billing.empty")
+                    : invoiceListIssuedYm
+                      ? t("admin.billing.empty_month_filter_issued")
+                      : issuedCollectionFilter === "outstanding"
+                        ? t("admin.billing.empty_collection_filter_issued")
+                        : t("admin.billing.empty")}
+                </p>
               ) : (
                 <div className="space-y-3">
                   {issuedGrouped.map((ig, igIdx) => {
@@ -1731,6 +1981,9 @@ const AdminBilling = () => {
                                                   <Table>
                                                     <TableHeader>
                                                       <TableRow>
+                                                        <TableHead className="w-11 px-2 text-center">
+                                                          {t("admin.billing.col_collection")}
+                                                        </TableHead>
                                                         <TableHead>{t("admin.billing.col_invoice")}</TableHead>
                                                         <TableHead>{t("admin.billing.col_status")}</TableHead>
                                                         <TableHead>{t("admin.billing.col_client")}</TableHead>
@@ -1745,8 +1998,24 @@ const AdminBilling = () => {
                                                           inv.invoiceNumber != null && inv.fiscalYear != null
                                                             ? `${inv.seriesCode}-${inv.fiscalYear}/${String(inv.invoiceNumber).padStart(4, "0")}`
                                                             : `${inv.seriesCode}-?`;
+                                                        const semTitle = issuedCollectionSemaphoreTitle(inv, t);
+                                                        const sem = billingCollectionSemaphore(inv);
                                                         return (
                                                           <TableRow key={inv.id}>
+                                                            <TableCell className="w-11 px-2 text-center align-middle">
+                                                              <span
+                                                                role="img"
+                                                                aria-label={semTitle}
+                                                                title={semTitle}
+                                                                className={cn(
+                                                                  "inline-block size-2.5 shrink-0 rounded-full border border-black/10 dark:border-white/15",
+                                                                  sem === "full" && "bg-emerald-500",
+                                                                  sem === "partial" && "bg-amber-500",
+                                                                  sem === "none" && "bg-red-500",
+                                                                  sem === "na" && "bg-muted-foreground/35"
+                                                                )}
+                                                              />
+                                                            </TableCell>
                                                             <TableCell className="font-medium">{number}</TableCell>
                                                             <TableCell>
                                                               <Badge variant={variantByStatus(inv.status)}>{inv.status}</Badge>
@@ -2146,6 +2415,54 @@ const AdminBilling = () => {
                       </TableCell>
                     </TableRow>
                   </TableFooter>
+                ) : selectedInvoice ? (
+                  <TableFooter>
+                    <TableRow className="bg-muted/40 border-t-2 border-border">
+                      <TableCell colSpan={2} className="text-muted-foreground align-top py-3 text-sm font-medium">
+                        {t("admin.billing.invoice_issued_totals_title")}
+                      </TableCell>
+                      <TableCell colSpan={5} className="text-right align-top py-3">
+                        <div className="inline-flex flex-col gap-1 text-sm tabular-nums sm:min-w-[16rem]">
+                          <div className="flex justify-end gap-6">
+                            <span className="text-muted-foreground font-normal">{t("admin.billing.draft_totals_base")}</span>
+                            <span className="min-w-[7.5rem]">
+                              {selectedInvoice.taxableBaseTotal.toLocaleString(localeTag, {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex justify-end gap-6">
+                            <span className="text-muted-foreground font-normal">{t("admin.billing.draft_totals_vat")}</span>
+                            <span className="min-w-[7.5rem]">
+                              {selectedInvoice.vatTotal.toLocaleString(localeTag, {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex justify-end gap-6">
+                            <span className="text-muted-foreground font-normal">{t("admin.billing.draft_totals_irpf")}</span>
+                            <span className="min-w-[7.5rem]">
+                              {selectedInvoice.irpfTotal.toLocaleString(localeTag, {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex justify-end gap-6 border-t border-border/80 pt-1 mt-0.5 font-semibold text-foreground">
+                            <span>{t("admin.billing.draft_totals_grand")}</span>
+                            <span className="min-w-[7.5rem]">
+                              {selectedInvoice.grandTotal.toLocaleString(localeTag, {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
                 ) : null}
               </Table>
             </div>
@@ -2296,26 +2613,119 @@ const AdminBilling = () => {
             </div>
 
             {selectedInvoice.status !== "DRAFT" && selectedInvoice.status !== "CANCELLED" ? (
-              <div className="rounded-md border p-3 space-y-2">
+              <div className="rounded-md border p-3 space-y-3">
                 <p className="text-sm font-medium">{t("admin.billing.receipts_title")}</p>
-                <div className="grid gap-2 sm:grid-cols-4">
-                  <Input type="date" value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
-                  <Input
-                    placeholder={t("admin.billing.receipt_amount_ph")}
-                    value={receiptAmount}
-                    onChange={(e) => setReceiptAmount(e.target.value)}
-                  />
-                  <Input value={receiptMethod} onChange={(e) => setReceiptMethod(e.target.value)} />
-                  <Input
-                    placeholder={t("admin.billing.receipt_reference_ph")}
-                    value={receiptReference}
-                    onChange={(e) => setReceiptReference(e.target.value)}
-                  />
-                </div>
-                <Button type="button" variant="outline" onClick={() => receiptMutation.mutate()} disabled={receiptMutation.isPending || !receiptAmount}>
-                  {receiptMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Receipt className="h-4 w-4 mr-2" />}
-                  {t("admin.billing.action_add_receipt")}
-                </Button>
+                {issuedReceiptRemainingEuro != null ? (
+                  <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:gap-x-5">
+                    <span>
+                      {t("admin.billing.receipt_summary_invoice_total")}:{" "}
+                      <span className="font-medium tabular-nums text-foreground">
+                        {selectedInvoice.grandTotal.toLocaleString(localeTag, {
+                          style: "currency",
+                          currency: "EUR",
+                        })}
+                      </span>
+                    </span>
+                    <span>
+                      {t("admin.billing.receipt_summary_collected")}:{" "}
+                      <span className="font-medium tabular-nums text-foreground">
+                        {selectedInvoice.collectedTotal.toLocaleString(localeTag, {
+                          style: "currency",
+                          currency: "EUR",
+                        })}
+                      </span>
+                    </span>
+                    <span>
+                      {t("admin.billing.receipt_summary_pending")}:{" "}
+                      <span className="font-medium tabular-nums text-foreground">
+                        {issuedReceiptRemainingEuro.toLocaleString(localeTag, {
+                          style: "currency",
+                          currency: "EUR",
+                        })}
+                      </span>
+                    </span>
+                  </div>
+                ) : null}
+                {issuedReceiptRemainingEuro != null && issuedReceiptRemainingEuro <= BILLING_COLLECTION_EPS ? (
+                  <p className="text-xs text-muted-foreground">{t("admin.billing.receipt_fully_paid_hint")}</p>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label className="text-xs">{t("admin.billing.receipt_amount_mode_label")}</Label>
+                      <RadioGroup
+                        value={receiptAmountMode}
+                        onValueChange={(v) => {
+                          const mode = v as "partial" | "full";
+                          setReceiptAmountMode(mode);
+                          if (mode === "partial") setReceiptAmount("");
+                        }}
+                        className="flex flex-col gap-2 sm:flex-row sm:gap-8"
+                      >
+                        <div className="flex items-center gap-2">
+                          <RadioGroupItem value="partial" id="receipt-mode-partial" />
+                          <Label htmlFor="receipt-mode-partial" className="cursor-pointer font-normal">
+                            {t("admin.billing.receipt_mode_partial")}
+                          </Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <RadioGroupItem value="full" id="receipt-mode-full" />
+                          <Label htmlFor="receipt-mode-full" className="cursor-pointer font-normal">
+                            {t("admin.billing.receipt_mode_full")}
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs">{t("admin.billing.receipt_date_label")}</Label>
+                        <Input type="date" value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">{t("admin.billing.receipt_amount_label")}</Label>
+                        <Input
+                          placeholder={t("admin.billing.receipt_amount_partial_ph")}
+                          value={receiptAmount}
+                          onChange={(e) => setReceiptAmount(e.target.value)}
+                          disabled={receiptAmountMode === "full"}
+                          readOnly={receiptAmountMode === "full"}
+                          className={cn(receiptAmountMode === "full" && "bg-muted")}
+                        />
+                        {receiptAmountMode === "partial" && issuedReceiptRemainingEuro != null ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            {t("admin.billing.receipt_amount_max_hint").replace(
+                              "{{max}}",
+                              issuedReceiptRemainingEuro.toLocaleString(localeTag, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">{t("admin.billing.receipt_method_label")}</Label>
+                        <Input value={receiptMethod} onChange={(e) => setReceiptMethod(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">{t("admin.billing.receipt_reference_label")}</Label>
+                        <Input
+                          placeholder={t("admin.billing.receipt_reference_ph")}
+                          value={receiptReference}
+                          onChange={(e) => setReceiptReference(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => receiptMutation.mutate()}
+                      disabled={receiptMutation.isPending || !receiptCanSubmit}
+                    >
+                      {receiptMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Receipt className="h-4 w-4 mr-2" />}
+                      {t("admin.billing.action_add_receipt")}
+                    </Button>
+                  </>
+                )}
               </div>
             ) : null}
           </CardContent>

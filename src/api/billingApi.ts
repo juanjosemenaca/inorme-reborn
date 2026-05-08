@@ -3,6 +3,7 @@ import { PROJECT_DOCUMENTS_BUCKET } from "@/api/projectsApi";
 import { requireSupabase } from "@/api/supabaseRequire";
 import { getErrorMessage } from "@/lib/errorMessage";
 import { sortByLocaleKey } from "@/lib/sortAlpha";
+import { BILLING_COLLECTION_EPS } from "@/lib/billingCollectionSemaphore";
 import { isInormeInformaticaOrganizacionIssuer } from "@/lib/billingPrivacyFooter";
 import type {
   BillingInvoiceLineRow,
@@ -1028,6 +1029,21 @@ export async function registerBillingReceipt(input: {
   const invoice = inv as BillingInvoiceRow;
   if (invoice.status === "DRAFT" || invoice.status === "CANCELLED") {
     throw new Error("Solo se pueden registrar cobros en facturas emitidas.");
+  }
+
+  const { data: prevRows, error: prevErr } = await sb.from("billing_receipts").select("amount").eq("invoice_id", input.invoiceId);
+  if (prevErr) throwErr(prevErr);
+  const prevCollected =
+    Math.round(
+      ((prevRows ?? []) as { amount: unknown }[]).reduce((acc, r) => acc + parseMoney(r.amount), 0) * 100
+    ) / 100;
+  const invoiceTotal = parseMoney(invoice.grand_total);
+  const maxPending = Math.round((invoiceTotal - prevCollected) * 100) / 100;
+  const nextCollected = Math.round((prevCollected + input.amount) * 100) / 100;
+  if (nextCollected > invoiceTotal + BILLING_COLLECTION_EPS) {
+    throw new Error(
+      `El cobro superaría el total de la factura (importe máximo pendiente: ${maxPending.toFixed(2)} €).`
+    );
   }
 
   const { data: inserted, error } = await sb
