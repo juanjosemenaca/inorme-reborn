@@ -86,6 +86,7 @@ import { cn } from "@/lib/utils";
 import type { ClientRecord } from "@/types/clients";
 import type {
   BillingInvoiceLineInput,
+  BillingInvoiceLineRecord,
   BillingInvoiceRecord,
   BillingIssuerRecord,
   BillingSeriesRecord,
@@ -116,6 +117,24 @@ function addCalendarMonthsYmd(isoYmd: string, monthsToAdd: number): string {
 
 const NEW_DRAFT_COPY_LINES_NONE = "__none__";
 
+/**
+ * Serie por defecto al crear un borrador nuevo: la «general» del emisor
+ * (en datos semilla el código es `A`; numeración tipo A-AAAA/NNNN).
+ */
+function pickDefaultSeriesForNewDraft(seriesList: BillingSeriesRecord[]): BillingSeriesRecord | undefined {
+  if (seriesList.length === 0) return undefined;
+  const codeNorm = (code: string) => code.trim();
+  const exactA = seriesList.find((s) => codeNorm(s.code).toUpperCase() === "A");
+  if (exactA) return exactA;
+  const aHyphen = seriesList.find((s) => /^A-/i.test(codeNorm(s.code)));
+  if (aHyphen) return aHyphen;
+  const generalLabel = seriesList.find((s) => /\bgeneral\b/i.test(s.label));
+  if (generalLabel) return generalLabel;
+  return [...seriesList].sort((a, b) =>
+    codeNorm(a.code).localeCompare(codeNorm(b.code), undefined, { sensitivity: "base" })
+  )[0];
+}
+
 /** Etiqueta compacta para elegir factura origen (mismo cliente). */
 function formatInvoiceCopySourceLabel(inv: BillingInvoiceRecord, localeTag: string, draftLabel: string): string {
   const ref =
@@ -130,6 +149,95 @@ function formatInvoiceCopySourceLabel(inv: BillingInvoiceRecord, localeTag: stri
     : "—";
   const money = new Intl.NumberFormat(localeTag, { style: "currency", currency: "EUR" }).format(inv.grandTotal);
   return `${ref} · ${dateLabel} · ${money}`;
+}
+
+function invoiceCopySourceLineTypeLabel(lineType: BillingInvoiceLineRecord["lineType"], t: (key: string) => string): string {
+  switch (lineType) {
+    case "BILLABLE":
+      return t("admin.billing.line_type_billable");
+    case "BLOCK_TITLE":
+      return t("admin.billing.line_type_block_title");
+    case "BLOCK_SUBTITLE":
+      return t("admin.billing.line_type_block_subtitle");
+    case "CONCEPT":
+      return t("admin.billing.line_type_concept");
+    default:
+      return lineType;
+  }
+}
+
+/** Palabras extra para filtrar en el selector (además del número/fecha/total). */
+function buildInvoiceCopySourceKeywords(inv: BillingInvoiceRecord, headerLabel: string): string[] {
+  const set = new Set<string>();
+  const add = (s: string | null | undefined) => {
+    const v = (s ?? "").trim();
+    if (v) set.add(v);
+  };
+  add(headerLabel);
+  if (inv.invoiceNumber != null && inv.fiscalYear != null) {
+    add(`${inv.seriesCode}-${inv.fiscalYear}/${String(inv.invoiceNumber).padStart(4, "0")}`);
+  }
+  add(inv.seriesCode);
+  for (const line of inv.lines) {
+    add(line.description);
+    add(String(line.quantity));
+    add(String(line.unitPrice));
+    add(String(line.lineTotal));
+  }
+  return [...set];
+}
+
+function InvoiceCopySourceOptionPreview(props: {
+  inv: BillingInvoiceRecord;
+  headerLabel: string;
+  localeTag: string;
+  t: (key: string) => string;
+}) {
+  const { inv, headerLabel, localeTag, t } = props;
+  const moneyFmt = new Intl.NumberFormat(localeTag, { style: "currency", currency: "EUR" });
+  const qtyFmt = new Intl.NumberFormat(localeTag, { maximumFractionDigits: 4 });
+  const sorted = [...inv.lines].sort((a, b) => a.lineOrder - b.lineOrder);
+
+  return (
+    <div className="space-y-1.5 py-0.5">
+      <div className="font-medium leading-snug text-foreground">{headerLabel}</div>
+      <ul className="max-h-36 space-y-1.5 overflow-y-auto border-l-2 border-border pl-2">
+        {sorted.map((line) => {
+          const typeLbl = invoiceCopySourceLineTypeLabel(line.lineType, t);
+          if (line.lineType !== "BILLABLE") {
+            return (
+              <li key={line.id} className="text-xs leading-snug text-muted-foreground">
+                <span className="font-medium text-foreground/90">{typeLbl}</span>
+                {line.description.trim() ? (
+                  <>
+                    <span className="mx-1">·</span>
+                    <span className="break-words">{line.description}</span>
+                  </>
+                ) : null}
+              </li>
+            );
+          }
+          const pctRaw = line.billableHoursPercent;
+          const pctRounded = pctRaw != null ? Math.round(Number(pctRaw)) : 100;
+          const pctSuffix =
+            pctRaw != null && Number.isFinite(Number(pctRaw)) && pctRounded !== 100 ? ` · ${pctRounded}%` : "";
+          const desc = line.description.trim() || "—";
+          return (
+            <li key={line.id} className="text-xs leading-snug text-muted-foreground">
+              <div className="break-words text-foreground/95">{desc}</div>
+              <div className="mt-0.5 grid grid-cols-[1fr_auto] gap-x-2 text-[11px] tabular-nums">
+                <span className="min-w-0">
+                  {qtyFmt.format(line.quantity)} × {moneyFmt.format(line.unitPrice)}
+                  {pctSuffix}
+                </span>
+                <span className="shrink-0 font-medium text-foreground">{moneyFmt.format(line.lineTotal)}</span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 /** Compara el borrador en pantalla con la última versión guardada en servidor. */
@@ -564,7 +672,8 @@ const AdminBilling = () => {
       return;
     }
     if (!newSeriesId || !seriesForNewDraft.some((s) => s.id === newSeriesId)) {
-      setNewSeriesId(seriesForNewDraft[0].id);
+      const preferred = pickDefaultSeriesForNewDraft(seriesForNewDraft);
+      if (preferred) setNewSeriesId(preferred.id);
     }
   }, [seriesForNewDraft, newSeriesId]);
 
@@ -1739,19 +1848,32 @@ const AdminBilling = () => {
                     <SearchableSelect
                       value={newCopyLinesFromInvoiceId}
                       onValueChange={setNewCopyLinesFromInvoiceId}
+                      minPopoverWidth={420}
                       options={[
                         {
                           value: NEW_DRAFT_COPY_LINES_NONE,
                           label: t("admin.billing.new_draft_copy_lines_none"),
                         },
-                        ...invoicesForNewDraftLineCopy.map((inv) => ({
-                          value: inv.id,
-                          label: formatInvoiceCopySourceLabel(
+                        ...invoicesForNewDraftLineCopy.map((inv) => {
+                          const label = formatInvoiceCopySourceLabel(
                             inv,
                             localeTag,
                             t("admin.billing.copy_source_draft_marker")
-                          ),
-                        })),
+                          );
+                          return {
+                            value: inv.id,
+                            label,
+                            keywords: buildInvoiceCopySourceKeywords(inv, label),
+                            content: (
+                              <InvoiceCopySourceOptionPreview
+                                inv={inv}
+                                headerLabel={label}
+                                localeTag={localeTag}
+                                t={t}
+                              />
+                            ),
+                          };
+                        }),
                       ]}
                     />
                   )}

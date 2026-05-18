@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import {
   Building2,
   ClipboardList,
@@ -55,6 +55,22 @@ function fillKpiTemplate(template: string, vars: Record<string, string | number>
     template
   );
 }
+
+/** Escala de grises por mes (quesito facturación panel admin). */
+const DASHBOARD_BILLING_PIE_COLORS = [
+  "#171717",
+  "#262626",
+  "#404040",
+  "#525252",
+  "#737373",
+  "#a3a3a3",
+  "#1c1917",
+  "#292524",
+  "#44403c",
+  "#57534e",
+  "#78716c",
+  "#a8a29e",
+] as const;
 
 function countProjectsOngoing(projects: { endDate: string }[]): number {
   const today = new Date().toISOString().slice(0, 10);
@@ -249,16 +265,6 @@ export function AdminDashboardAdmin({ session }: Props) {
 
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
 
-  const formatEuroChart = useMemo(
-    () =>
-      new Intl.NumberFormat(localeTag, {
-        style: "currency",
-        currency: "EUR",
-        maximumFractionDigits: 0,
-        minimumFractionDigits: 0,
-      }),
-    [localeTag]
-  );
   const formatEuroTotalDetailed = useMemo(
     () =>
       new Intl.NumberFormat(localeTag, {
@@ -298,6 +304,19 @@ export function AdminDashboardAdmin({ session }: Props) {
   );
   const billingMonthlyChartHasData = useMemo(
     () => billingMonthlyChartRows.some((r) => r.total > 0),
+    [billingMonthlyChartRows]
+  );
+
+  /** Solo meses con facturación > 0 (evita trozos vacíos en el quesito). */
+  const billingMonthlyPieData = useMemo(
+    () =>
+      billingMonthlyChartRows
+        .map((row, i) => ({
+          name: row.labelShort,
+          value: row.total,
+          fill: DASHBOARD_BILLING_PIE_COLORS[i % DASHBOARD_BILLING_PIE_COLORS.length],
+        }))
+        .filter((d) => d.value > 0),
     [billingMonthlyChartRows]
   );
 
@@ -526,28 +545,25 @@ export function AdminDashboardAdmin({ session }: Props) {
                             {t("admin.dashboard.admin_billing_monthly_chart_empty")}
                           </p>
                         ) : (
-                          <div className="h-[148px] w-full">
+                          <div className="h-[208px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                              <BarChart
-                                data={billingMonthlyChartRows}
-                                margin={{ top: 4, right: 2, left: 4, bottom: 20 }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                                <XAxis
-                                  dataKey="labelShort"
-                                  tick={{ fontSize: 9 }}
-                                  interval={0}
-                                  angle={-32}
-                                  textAnchor="end"
-                                  height={44}
-                                  stroke="hsl(var(--muted-foreground))"
-                                />
-                                <YAxis
-                                  tickFormatter={(v) => formatEuroChart.format(v)}
-                                  tick={{ fontSize: 9 }}
-                                  width={44}
-                                  stroke="hsl(var(--muted-foreground))"
-                                />
+                              <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                                <Pie
+                                  data={billingMonthlyPieData}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="42%"
+                                  innerRadius={38}
+                                  outerRadius={68}
+                                  paddingAngle={2}
+                                  stroke="hsl(var(--background))"
+                                  strokeWidth={2}
+                                >
+                                  {billingMonthlyPieData.map((entry) => (
+                                    <Cell key={entry.name} fill={entry.fill} />
+                                  ))}
+                                </Pie>
                                 <Tooltip
                                   formatter={(value: number | undefined) =>
                                     value != null ? formatEuroTotalDetailed.format(value) : ""
@@ -561,14 +577,15 @@ export function AdminDashboardAdmin({ session }: Props) {
                                     color: "hsl(var(--popover-foreground))",
                                   }}
                                 />
-                                <Bar
-                                  dataKey="total"
-                                  name={t("admin.dashboard.admin_billing_monthly_chart_series")}
-                                  fill="#6366f1"
-                                  radius={[3, 3, 0, 0]}
-                                  maxBarSize={28}
+                                <Legend
+                                  layout="horizontal"
+                                  verticalAlign="bottom"
+                                  wrapperStyle={{ fontSize: 9, paddingTop: 4 }}
+                                  formatter={(value) => (
+                                    <span className="text-muted-foreground">{value}</span>
+                                  )}
                                 />
-                              </BarChart>
+                              </PieChart>
                             </ResponsiveContainer>
                           </div>
                         )}

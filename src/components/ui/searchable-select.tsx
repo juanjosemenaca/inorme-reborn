@@ -17,6 +17,10 @@ export type SearchableSelectOption = {
   value: string;
   label: string;
   disabled?: boolean;
+  /** Fila enriquecida en el desplegable; si no, se muestra `label`. */
+  content?: React.ReactNode;
+  /** Términos extra para el filtro de búsqueda (además de `label`). */
+  keywords?: string[];
 };
 
 export type SearchableSelectProps = {
@@ -33,6 +37,8 @@ export type SearchableSelectProps = {
   /** Clases del botón disparador (mismo estilo base que SelectTrigger) */
   className?: string;
   contentClassName?: string;
+  /** Ancho mínimo del panel (útil si el contenido es ancho). */
+  minPopoverWidth?: number;
   /** Si es false, no se muestra la caja de búsqueda (listas muy cortas) */
   searchable?: boolean;
   id?: string;
@@ -52,6 +58,7 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
       disabled,
       className,
       contentClassName,
+      minPopoverWidth,
       searchable = true,
       id,
       "aria-invalid": ariaInvalid,
@@ -114,29 +121,35 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
           align="start"
           className={cn("p-0", contentClassName)}
           style={{
-            width: panelWidth ? Math.max(panelWidth, 200) : undefined,
-            minWidth: panelWidth ? undefined : 220,
+            width: panelWidth ? Math.max(panelWidth, minPopoverWidth ?? 200) : minPopoverWidth,
+            minWidth: panelWidth ? undefined : minPopoverWidth ?? 220,
           }}
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <Command key={cmdKey} shouldFilter={searchable}>
             {searchable && <CommandInput placeholder={searchPlaceholder} />}
-            <CommandList>
+            <CommandList className="max-h-[min(70vh,22rem)] overflow-y-auto">
               <CommandEmpty>{emptyText}</CommandEmpty>
               <CommandGroup>
                 {options.map((opt) => (
                   <CommandItem
                     key={opt.value}
                     value={opt.value}
-                    keywords={[opt.label]}
+                    keywords={[opt.label, ...(opt.keywords ?? [])]}
                     disabled={opt.disabled}
+                    className="items-start"
                     onSelect={() => {
                       onValueChange(opt.value);
                       setOpen(false);
                     }}
                   >
-                    <Check className={cn("mr-2 h-4 w-4 shrink-0", value === opt.value ? "opacity-100" : "opacity-0")} />
-                    <span className="truncate">{opt.label}</span>
+                    <Check
+                      className={cn(
+                        "mr-2 mt-1 h-4 w-4 shrink-0",
+                        value === opt.value ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    <div className="min-w-0 flex-1">{opt.content ?? <span className="truncate">{opt.label}</span>}</div>
                   </CommandItem>
                 ))}
               </CommandGroup>
