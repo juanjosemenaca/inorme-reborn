@@ -392,6 +392,8 @@ const AdminBilling = () => {
   const [newIssuerId, setNewIssuerId] = useState("");
   const [newSeriesIssuerId, setNewSeriesIssuerId] = useState("");
   const [rectificativeSeriesId, setRectificativeSeriesId] = useState("");
+  /** Obligatorio al crear borrador rectificativo desde factura emitida. */
+  const [rectificativeReason, setRectificativeReason] = useState("");
   const [newSeriesCode, setNewSeriesCode] = useState("");
   const [newSeriesLabel, setNewSeriesLabel] = useState("");
   const [newClientId, setNewClientId] = useState("");
@@ -714,6 +716,10 @@ const AdminBilling = () => {
       setRectificativeSeriesId(seriesForRectificative[0].id);
     }
   }, [seriesForRectificative, rectificativeSeriesId]);
+
+  useEffect(() => {
+    setRectificativeReason("");
+  }, [selectedInvoiceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1040,9 +1046,12 @@ const AdminBilling = () => {
     mutationFn: async () => {
       if (!selectedInvoice) throw new Error("Factura no encontrada.");
       if (!rectificativeSeriesId) throw new Error("Selecciona serie.");
-      return createRectificativeDraftFromInvoice(selectedInvoice.id, rectificativeSeriesId);
+      const reason = rectificativeReason.trim();
+      if (!reason) throw new Error(t("admin.billing.rectificative_reason_required_error"));
+      return createRectificativeDraftFromInvoice(selectedInvoice.id, rectificativeSeriesId, reason);
     },
     onSuccess: async (draft) => {
+      setRectificativeReason("");
       await invalidateAll();
       setSelectedInvoiceId(draft.id);
       toast({ title: t("admin.billing.toast_rectificative_created") });
@@ -2703,7 +2712,13 @@ const AdminBilling = () => {
                       type="button"
                       variant="outline"
                       onClick={() => rectificativeMutation.mutate()}
-                      disabled={rectificativeMutation.isPending || !rectificativeSeriesId || seriesForRectificative.length === 0}
+                      disabled={
+                        rectificativeMutation.isPending ||
+                        !rectificativeSeriesId ||
+                        seriesForRectificative.length === 0 ||
+                        selectedInvoice.status === "CANCELLED" ||
+                        !rectificativeReason.trim()
+                      }
                     >
                       {rectificativeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Receipt className="h-4 w-4 mr-2" />}
                       {t("admin.billing.action_rectificative")}
@@ -2728,6 +2743,17 @@ const AdminBilling = () => {
                         value: s.id,
                         label: `${s.code} · ${s.label}`,
                       }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5 max-w-xl">
+                    <Label className="text-xs">{t("admin.billing.rectificative_reason_label")}</Label>
+                    <p className="text-xs text-muted-foreground">{t("admin.billing.rectificative_reason_hint")}</p>
+                    <Textarea
+                      rows={3}
+                      value={rectificativeReason}
+                      onChange={(e) => setRectificativeReason(e.target.value)}
+                      placeholder={t("admin.billing.rectificative_reason_placeholder")}
+                      className="text-sm resize-y min-h-[4.5rem]"
                     />
                   </div>
                 </div>
