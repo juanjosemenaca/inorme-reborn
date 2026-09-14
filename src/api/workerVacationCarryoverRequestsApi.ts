@@ -4,6 +4,7 @@ import { requireSupabase } from "@/api/supabaseRequire";
 import { getErrorMessage } from "@/lib/errorMessage";
 import type { WorkerVacationCarryoverRequestRow } from "@/types/database";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
+import { vacationStandardCarryoverBlockedFromClosedYear } from "@/lib/vacationCarryoverPolicy";
 
 function throwErr(error: unknown): never {
   throw new Error(getErrorMessage(error));
@@ -65,8 +66,12 @@ export async function countStandardVacationDaysInYear(
 export async function getUnusedStandardDaysInYear(
   companyWorkerId: string,
   sourceYear: number,
-  annualAllowance: number
+  annualAllowance: number,
+  vacationAllowCarryoverFrom2025: boolean
 ): Promise<number> {
+  if (vacationStandardCarryoverBlockedFromClosedYear(sourceYear, vacationAllowCarryoverFrom2025)) {
+    return 0;
+  }
   const used = await countStandardVacationDaysInYear(companyWorkerId, sourceYear);
   return Math.max(0, annualAllowance - used);
 }
@@ -180,7 +185,8 @@ export async function submitCarryoverRequest(input: SubmitCarryoverRequestInput)
   const unused = await getUnusedStandardDaysInYear(
     profile.companyWorkerId,
     sourceYear,
-    worker.vacationDays
+    worker.vacationDays,
+    worker.vacationAllowCarryoverFrom2025
   );
   if (daysRequested > unused) {
     throw new Error(

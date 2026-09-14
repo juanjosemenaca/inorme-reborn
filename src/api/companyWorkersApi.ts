@@ -94,6 +94,7 @@ export type CreateCompanyWorkerInput = {
   autonomoVia?: AutonomoVia | null;
   workCalendarSiteId: string;
   vacationDays: number;
+  vacationAllowCarryoverFrom2025?: boolean;
   active: boolean;
 };
 
@@ -127,6 +128,7 @@ export async function createCompanyWorker(input: CreateCompanyWorkerInput): Prom
     autonomoVia,
     workCalendarSiteId: input.workCalendarSiteId,
     vacationDays: vd,
+    vacationAllowCarryoverFrom2025: input.vacationAllowCarryoverFrom2025 ?? false,
     active: input.active,
   });
   delete (record as { id?: string }).id;
@@ -163,6 +165,10 @@ export async function updateCompanyWorker(
     input.vacationDays !== undefined
       ? Math.min(365, Math.max(0, Math.floor(input.vacationDays)))
       : current.vacationDays;
+  const nextCarry2025 =
+    input.vacationAllowCarryoverFrom2025 !== undefined
+      ? input.vacationAllowCarryoverFrom2025
+      : current.vacationAllowCarryoverFrom2025;
   const patch = companyWorkerRecordToRowInsert({
     id,
     firstName: input.firstName !== undefined ? input.firstName.trim() : current.firstName,
@@ -177,6 +183,7 @@ export async function updateCompanyWorker(
     autonomoVia,
     workCalendarSiteId: nextSiteId,
     vacationDays: nextVacation,
+    vacationAllowCarryoverFrom2025: nextCarry2025,
     active: input.active !== undefined ? input.active : current.active,
   });
   const { data: updated, error } = await sb
@@ -194,6 +201,7 @@ export async function updateCompanyWorker(
       autonomo_via: patch.autonomo_via,
       work_calendar_site_id: patch.work_calendar_site_id,
       vacation_days: patch.vacation_days,
+      vacation_allow_carryover_from_2025: patch.vacation_allow_carryover_from_2025,
       active: patch.active,
     })
     .eq("id", id)

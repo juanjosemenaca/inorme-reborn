@@ -56,6 +56,7 @@ const schema = z
     city: z.string(),
     workCalendarSiteId: z.string().uuid(),
     vacationDays: z.coerce.number().int().min(0).max(365),
+    vacationAllowCarryoverFrom2025: z.boolean(),
     employmentType: employmentEnum,
     autonomoVia: autonomoViaEnum.optional().nullable(),
     providerId: z.string().optional(),
@@ -135,6 +136,7 @@ export function WorkerFormDialog({
       city: "",
       workCalendarSiteId: defaultSiteId,
       vacationDays: defaultVacation,
+      vacationAllowCarryoverFrom2025: false,
       employmentType: "FIJO",
       autonomoVia: null,
       providerId: "",
@@ -171,6 +173,7 @@ export function WorkerFormDialog({
         city: initial.city,
         workCalendarSiteId: initial.workCalendarSiteId,
         vacationDays: initial.vacationDays,
+        vacationAllowCarryoverFrom2025: initial.vacationAllowCarryoverFrom2025,
         employmentType: initial.employmentType,
         autonomoVia: initial.autonomoVia,
         providerId: initial.providerId ?? "",
@@ -187,6 +190,7 @@ export function WorkerFormDialog({
         city: "",
         workCalendarSiteId: defaultSiteId,
         vacationDays: defaultVacation,
+        vacationAllowCarryoverFrom2025: false,
         employmentType: "FIJO",
         autonomoVia: null,
         providerId: "",
@@ -345,6 +349,26 @@ export function WorkerFormDialog({
                       <Input type="number" min={0} max={365} step={1} {...field} />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="vacationAllowCarryoverFrom2025"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2 flex flex-row items-center justify-between gap-4 rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">
+                        {t("admin.workers.field_carryover_2025_exception")}
+                      </FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        {t("admin.workers.field_carryover_2025_exception_desc")}
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
                   </FormItem>
                 )}
               />

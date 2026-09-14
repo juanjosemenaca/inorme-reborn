@@ -47,8 +47,8 @@ export interface CompanyWorkerRecord {
   autonomoVia: AutonomoVia | null;
   /** Sede / calendario laboral (festivos y horario de verano). */
   workCalendarSiteId: string;
-  /** Días de vacaciones anuales (solo administración). */
-  vacationDays: number;
+/** Si true (solo excepción en ficha), puede solicitar traspaso desde el cierre estándar de 2025. */
+  vacationAllowCarryoverFrom2025: boolean;
   active: boolean;
   createdAt: string;
   updatedAt: string;

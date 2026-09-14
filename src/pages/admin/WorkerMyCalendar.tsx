@@ -108,8 +108,20 @@ const WorkerMyCalendar = () => {
     enabled: !!workerId && year > 2000,
   });
   const { data: unusedPrev = 0 } = useQuery({
-    queryKey: ["unusedStandardPrevYear", workerId, sourceYear, worker?.vacationDays] as const,
-    queryFn: () => getUnusedStandardDaysInYear(workerId!, sourceYear, worker!.vacationDays),
+    queryKey: [
+      "unusedStandardPrevYear",
+      workerId,
+      sourceYear,
+      worker?.vacationDays,
+      worker?.vacationAllowCarryoverFrom2025,
+    ] as const,
+    queryFn: () =>
+      getUnusedStandardDaysInYear(
+        workerId!,
+        sourceYear,
+        worker!.vacationDays,
+        worker!.vacationAllowCarryoverFrom2025
+      ),
     enabled: !!workerId && !!worker,
   });
 

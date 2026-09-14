@@ -170,6 +170,7 @@ const AdminCompanyWorkers = () => {
         autonomoVia: values.employmentType === "AUTONOMO" ? values.autonomoVia ?? null : null,
         workCalendarSiteId: values.workCalendarSiteId,
         vacationDays: values.vacationDays,
+        vacationAllowCarryoverFrom2025: values.vacationAllowCarryoverFrom2025,
         active: values.active,
       };
 

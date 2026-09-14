@@ -5,6 +5,7 @@ import { getErrorMessage } from "@/lib/errorMessage";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
 import { companyWorkerDisplayName } from "@/types/companyWorkers";
 import type { CompanyWorkerRecord } from "@/types/companyWorkers";
+import { vacationStandardCarryoverBlockedFromClosedYear } from "@/lib/vacationCarryoverPolicy";
 
 function throwSupabaseError(err: unknown): never {
   throw new Error(getErrorMessage(err));
@@ -126,6 +127,11 @@ export function computeVacationSummaries(
     const usedPrev = ym?.get(prevYear) ?? 0;
     const cUsed = carryoverInSelected.get(w.id) ?? 0;
     const cApp = carryoverApprovedByWorker.get(w.id) ?? 0;
+    const rawUnusedPrev = Math.max(0, allowance - usedPrev);
+    const unusedFromPreviousYear =
+      vacationStandardCarryoverBlockedFromClosedYear(prevYear, w.vacationAllowCarryoverFrom2025)
+        ? 0
+        : rawUnusedPrev;
     return {
       workerId: w.id,
       workerName: companyWorkerDisplayName(w),
@@ -141,7 +147,7 @@ export function computeVacationSummaries(
       selectedYear,
       previousYear: prevYear,
       usedInPreviousYear: usedPrev,
-      unusedFromPreviousYear: Math.max(0, allowance - usedPrev),
+      unusedFromPreviousYear,
     };
   });
 }

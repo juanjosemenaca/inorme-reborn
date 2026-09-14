@@ -319,6 +319,7 @@ export function companyWorkerRowToDomain(row: CompanyWorkerRow): CompanyWorkerRe
     autonomoVia: row.autonomo_via as AutonomoVia | null,
     workCalendarSiteId: row.work_calendar_site_id,
     vacationDays: row.vacation_days,
+    vacationAllowCarryoverFrom2025: Boolean(row.vacation_allow_carryover_from_2025),
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -342,6 +343,7 @@ export function companyWorkerRecordToRowInsert(
     autonomo_via: record.autonomoVia,
     work_calendar_site_id: record.workCalendarSiteId,
     vacation_days: record.vacationDays,
+    vacation_allow_carryover_from_2025: record.vacationAllowCarryoverFrom2025,
     active: record.active,
   };
 }

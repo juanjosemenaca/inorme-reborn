@@ -33,12 +33,7 @@ import {
   billingInvoiceHasCollectionOutstanding,
   billingInvoiceOutstandingAmount,
 } from "@/lib/billingCollectionSemaphore";
-import {
-  draftGroupYearMonth,
-  formatInvoiceMonthHeading,
-  formatInvoiceMonthOnly,
-  issuedGroupYearMonth,
-} from "@/lib/billingInvoiceGroups";
+import { draftGroupYearMonth, formatInvoiceMonthHeading, issuedGroupYearMonth } from "@/lib/billingInvoiceGroups";
 import { useBillingInvoices } from "@/hooks/useBilling";
 import type { BillingInvoiceRecord } from "@/types/billing";
 import { useClients } from "@/hooks/useClients";
@@ -56,7 +51,7 @@ function fillKpiTemplate(template: string, vars: Record<string, string | number>
   );
 }
 
-/** Escala de grises por mes (quesito facturación panel admin). */
+/** Escala de grises por mes (quesito 3 meses facturación panel admin). */
 const DASHBOARD_BILLING_PIE_COLORS = [
   "#171717",
   "#262626",
@@ -131,54 +126,25 @@ function countBillingDraftsYm(invoices: BillingInvoiceRecord[], ym: string): num
   }).length;
 }
 
-function countBillingIssuedYm(invoices: BillingInvoiceRecord[], ym: string): number {
-  if (!/^\d{4}-\d{2}$/.test(ym)) return 0;
+/** Emitidas efectivas en Facturación (no borrador ni anulada). */
+function isEffectiveIssued(inv: BillingInvoiceRecord): boolean {
+  return inv.status !== "DRAFT" && inv.status !== "CANCELLED";
+}
+
+function aggregateEffectiveIssuedYm(invoices: BillingInvoiceRecord[], ym: string): { count: number; total: number } {
+  if (!/^\d{4}-\d{2}$/.test(ym)) return { count: 0, total: 0 };
   const ys = Number(ym.slice(0, 4));
   const ms = Number(ym.slice(5, 7));
-  return invoices.filter((inv) => {
-    if (inv.status === "DRAFT") return false;
-    const { y, m } = issuedGroupYearMonth(inv);
-    return y === ys && m === ms;
-  }).length;
-}
-
-function rolling12MonthsSlotsFromYm(endYm: string): { y: number; m: number }[] {
-  if (!/^\d{4}-\d{2}$/.test(endYm)) return [];
-  const endY = Number(endYm.slice(0, 4));
-  const endM = Number(endYm.slice(5, 7));
-  const rows: { y: number; m: number }[] = [];
-  for (let i = 11; i >= 0; i--) {
-    const t = new Date(endY, endM - 1 - i, 1);
-    rows.push({ y: t.getFullYear(), m: t.getMonth() + 1 });
-  }
-  return rows;
-}
-
-/** Total factura (`grandTotal`) por mes en los últimos 12 meses naturales hasta `endYm` (solo emitidas; sin borrador ni anuladas). */
-function issuedGrandTotalsLast12MonthsSeries(
-  invoices: BillingInvoiceRecord[],
-  endYm: string,
-  localeTag: string,
-  unknownMonthLabel: string
-): { labelShort: string; total: number }[] {
-  const slots = rolling12MonthsSlotsFromYm(endYm);
-  const ymKey = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
-  const sums = new Map<string, number>();
-  for (const { y, m } of slots) sums.set(ymKey(y, m), 0);
+  let count = 0;
+  let total = 0;
   for (const inv of invoices) {
-    if (inv.status === "DRAFT" || inv.status === "CANCELLED") continue;
+    if (!isEffectiveIssued(inv)) continue;
     const { y, m } = issuedGroupYearMonth(inv);
-    const key = ymKey(y, m);
-    if (!sums.has(key)) continue;
-    sums.set(key, (sums.get(key) ?? 0) + (Number(inv.grandTotal) || 0));
+    if (y !== ys || m !== ms) continue;
+    count += 1;
+    total += Number(inv.grandTotal) || 0;
   }
-  const multiYear = new Set(slots.map((s) => s.y)).size > 1;
-  return slots.map(({ y, m }) => ({
-    labelShort: multiYear
-      ? formatInvoiceMonthHeading(localeTag, y, m, unknownMonthLabel)
-      : formatInvoiceMonthOnly(localeTag, m, unknownMonthLabel),
-    total: Math.round((sums.get(ymKey(y, m)) ?? 0) * 100) / 100,
-  }));
+  return { count, total: Math.round(total * 100) / 100 };
 }
 
 export function AdminDashboardAdmin({ session }: Props) {
@@ -194,18 +160,23 @@ export function AdminDashboardAdmin({ session }: Props) {
 
   const billingYmCurrent = calendarYmShift(0);
   const billingYmPrevious = calendarYmShift(-1);
+  const billingYmMinus2 = calendarYmShift(-2);
 
   const billingDraftsThisMonth = useMemo(
     () => countBillingDraftsYm(billingInvoices, billingYmCurrent),
     [billingInvoices, billingYmCurrent]
   );
-  const billingIssuedThisMonth = useMemo(
-    () => countBillingIssuedYm(billingInvoices, billingYmCurrent),
-    [billingInvoices, billingYmCurrent]
+  const billingAggMinus2 = useMemo(
+    () => aggregateEffectiveIssuedYm(billingInvoices, billingYmMinus2),
+    [billingInvoices, billingYmMinus2]
   );
-  const billingIssuedPrevMonth = useMemo(
-    () => countBillingIssuedYm(billingInvoices, billingYmPrevious),
+  const billingAggPrev = useMemo(
+    () => aggregateEffectiveIssuedYm(billingInvoices, billingYmPrevious),
     [billingInvoices, billingYmPrevious]
+  );
+  const billingAggCurrent = useMemo(
+    () => aggregateEffectiveIssuedYm(billingInvoices, billingYmCurrent),
+    [billingInvoices, billingYmCurrent]
   );
 
   const overviewPending =
@@ -292,33 +263,55 @@ export function AdminDashboardAdmin({ session }: Props) {
     [billingInvoices]
   );
 
-  const billingMonthlyChartRows = useMemo(
-    () =>
-      issuedGrandTotalsLast12MonthsSeries(
-        billingInvoices,
-        billingYmCurrent,
-        localeTag,
-        t("admin.billing.group_month_unknown")
-      ),
-    [billingInvoices, billingYmCurrent, localeTag, t]
-  );
-  const billingMonthlyChartHasData = useMemo(
-    () => billingMonthlyChartRows.some((r) => r.total > 0),
-    [billingMonthlyChartRows]
-  );
+  /** Comparativa rápida: importe emitido por mes natural (últimos 3 meses). */
+  const billingLast3MonthsChartData = useMemo(() => {
+    const unk = t("admin.billing.group_month_unknown");
+    const mkLabel = (ym: string) =>
+      formatInvoiceMonthHeading(localeTag, Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), unk);
+    return [
+      {
+        key: billingYmMinus2,
+        label: mkLabel(billingYmMinus2),
+        total: billingAggMinus2.total,
+        count: billingAggMinus2.count,
+      },
+      {
+        key: billingYmPrevious,
+        label: mkLabel(billingYmPrevious),
+        total: billingAggPrev.total,
+        count: billingAggPrev.count,
+      },
+      {
+        key: billingYmCurrent,
+        label: mkLabel(billingYmCurrent),
+        total: billingAggCurrent.total,
+        count: billingAggCurrent.count,
+      },
+    ];
+  }, [
+    billingYmMinus2,
+    billingYmPrevious,
+    billingYmCurrent,
+    billingAggMinus2,
+    billingAggPrev,
+    billingAggCurrent,
+    localeTag,
+    t,
+  ]);
 
-  /** Solo meses con facturación > 0 (evita trozos vacíos en el quesito). */
-  const billingMonthlyPieData = useMemo(
+  const billingLast3MonthsPieData = useMemo(
     () =>
-      billingMonthlyChartRows
+      billingLast3MonthsChartData
         .map((row, i) => ({
-          name: row.labelShort,
+          name: row.label,
           value: row.total,
+          count: row.count,
           fill: DASHBOARD_BILLING_PIE_COLORS[i % DASHBOARD_BILLING_PIE_COLORS.length],
         }))
         .filter((d) => d.value > 0),
-    [billingMonthlyChartRows]
+    [billingLast3MonthsChartData]
   );
+  const billingLast3MonthsPieHasData = billingLast3MonthsPieData.length > 0;
 
   const showAssignedDocsCard =
     fetchPending && !docsPending && pendingAssignedDocsCount > 0;
@@ -456,208 +449,264 @@ export function AdminDashboardAdmin({ session }: Props) {
                   <CardDescription>{t("admin.dashboard.admin_billing_section_hint")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="rounded-lg border border-border/80 bg-muted/25 px-4 py-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {t("admin.dashboard.admin_billing_prev_month_label")}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">
-                      {formatInvoiceMonthHeading(
-                        localeTag,
-                        Number(billingYmPrevious.slice(0, 4)),
-                        Number(billingYmPrevious.slice(5, 7)),
-                        billingYmPrevious
-                      )}
-                    </p>
-                    <Link
-                      to={`/admin/facturacion?tab=issued&period=${encodeURIComponent(billingYmPrevious)}`}
-                      className={cn(
-                        "mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background px-3 py-3 outline-none ring-offset-background transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
-                      )}
-                    >
-                      <span className="text-sm font-medium">{t("admin.dashboard.admin_billing_row_issued")}</span>
-                      <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-                        {billingIssuedPrevMonth > 999 ? "999+" : billingIssuedPrevMonth}
-                      </span>
-                      <span
-                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full sm:w-auto sm:shrink-0")}
-                      >
-                        {t("admin.dashboard.admin_dashboard_billing_open")}
-                      </span>
-                    </Link>
+                  <div className="flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:items-stretch sm:gap-x-4 sm:gap-y-0">
+                    <div className="min-w-0 w-full rounded-lg border border-green-200/90 bg-green-50 px-4 py-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/35">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-green-900/70 dark:text-emerald-300/80">
+                        {t("admin.dashboard.admin_billing_current_month_label")}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold leading-tight text-green-950 dark:text-emerald-50">
+                        {formatInvoiceMonthHeading(
+                          localeTag,
+                          Number(billingYmCurrent.slice(0, 4)),
+                          Number(billingYmCurrent.slice(5, 7)),
+                          billingYmCurrent
+                        )}
+                      </p>
+                      <dl className="mt-3 space-y-2 text-sm">
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-green-900/65 dark:text-emerald-200/70">{t("admin.dashboard.admin_billing_row_issued")}</dt>
+                          <dd className="font-bold tabular-nums text-green-950 dark:text-emerald-50">
+                            {billingAggCurrent.count > 999 ? "999+" : billingAggCurrent.count}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-green-900/65 dark:text-emerald-200/70">{t("admin.dashboard.admin_billing_row_amount")}</dt>
+                          <dd className="font-semibold tabular-nums leading-tight text-green-950 dark:text-emerald-50">
+                            {formatEuroTotalDetailed.format(billingAggCurrent.total)}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="mt-3 space-y-2.5">
+                        <Link
+                          to={`/admin/facturacion?tab=drafts&period=${encodeURIComponent(billingYmCurrent)}`}
+                          className={cn(
+                            "flex flex-col gap-2 rounded-md border border-green-200/80 bg-white/70 px-3 py-2.5 outline-none ring-offset-background transition-colors hover:bg-white/95 focus-visible:ring-2 focus-visible:ring-ring dark:border-emerald-800/50 dark:bg-emerald-950/50 dark:hover:bg-emerald-950/70"
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium text-green-950 dark:text-emerald-50">{t("admin.dashboard.admin_billing_row_drafts")}</span>
+                            <span className="text-xl font-bold tabular-nums tracking-tight text-green-950 dark:text-emerald-50">
+                              {billingDraftsThisMonth > 999 ? "999+" : billingDraftsThisMonth}
+                            </span>
+                          </div>
+                          <span className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 w-full border-green-300/80 bg-white/90 text-xs hover:bg-white dark:border-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50")}>
+                            {t("admin.dashboard.admin_dashboard_billing_open")}
+                          </span>
+                        </Link>
+                        <Link
+                          to={`/admin/facturacion?tab=issued&period=${encodeURIComponent(billingYmCurrent)}`}
+                          className={cn(
+                            "flex flex-col gap-2 rounded-md border border-green-200/80 bg-white/70 px-3 py-2.5 outline-none ring-offset-background transition-colors hover:bg-white/95 focus-visible:ring-2 focus-visible:ring-ring dark:border-emerald-800/50 dark:bg-emerald-950/50 dark:hover:bg-emerald-950/70"
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium text-green-950 dark:text-emerald-50">{t("admin.dashboard.admin_billing_row_issued")}</span>
+                            <span className="text-xl font-bold tabular-nums tracking-tight text-green-950 dark:text-emerald-50">
+                              {billingAggCurrent.count > 999 ? "999+" : billingAggCurrent.count}
+                            </span>
+                          </div>
+                          <span className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 w-full border-green-300/80 bg-white/90 text-xs hover:bg-white dark:border-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50")}>
+                            {t("admin.dashboard.admin_dashboard_billing_open")}
+                          </span>
+                        </Link>
+                      </div>
+                    </div>
+
+                    <div className="flex min-h-0 min-w-0 w-full flex-col gap-3 sm:h-full">
+                      <div className="flex min-h-0 flex-1 flex-col justify-between gap-3 rounded-lg border border-border/80 bg-muted/25 px-4 py-4 shadow-sm">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            {t("admin.dashboard.admin_billing_two_months_ago_label")}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold leading-tight text-foreground">
+                            {formatInvoiceMonthHeading(
+                              localeTag,
+                              Number(billingYmMinus2.slice(0, 4)),
+                              Number(billingYmMinus2.slice(5, 7)),
+                              billingYmMinus2
+                            )}
+                          </p>
+                          <dl className="mt-3 space-y-2 text-sm">
+                            <div className="flex justify-between gap-2">
+                              <dt className="text-muted-foreground">{t("admin.dashboard.admin_billing_row_issued")}</dt>
+                              <dd className="font-bold tabular-nums text-foreground">
+                                {billingAggMinus2.count > 999 ? "999+" : billingAggMinus2.count}
+                              </dd>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <dt className="text-muted-foreground">{t("admin.dashboard.admin_billing_row_amount")}</dt>
+                              <dd className="font-semibold tabular-nums text-foreground leading-tight">
+                                {formatEuroTotalDetailed.format(billingAggMinus2.total)}
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
+                        <Link
+                          to={`/admin/facturacion?tab=issued&period=${encodeURIComponent(billingYmMinus2)}`}
+                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-auto h-9 w-full shrink-0 text-sm")}
+                        >
+                          {t("admin.dashboard.admin_dashboard_billing_open")}
+                        </Link>
+                      </div>
+
+                      <div className="flex min-h-0 flex-1 flex-col justify-between gap-3 rounded-lg border border-border/80 bg-muted/25 px-4 py-4 shadow-sm">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            {t("admin.dashboard.admin_billing_prev_month_label")}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold leading-tight text-foreground">
+                            {formatInvoiceMonthHeading(
+                              localeTag,
+                              Number(billingYmPrevious.slice(0, 4)),
+                              Number(billingYmPrevious.slice(5, 7)),
+                              billingYmPrevious
+                            )}
+                          </p>
+                          <dl className="mt-3 space-y-2 text-sm">
+                            <div className="flex justify-between gap-2">
+                              <dt className="text-muted-foreground">{t("admin.dashboard.admin_billing_row_issued")}</dt>
+                              <dd className="font-bold tabular-nums text-foreground">
+                                {billingAggPrev.count > 999 ? "999+" : billingAggPrev.count}
+                              </dd>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <dt className="text-muted-foreground">{t("admin.dashboard.admin_billing_row_amount")}</dt>
+                              <dd className="font-semibold tabular-nums text-foreground leading-tight">
+                                {formatEuroTotalDetailed.format(billingAggPrev.total)}
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
+                        <Link
+                          to={`/admin/facturacion?tab=issued&period=${encodeURIComponent(billingYmPrevious)}`}
+                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-auto h-9 w-full shrink-0 text-sm")}
+                        >
+                          {t("admin.dashboard.admin_dashboard_billing_open")}
+                        </Link>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="rounded-lg border border-border/80 px-4 py-4">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {t("admin.dashboard.admin_billing_current_month_label")}
+                      {t("admin.dashboard.admin_billing_bar_chart_title")}
                     </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">
-                      {formatInvoiceMonthHeading(
-                        localeTag,
-                        Number(billingYmCurrent.slice(0, 4)),
-                        Number(billingYmCurrent.slice(5, 7)),
-                        billingYmCurrent
+                    <div className="mt-3 h-[220px] w-full">
+                      {!billingLast3MonthsPieHasData ? (
+                        <p className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                          {t("admin.dashboard.admin_billing_bar_chart_empty")}
+                        </p>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                            <Pie
+                              data={billingLast3MonthsPieData}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%"
+                              cy="42%"
+                              innerRadius={38}
+                              outerRadius={68}
+                              paddingAngle={2}
+                              stroke="hsl(var(--background))"
+                              strokeWidth={2}
+                            >
+                              {billingLast3MonthsPieData.map((entry) => (
+                                <Cell key={entry.name} fill={entry.fill} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null;
+                                const p = payload[0].payload as {
+                                  name: string;
+                                  value: number;
+                                  count: number;
+                                };
+                                return (
+                                  <div className="rounded-md border border-border bg-popover px-3 py-2 text-xs shadow-md">
+                                    <p className="font-medium text-popover-foreground">{p.name}</p>
+                                    <p className="mt-0.5 tabular-nums text-popover-foreground">
+                                      {formatEuroTotalDetailed.format(p.value)}
+                                    </p>
+                                    <p className="mt-1 text-muted-foreground">
+                                      {fillKpiTemplate(t("admin.dashboard.admin_billing_bar_tooltip_invoices"), {
+                                        count: p.count,
+                                      })}
+                                    </p>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Legend
+                              layout="horizontal"
+                              verticalAlign="bottom"
+                              wrapperStyle={{ fontSize: 10, paddingTop: 4 }}
+                              formatter={(value) => (
+                                <span className="text-muted-foreground">{value}</span>
+                              )}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
                       )}
-                    </p>
-                    <div className="mt-3 space-y-3">
-                      <Link
-                        to={`/admin/facturacion?tab=drafts&period=${encodeURIComponent(billingYmCurrent)}`}
-                        className={cn(
-                          "flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/15 px-3 py-3 outline-none ring-offset-background transition-colors hover:bg-muted/35 focus-visible:ring-2 focus-visible:ring-ring"
-                        )}
-                      >
-                        <span className="text-sm font-medium">{t("admin.dashboard.admin_billing_row_drafts")}</span>
-                        <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-                          {billingDraftsThisMonth > 999 ? "999+" : billingDraftsThisMonth}
-                        </span>
-                        <span
-                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full sm:w-auto sm:shrink-0")}
-                        >
-                          {t("admin.dashboard.admin_dashboard_billing_open")}
-                        </span>
-                      </Link>
-                      <Link
-                        to={`/admin/facturacion?tab=issued&period=${encodeURIComponent(billingYmCurrent)}`}
-                        className={cn(
-                          "flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/15 px-3 py-3 outline-none ring-offset-background transition-colors hover:bg-muted/35 focus-visible:ring-2 focus-visible:ring-ring"
-                        )}
-                      >
-                        <span className="text-sm font-medium">{t("admin.dashboard.admin_billing_row_issued")}</span>
-                        <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-                          {billingIssuedThisMonth > 999 ? "999+" : billingIssuedThisMonth}
-                        </span>
-                        <span
-                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full sm:w-auto sm:shrink-0")}
-                        >
-                          {t("admin.dashboard.admin_dashboard_billing_open")}
-                        </span>
-                      </Link>
                     </div>
                   </div>
 
-                  <div className="border-t pt-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {t("admin.dashboard.admin_billing_monthly_chart_title")}
-                    </p>
-                    <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-                      <div className="min-w-0 w-full shrink-0 lg:max-w-[min(100%,340px)] lg:basis-[340px] space-y-2">
-                        {!billingMonthlyChartHasData ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t("admin.dashboard.admin_billing_monthly_chart_empty")}
+                  <div className="rounded-lg border border-border/80 px-4 py-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Link
+                        to="/admin/facturacion?tab=issued&collection=all"
+                        className={cn(
+                          "flex min-w-0 flex-col gap-2 rounded-md border border-border/50 bg-muted/10 px-3 py-3 outline-none ring-offset-background transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring"
+                        )}
+                      >
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="text-[10px] font-medium tracking-wide text-muted-foreground">
+                            {t("admin.dashboard.admin_billing_total_to_date_title")}
+                          </p>
+                          <p className="text-[10px] leading-snug text-muted-foreground/90">
+                            {fillKpiTemplate(t("admin.dashboard.admin_billing_total_to_date_cutoff"), {
+                              date: billingTodayLong,
+                            })}
+                          </p>
+                        </div>
+                        <p className="text-base font-medium tabular-nums tracking-tight text-muted-foreground">
+                          {formatEuroTotalDetailed.format(billingGrandTotalToDate)}
+                        </p>
+                      </Link>
+
+                      <Link
+                        to="/admin/facturacion?tab=issued&collection=outstanding"
+                        className={cn(
+                          "flex min-w-0 flex-col gap-2 rounded-md border border-border/50 bg-muted/10 px-3 py-3 outline-none ring-offset-background transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring"
+                        )}
+                      >
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="text-[10px] font-medium tracking-wide text-muted-foreground">
+                            {t("admin.dashboard.admin_billing_outstanding_total_title")}
+                          </p>
+                          <p className="text-[10px] leading-snug text-muted-foreground/90">
+                            {t("admin.dashboard.admin_billing_outstanding_total_hint")}
+                          </p>
+                        </div>
+                        <p className="text-base font-medium tabular-nums tracking-tight text-muted-foreground">
+                          {formatEuroTotalDetailed.format(billingPendingCollection.outstanding)}
+                        </p>
+                        {billingPendingCollection.count > 0 ? (
+                          <p className="text-[10px] leading-snug text-muted-foreground">
+                            {billingPendingCollection.count === 1
+                              ? t("admin.dashboard.admin_billing_outstanding_invoice_one")
+                              : fillKpiTemplate(t("admin.dashboard.admin_billing_outstanding_invoice_many"), {
+                                  count: billingPendingCollection.count,
+                                })}
                           </p>
                         ) : (
-                          <div className="h-[208px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-                                <Pie
-                                  data={billingMonthlyPieData}
-                                  dataKey="value"
-                                  nameKey="name"
-                                  cx="50%"
-                                  cy="42%"
-                                  innerRadius={38}
-                                  outerRadius={68}
-                                  paddingAngle={2}
-                                  stroke="hsl(var(--background))"
-                                  strokeWidth={2}
-                                >
-                                  {billingMonthlyPieData.map((entry) => (
-                                    <Cell key={entry.name} fill={entry.fill} />
-                                  ))}
-                                </Pie>
-                                <Tooltip
-                                  formatter={(value: number | undefined) =>
-                                    value != null ? formatEuroTotalDetailed.format(value) : ""
-                                  }
-                                  labelFormatter={(label) => String(label)}
-                                  contentStyle={{
-                                    fontSize: 12,
-                                    borderRadius: 8,
-                                    border: "1px solid hsl(var(--border))",
-                                    background: "hsl(var(--popover))",
-                                    color: "hsl(var(--popover-foreground))",
-                                  }}
-                                />
-                                <Legend
-                                  layout="horizontal"
-                                  verticalAlign="bottom"
-                                  wrapperStyle={{ fontSize: 9, paddingTop: 4 }}
-                                  formatter={(value) => (
-                                    <span className="text-muted-foreground">{value}</span>
-                                  )}
-                                />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
+                          <p className="text-[10px] leading-snug text-muted-foreground">
+                            {t("admin.dashboard.admin_billing_outstanding_none")}
+                          </p>
                         )}
-                      </div>
-
-                      <div className="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-stretch">
-                        <Link
-                          to="/admin/facturacion?tab=issued&collection=all"
-                          className={cn(
-                            "flex min-w-0 flex-1 flex-col gap-2 rounded-md border border-border/50 bg-muted/10 px-3 py-3 outline-none ring-offset-background transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring"
-                          )}
-                        >
-                          <div className="min-w-0 space-y-0.5">
-                            <p className="text-[10px] font-medium tracking-wide text-muted-foreground">
-                              {t("admin.dashboard.admin_billing_total_to_date_title")}
-                            </p>
-                            <p className="text-[10px] leading-snug text-muted-foreground/90">
-                              {fillKpiTemplate(t("admin.dashboard.admin_billing_total_to_date_cutoff"), {
-                                date: billingTodayLong,
-                              })}
-                            </p>
-                          </div>
-                          <p className="text-base font-medium tabular-nums tracking-tight text-muted-foreground">
-                            {formatEuroTotalDetailed.format(billingGrandTotalToDate)}
-                          </p>
-                        </Link>
-
-                        <Link
-                          to="/admin/facturacion?tab=issued&collection=outstanding"
-                          className={cn(
-                            "flex min-w-0 flex-1 flex-col gap-2 rounded-md border border-border/50 bg-muted/10 px-3 py-3 outline-none ring-offset-background transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring"
-                          )}
-                        >
-                          <div className="min-w-0 space-y-0.5">
-                            <p className="text-[10px] font-medium tracking-wide text-muted-foreground">
-                              {t("admin.dashboard.admin_billing_outstanding_total_title")}
-                            </p>
-                            <p className="text-[10px] leading-snug text-muted-foreground/90">
-                              {t("admin.dashboard.admin_billing_outstanding_total_hint")}
-                            </p>
-                          </div>
-                          <p className="text-base font-medium tabular-nums tracking-tight text-muted-foreground">
-                            {formatEuroTotalDetailed.format(billingPendingCollection.outstanding)}
-                          </p>
-                          {billingPendingCollection.count > 0 ? (
-                            <p className="text-[10px] leading-snug text-muted-foreground">
-                              {billingPendingCollection.count === 1
-                                ? t("admin.dashboard.admin_billing_outstanding_invoice_one")
-                                : fillKpiTemplate(t("admin.dashboard.admin_billing_outstanding_invoice_many"), {
-                                    count: billingPendingCollection.count,
-                                  })}
-                            </p>
-                          ) : (
-                            <p className="text-[10px] leading-snug text-muted-foreground">
-                              {t("admin.dashboard.admin_billing_outstanding_none")}
-                            </p>
-                          )}
-                        </Link>
-                      </div>
+                      </Link>
                     </div>
-                    <Link
-                      to="/admin/facturacion?tab=issued&collection=all"
-                      className={cn(
-                        buttonVariants({ variant: "ghost", size: "sm" }),
-                        "mt-3 h-8 w-fit px-2 text-xs text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {t("admin.dashboard.admin_dashboard_billing_open")}
-                    </Link>
-                    <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-                      {t("admin.dashboard.admin_billing_monthly_chart_footnote")}
-                    </p>
                   </div>
                 </CardContent>
               </Card>

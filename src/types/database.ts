@@ -57,6 +57,7 @@ export interface CompanyWorkerRow {
   autonomo_via: DbAutonomoVia | null;
   work_calendar_site_id: string;
   vacation_days: number;
+  vacation_allow_carryover_from_2025: boolean;
   active: boolean;
   created_at: string;
   updated_at: string;
