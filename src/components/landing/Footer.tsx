@@ -1,5 +1,8 @@
+import { Link } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { LEGAL_PATHS } from "@/constants/legalPaths";
+import { useScrollToSection } from "@/hooks/useScrollToSection";
 import { publicAssetUrl } from "@/lib/publicAssetUrl";
 
 const footerLinkKeys = [
@@ -13,9 +16,7 @@ const footerLinkKeys = [
 
 const Footer = () => {
   const { t } = useLanguage();
-  const scrollTo = (href: string) => {
-    document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
-  };
+  const scrollTo = useScrollToSection();
 
   return (
     <footer className="bg-section-dark relative">
@@ -25,14 +26,14 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-16">
           {/* Brand */}
           <div className="md:col-span-5">
-            <a href="#" className="inline-block">
+            <Link to="/" className="inline-block">
               <img
                 src={publicAssetUrl("logo-inorme.png")}
                 alt="Inorme S.L. - Informática, organización y métodos"
                 className="h-10 w-auto max-h-10 object-contain object-left [max-width:min(280px,85vw)]"
                 decoding="async"
               />
-            </a>
+            </Link>
             <p className="text-white/40 mt-4 text-sm leading-relaxed max-w-sm">
               {t("footer_tagline")}
             </p>
@@ -88,15 +89,15 @@ const Footer = () => {
           <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-white/25">
             <LanguageSwitcher variant="light" />
             <span className="text-white/10">|</span>
-            <button className="hover:text-white/50 transition-colors">
+            <Link to={LEGAL_PATHS.notice} className="hover:text-white/50 transition-colors">
               {t("footer_legal")}
-            </button>
-            <button className="hover:text-white/50 transition-colors">
+            </Link>
+            <Link to={LEGAL_PATHS.privacy} className="hover:text-white/50 transition-colors">
               {t("footer_privacy")}
-            </button>
-            <button className="hover:text-white/50 transition-colors">
+            </Link>
+            <Link to={LEGAL_PATHS.cookies} className="hover:text-white/50 transition-colors">
               {t("footer_cookies")}
-            </button>
+            </Link>
           </div>
         </div>
       </div>

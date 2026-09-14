@@ -10,6 +10,10 @@ import { PasswordChangeGate } from "@/components/admin/PasswordChangeGate";
 import { RoleRoute } from "@/components/admin/RoleRoute";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import LegalDocumentPage from "./pages/legal/LegalDocumentPage";
+import CookieConsentBanner from "@/components/landing/CookieConsentBanner";
+import ScrollToTop from "@/components/ScrollToTop";
+import { LEGAL_PATHS } from "@/constants/legalPaths";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -56,8 +60,13 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <ScrollToTop />
+            <CookieConsentBanner />
             <Routes>
               <Route path="/" element={<Index />} />
+              <Route path={LEGAL_PATHS.notice} element={<LegalDocumentPage documentId="notice" />} />
+              <Route path={LEGAL_PATHS.privacy} element={<LegalDocumentPage documentId="privacy" />} />
+              <Route path={LEGAL_PATHS.cookies} element={<LegalDocumentPage documentId="cookies" />} />
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route
                 path="/admin"

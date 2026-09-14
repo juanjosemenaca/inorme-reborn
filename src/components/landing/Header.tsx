@@ -11,6 +11,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useScrollToSection } from "@/hooks/useScrollToSection";
 import { publicAssetUrl } from "@/lib/publicAssetUrl";
 
 const navKeys = [
@@ -22,23 +23,31 @@ const navKeys = [
   { href: "#contacto", key: "nav_contact" },
 ] as const;
 
-const Header = () => {
+type HeaderProps = {
+  /** Fuerza el fondo claro desde el inicio, para páginas sin hero oscuro. */
+  alwaysSolid?: boolean;
+};
+
+const Header = ({ alwaysSolid = false }: HeaderProps) => {
   const { t } = useLanguage();
-  const [isScrolled, setIsScrolled] = useState(false);
+  const [hasScrolled, setHasScrolled] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
 
   const logoSrc = publicAssetUrl("logo-inorme.png");
+  const isScrolled = alwaysSolid || hasScrolled;
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 20);
+    const handleScroll = () => setHasScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  const scrollToSection = useScrollToSection();
+
   const scrollTo = (href: string) => {
     setSheetOpen(false);
-    document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
+    scrollToSection(href);
   };
 
   const sheetLinkClass =
@@ -53,7 +62,7 @@ const Header = () => {
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 min-h-[72px] py-2">
-        <a href="#" className="relative z-10 flex min-w-0 shrink items-center">
+        <Link to="/" className="relative z-10 flex min-w-0 shrink items-center">
           {!logoError ? (
             <div className="flex h-9 max-h-9 w-auto max-w-[min(280px,calc(100vw-8rem))] items-center">
               <img
@@ -71,7 +80,7 @@ const Header = () => {
               <span className={isScrolled ? "text-foreground" : "text-white"}>orme</span>
             </span>
           )}
-        </a>
+        </Link>
 
         {/* Navegación solo vía hamburguesa → Sheet. Sin breakpoints: mismo patrón en todos los dispositivos. */}
         <div className="flex shrink-0 items-center gap-2">

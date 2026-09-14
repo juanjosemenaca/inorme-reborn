@@ -13,7 +13,7 @@ export const BILLING_PDF_PRIVACY_NOTICE_INORME_ES =
   "Puede ejercitar los derechos de acceso, rectificación, supresión, limitación, oposición y portabilidad en cualquier momento, mediante escrito, acompañado de " +
   "copia de documento oficial que le identifique dirigido a la dirección Calle Entenza, Nº218-224, Local 2, 08.029, Les Corts (Barcelona), o al correo electrónico " +
   "juanjosemena@informe.com " +
-  "Puede consultar información adicional y detallada sobre Protección de Datos en nuestra Política de Privacidad del sitio web www.inorme.com";
+  "Puede consultar información adicional y detallada sobre Protección de Datos en nuestra Política de Privacidad del sitio web www.inorme.com/politica-privacidad";
 
 /** CIF de Informática Organización y Métodos S.L. (variantes B-60.340.601, espacios, etc.). */
 const INORME_IOM_TAX_ID_NORMALIZED = "B60340601";

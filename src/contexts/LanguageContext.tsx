@@ -13,7 +13,12 @@ import en from "@/locales/en.json";
 import adminEs from "@/locales/admin.es.json";
 import adminCa from "@/locales/admin.ca.json";
 import adminEn from "@/locales/admin.en.json";
+import legalEs from "@/locales/legal.es.json";
+import legalCa from "@/locales/legal.ca.json";
+import legalEn from "@/locales/legal.en.json";
 import { getTranslationValue } from "@/lib/i18nResolve";
+import type { LegalDocumentId } from "@/constants/legalPaths";
+import type { LegalDocumentContent } from "@/types/legal";
 
 /** Idiomas de la aplicación: castellano, catalán, inglés */
 export type Language = "es" | "ca" | "en";
@@ -30,10 +35,17 @@ const adminByLang = {
   en: adminEn as Record<string, unknown>,
 };
 
+const legalByLang = {
+  es: legalEs as Record<string, unknown>,
+  ca: legalCa as Record<string, unknown>,
+  en: legalEn as Record<string, unknown>,
+};
+
 function mergeTranslations(lang: Language): Record<string, unknown> {
   return {
     ...baseTranslations[lang],
     admin: adminByLang[lang],
+    legal: legalByLang[lang],
   };
 }
 
@@ -44,6 +56,7 @@ type LanguageContextValue = {
   setLanguage: (lang: Language) => void;
   t: (key: string) => string;
   tArray: (key: string) => string[];
+  tLegalDocument: (documentId: LegalDocumentId) => LegalDocumentContent | null;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
@@ -103,9 +116,20 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     [translations]
   );
 
+  const tLegalDocument = useCallback(
+    (documentId: LegalDocumentId): LegalDocumentContent | null => {
+      const value = getTranslationValue(translations, `legal.${documentId}`);
+      if (!value || typeof value !== "object") return null;
+      const doc = value as LegalDocumentContent;
+      if (typeof doc.title !== "string" || !Array.isArray(doc.sections)) return null;
+      return doc;
+    },
+    [translations]
+  );
+
   const value = useMemo<LanguageContextValue>(
-    () => ({ language, setLanguage, t, tArray }),
-    [language, setLanguage, t, tArray]
+    () => ({ language, setLanguage, t, tArray, tLegalDocument }),
+    [language, setLanguage, t, tArray, tLegalDocument]
   );
 
   return (

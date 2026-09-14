@@ -1,0 +1,192 @@
+{
+  "notice": {
+    "title": "Legal Notice",
+    "updated": "Last updated: 14 September 2026",
+    "intro": "In compliance with Law 34/2002 of 11 July on Information Society Services and Electronic Commerce (LSSI-CE), users are informed of the identifying details of the owner of this website.",
+    "sections": [
+      {
+        "title": "1. Identifying details of the owner",
+        "paragraphs": [
+          "Owner: INORME S.L. (Informática, Organización y Métodos S.L.).",
+          "Tax ID (CIF): B-60340601.",
+          "Registered office: Calle Entenza, 218-224, Local 2, 08029 Barcelona (Les Corts).",
+          "Contact email: admon@inorme.com.",
+          "Website: www.inorme.com."
+        ]
+      },
+      {
+        "title": "2. Purpose",
+        "paragraphs": [
+          "This website aims to provide information about the activities of INORME S.L., a technology consultancy specialised in the financial sector, and to give authorised clients and users access to the corporate backoffice.",
+          "Browsing the site implies user status and acceptance of these terms, without prejudice to any specific conditions applicable to access to the private administration area."
+        ]
+      },
+      {
+        "title": "3. Terms of use",
+        "paragraphs": [
+          "The user agrees to make appropriate use of the contents and services offered through the website, refraining from using them for unlawful activities, acts contrary to good faith or public order, or actions that may harm third parties.",
+          "INORME S.L. reserves the right to modify, suspend or restrict access to certain contents or features, especially those reserved for authenticated users, when it deems this appropriate for the proper operation of the service or for security reasons."
+        ]
+      },
+      {
+        "title": "4. Intellectual and industrial property",
+        "paragraphs": [
+          "The contents of the website, including texts, images, logos, designs, source code and other elements, are owned by INORME S.L. or by third parties that have authorised their use, and are protected by Spanish and international intellectual and industrial property regulations.",
+          "Reproduction, distribution, public communication or transformation of such contents is prohibited without the express written authorisation of INORME S.L., except where legally permitted."
+        ]
+      },
+      {
+        "title": "5. Links",
+        "paragraphs": [
+          "The website may include links to third-party sites. INORME S.L. assumes no responsibility for the contents, policies or practices of such external sites.",
+          "The inclusion of links does not imply any relationship, approval or sponsorship by INORME S.L."
+        ]
+      },
+      {
+        "title": "6. Liability",
+        "paragraphs": [
+          "INORME S.L. does not guarantee the absence of interruptions or errors in access to the website, although it will take reasonable measures to prevent or correct them.",
+          "INORME S.L. shall not be liable for damages arising from use of the website when they result from causes beyond its reasonable control, misuse by the user or information provided by third parties."
+        ]
+      },
+      {
+        "title": "7. Applicable law and jurisdiction",
+        "paragraphs": [
+          "These terms are governed by Spanish law.",
+          "For the resolution of any dispute, the parties submit to the Courts and Tribunals of Barcelona, unless consumer and user regulations provide otherwise."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "updated": "Last updated: 14 September 2026",
+    "intro": "In accordance with Regulation (EU) 2016/679 (GDPR) and Organic Law 3/2018 of 5 December on the Protection of Personal Data and guarantee of digital rights (LOPDGDD), INORME S.L. provides information on the processing of personal data collected through this website and associated services.",
+    "sections": [
+      {
+        "title": "1. Data controller",
+        "paragraphs": [
+          "Controller: INORME S.L. (Informática, Organización y Métodos S.L.).",
+          "Tax ID (CIF): B-60340601.",
+          "Address: Calle Entenza, 218-224, Local 2, 08029 Barcelona (Les Corts).",
+          "Email: admon@inorme.com.",
+          "Email for exercising data protection rights: juanjosemena@inorme.com."
+        ]
+      },
+      {
+        "title": "2. Purposes and legal basis",
+        "paragraphs": [
+          "Management of enquiries received through the contact form or email: to handle your request and maintain related communications. Legal basis: data subject consent and, where applicable, legitimate interest in providing a commercial or professional response.",
+          "Access to the backoffice and corporate services: management of the employment or professional relationship, authentication, time tracking, holidays, billing, documentation and other features enabled for authorised users. Legal basis: performance of an employment or commercial contract, compliance with legal obligations and, where applicable, consent.",
+          "Billing and commercial relationship with clients: issuing documents and complying with accounting, tax and commercial obligations. Legal basis: contract performance and compliance with legal obligations.",
+          "Security and service improvement: prevention of unauthorised access, logging of technical activity and retention of evidence where appropriate. Legal basis: legitimate interest and compliance with legal obligations."
+        ]
+      },
+      {
+        "title": "3. Categories of data",
+        "paragraphs": [
+          "Identification and contact data (name, email, company, telephone).",
+          "Professional and employment data of workers and backoffice users.",
+          "Billing, client, supplier and project data processed in the corporate environment.",
+          "Technical browsing and authentication data strictly necessary for the operation of the service."
+        ]
+      },
+      {
+        "title": "4. Recipients and processors",
+        "paragraphs": [
+          "Data may be disclosed to public authorities where there is a legal obligation.",
+          "INORME S.L. may use providers acting as data processors, including cloud infrastructure, hosting, email and database providers. In particular, part of the platform may be hosted on Supabase services or other providers with contractual confidentiality and security measures in accordance with Article 28 GDPR.",
+          "Data will not be transferred to third parties for commercial purposes without a valid legal basis."
+        ]
+      },
+      {
+        "title": "5. International transfers",
+        "paragraphs": [
+          "Some processors may be located outside the European Economic Area. In such cases, INORME S.L. will ensure that the safeguards provided for in the GDPR are applied, such as standard contractual clauses, adequacy decisions or other recognised measures."
+        ]
+      },
+      {
+        "title": "6. Retention periods",
+        "paragraphs": [
+          "Data will be retained while the relationship with the data subject is maintained and, subsequently, for the periods required by applicable law (employment, commercial, tax or limitation of liability).",
+          "Contact enquiries will be retained for as long as necessary to handle them and, at most, for the legally applicable periods."
+        ]
+      },
+      {
+        "title": "7. Rights of data subjects",
+        "paragraphs": [
+          "You may exercise your rights of access, rectification, erasure, objection, restriction of processing and portability, as well as withdraw consent where consent is the legal basis for processing.",
+          "To exercise your rights, you may write to juanjosemena@inorme.com or to the postal address indicated, attaching a copy of a document proving your identity.",
+          "If you consider that processing does not comply with the regulations, you may lodge a complaint with the Spanish Data Protection Agency (www.aepd.es)."
+        ]
+      },
+      {
+        "title": "8. Security measures",
+        "paragraphs": [
+          "INORME S.L. applies appropriate technical and organisational measures to protect personal data against unauthorised access, loss, destruction or alteration, depending on the risk and nature of the information processed."
+        ]
+      },
+      {
+        "title": "9. Minors",
+        "paragraphs": [
+          "This website and its backoffice are not directed at minors. INORME S.L. does not deliberately collect data from minors without the consent of those exercising parental authority or guardianship, where required."
+        ]
+      }
+    ]
+  },
+  "cookies": {
+    "title": "Cookie Policy",
+    "updated": "Last updated: 14 September 2026",
+    "intro": "This policy explains what cookies and similar technologies are, which ones this website uses and how you can manage them, in accordance with the LSSI-CE, the GDPR and the guidelines of the Spanish Data Protection Agency.",
+    "sections": [
+      {
+        "title": "1. What are cookies?",
+        "paragraphs": [
+          "Cookies are small files downloaded to your device when you access certain web pages. Similar technologies may also be used, such as browser local storage (localStorage)."
+        ]
+      },
+      {
+        "title": "2. Types of cookies used on this site",
+        "paragraphs": [
+          "Technical or strictly necessary cookies: essential for the operation of the site, backoffice authentication, session security or language preference. They do not require prior consent but must be disclosed in this policy.",
+          "Preference cookies or storage: we use local storage to remember the selected language (inorme-lang key) and, where applicable, your decision on cookies (inorme-cookie-consent key).",
+          "Backoffice cookies: the /admin area may use session cookies and technical storage linked to authentication and interface operation (for example, internal navigation state). These are only activated when you access as an authorised user."
+        ]
+      },
+      {
+        "title": "3. Third-party cookies",
+        "paragraphs": [
+          "The public corporate website does not install analytics, advertising or third-party profiling cookies by default.",
+          "If third-party services using non-essential cookies are incorporated in the future, prior user consent will be requested and this policy will be updated."
+        ]
+      },
+      {
+        "title": "4. Legal basis",
+        "paragraphs": [
+          "Strictly necessary cookies are used on the basis of legitimate interest and the technical need to provide the service requested by the user.",
+          "Non-essential cookies, if implemented, will be used only with your consent, which you may withdraw at any time."
+        ]
+      },
+      {
+        "title": "5. How to manage or delete cookies",
+        "paragraphs": [
+          "You can allow, block or delete cookies from your browser settings. Please note that disabling technical cookies may affect the proper operation of the site or backoffice.",
+          "You can also delete local storage from developer tools or your browser privacy settings."
+        ]
+      },
+      {
+        "title": "6. Further information",
+        "paragraphs": [
+          "For any query about the use of cookies or data protection, you may contact INORME S.L. at admon@inorme.com or consult our Privacy Policy."
+        ]
+      }
+    ]
+  },
+  "banner": {
+    "title": "Use of cookies",
+    "description": "We use cookies and local storage that are strictly necessary for the operation of the site, language preference and, if you access the backoffice, management of your session. You can find more information in our Cookie Policy.",
+    "accept": "Accept",
+    "reject": "Reject non-essential",
+    "policyLink": "Cookie Policy"
+  }
+}
