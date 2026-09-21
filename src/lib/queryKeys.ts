@@ -5,6 +5,9 @@ export const queryKeys = {
   workerProfileChangeRequests: ["workerProfileChangeRequests"] as const,
   workerProfileChangeRequestsFor: (companyWorkerId: string) =>
     ["workerProfileChangeRequests", companyWorkerId] as const,
+  workerCalendarChangeRequests: ["workerCalendarChangeRequests"] as const,
+  workerCalendarChangeRequestsFor: (companyWorkerId: string) =>
+    ["workerCalendarChangeRequests", companyWorkerId] as const,
   backofficeUsers: ["backofficeUsers"] as const,
   backofficeMessages: ["backofficeMessages"] as const,
   backofficeMessageUnreadCount: ["backofficeMessageUnreadCount"] as const,
@@ -19,6 +22,7 @@ export const queryKeys = {
     ["workerVacationChangeRequests", companyWorkerId] as const,
   adminVacationSummaries: (year: number) => ["adminVacationSummaries", year] as const,
   pendingCarryoverRequests: ["pendingCarryoverRequests"] as const,
+  myCarryoverRequests: ["myCarryoverRequests"] as const,
   adminVacationNotifications: ["adminVacationNotifications"] as const,
   adminVacationNotificationCount: (sinceDays: number) =>
     ["adminVacationNotificationCount", sinceDays] as const,

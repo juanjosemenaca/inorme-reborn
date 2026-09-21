@@ -2,6 +2,7 @@ import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
 import { useHasPendingWorkerRequest } from "@/hooks/useWorkerProfileChangeRequests";
+import { useHasPendingWorkerCalendarRequest } from "@/hooks/useWorkerCalendarChangeRequests";
 import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
 import { useMyTimeClockEvents } from "@/hooks/useTimeTracking";
 import { useWorkCalendarHolidays } from "@/hooks/useWorkCalendarHolidays";
@@ -186,6 +187,9 @@ export function IntranetAttentionDialogs() {
   const { data: workerHasPendingProfileRequest = false } = useHasPendingWorkerRequest(
     userRole === "WORKER" || userRole === "ADMIN" ? companyWorkerId : null
   );
+  const { data: workerHasPendingCalendarRequest = false } = useHasPendingWorkerCalendarRequest(
+    userRole === "WORKER" || userRole === "ADMIN" ? companyWorkerId : null
+  );
 
   const alertsReady =
     ready &&
@@ -202,7 +206,7 @@ export function IntranetAttentionDialogs() {
     alertsReady && shouldRemindClockIn && !isDismissedToday("clock_in", today);
   const profileDue =
     alertsReady &&
-    workerHasPendingProfileRequest &&
+    (workerHasPendingProfileRequest || workerHasPendingCalendarRequest) &&
     !isDismissedToday("profile", today);
 
   const messagesDue = alertsReady && hasMessages && messageDelta > 0;

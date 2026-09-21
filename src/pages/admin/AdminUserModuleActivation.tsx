@@ -19,30 +19,9 @@ import {
   REGISTRY_MODULE_KEYS,
   type WorkerModuleKey,
 } from "@/types/backoffice";
+import { workerModuleLabel } from "@/lib/workerModules";
 
-const INTRANET_MODULE_ORDER: WorkerModuleKey[] = [
-  "VACATIONS",
-  "MESSAGES",
-  "TIME_CLOCK",
-  "AGENDA",
-  "GASTOS",
-  "FACTURACION",
-  "DMS",
-];
-
-function moduleLabel(module: WorkerModuleKey, t: (key: string) => string): string {
-  if (module === "VACATIONS") return t("admin.moduleActivation.mod_vacations");
-  if (module === "MESSAGES") return t("admin.moduleActivation.mod_messages");
-  if (module === "TIME_CLOCK") return t("admin.moduleActivation.mod_time_clock");
-  if (module === "AGENDA") return t("admin.moduleActivation.mod_agenda");
-  if (module === "FACTURACION") return t("admin.moduleActivation.mod_billing");
-  if (module === "DMS") return t("admin.moduleActivation.mod_dms");
-  if (module === "ADMIN_COMPANY_WORKERS") return t("admin.moduleActivation.mod_company_workers");
-  if (module === "ADMIN_CLIENTS") return t("admin.moduleActivation.mod_clients");
-  if (module === "ADMIN_PROJECTS") return t("admin.moduleActivation.mod_projects");
-  if (module === "ADMIN_PROVIDERS") return t("admin.moduleActivation.mod_providers");
-  return t("admin.moduleActivation.mod_expenses");
-}
+const INTRANET_MODULE_ORDER: WorkerModuleKey[] = [...ALL_WORKER_MODULES];
 
 const AdminUserModuleActivation = () => {
   const { t } = useLanguage();
@@ -166,7 +145,7 @@ const AdminUserModuleActivation = () => {
                       checked={bulkModules.includes(mod)}
                       onChange={() => toggleBulkModule(mod)}
                     />
-                    {moduleLabel(mod, t)}
+                    {workerModuleLabel(mod, t)}
                   </label>
                 ))}
               </div>
@@ -181,7 +160,7 @@ const AdminUserModuleActivation = () => {
                       checked={bulkModules.includes(mod)}
                       onChange={() => toggleBulkModule(mod)}
                     />
-                    {moduleLabel(mod, t)}
+                    {workerModuleLabel(mod, t)}
                   </label>
                 ))}
               </div>
@@ -263,7 +242,7 @@ const AdminUserModuleActivation = () => {
                                       void updateOne(u.id, next);
                                     }}
                                   />
-                                  {moduleLabel(mod, t)}
+                                  {workerModuleLabel(mod, t)}
                                 </label>
                               );
                             })}
@@ -282,7 +261,7 @@ const AdminUserModuleActivation = () => {
                                     disabled={savingUserId === u.id}
                                     onChange={() => updateOne(u.id, next)}
                                   />
-                                  {moduleLabel(mod, t)}
+                                  {workerModuleLabel(mod, t)}
                                 </label>
                               );
                             })}

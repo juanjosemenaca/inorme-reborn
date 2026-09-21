@@ -43,6 +43,10 @@ import {
   useHasPendingWorkerRequest,
   usePendingWorkerProfileChangeRequests,
 } from "@/hooks/useWorkerProfileChangeRequests";
+import {
+  useHasPendingWorkerCalendarRequest,
+  usePendingWorkerCalendarChangeRequests,
+} from "@/hooks/useWorkerCalendarChangeRequests";
 import { usePendingWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
 import { usePendingWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
 import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
@@ -50,7 +54,7 @@ import { useMyDmsDocumentReviewsAsAssignee } from "@/hooks/useMyDmsDocumentRevie
 import { ADMIN_PATHS } from "@/constants/adminPaths";
 import { IntranetAttentionDialogs } from "@/components/admin/IntranetAttentionDialogs";
 import { runProjectEndNotices } from "@/api/projectsApi";
-import { isRegistryWorkerModule } from "@/types/backoffice";
+import { isWorkerModuleEnabled } from "@/lib/workerModules";
 
 const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
@@ -267,11 +271,17 @@ const AdminLayout = () => {
   const { data: pendingProfileRequests = [] } = usePendingWorkerProfileChangeRequests(
     isAdmin && supabaseOk && !!user
   );
-  const pendingAdminProfileCount = pendingProfileRequests.length;
+  const { data: pendingCalendarRequests = [] } = usePendingWorkerCalendarChangeRequests(
+    isAdmin && supabaseOk && !!user
+  );
+  const pendingAdminProfileCount = pendingProfileRequests.length + pendingCalendarRequests.length;
   const userRole = normalizeRole(user?.role);
   const enabledModules = user?.enabledModules ?? [];
   const workerEnabledModules = userRole === "WORKER" ? enabledModules : [];
   const { data: workerHasPendingProfileRequest = false } = useHasPendingWorkerRequest(
+    userRole === "WORKER" || userRole === "ADMIN" ? user?.companyWorkerId ?? null : null
+  );
+  const { data: workerHasPendingCalendarRequest = false } = useHasPendingWorkerCalendarRequest(
     userRole === "WORKER" || userRole === "ADMIN" ? user?.companyWorkerId ?? null : null
   );
   const { data: unreadMessageCount = 0 } = useMyUnreadBackofficeMessageCount(
@@ -294,10 +304,7 @@ const AdminLayout = () => {
   const navItems = NAV_KEYS.filter((item) => {
     if (userRole === null || !item.roles.includes(userRole)) return false;
     if ("requiredModule" in item && item.requiredModule) {
-      if (userRole === "ADMIN" && item.requiredModule === "DMS") return true;
-      if (userRole === "ADMIN" && item.requiredModule === "FACTURACION") return true;
-      if (userRole === "ADMIN" && isRegistryWorkerModule(item.requiredModule)) return true;
-      return enabledModules.includes(item.requiredModule);
+      return isWorkerModuleEnabled(userRole, enabledModules, item.requiredModule);
     }
     return true;
   });
@@ -404,7 +411,7 @@ const AdminLayout = () => {
       return unreadMessageCount > 0;
     if (to === "/admin/documentos-pendientes" && userRole === "WORKER") return pendingAssignedDocsCount > 0;
     if (to === "/admin/mi-ficha" && (userRole === "WORKER" || userRole === "ADMIN"))
-      return workerHasPendingProfileRequest;
+      return workerHasPendingProfileRequest || workerHasPendingCalendarRequest;
     return false;
   };
 

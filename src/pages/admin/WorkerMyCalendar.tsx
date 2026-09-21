@@ -14,6 +14,7 @@ import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
 import { useWorkerVacationDays } from "@/hooks/useWorkerVacationDays";
 import { useWorkerVacationChangeHistory } from "@/hooks/useWorkerVacationChangeRequests";
 import { WorkCalendarYearGrid } from "@/components/admin/WorkCalendarYearGrid";
+import { PendingRequestNotice } from "@/components/admin/PendingRequestNotice";
 import { expandSummerRangesToWeekdayIsoSet } from "@/lib/workCalendarSummerRange";
 import { isWeekendIso } from "@/lib/calendarIso";
 import { isoDateOnlyFromDb } from "@/lib/isoDate";
@@ -28,6 +29,7 @@ import {
   fetchApprovedCarryoverAllowance,
   getUnusedStandardDaysInYear,
   submitCarryoverRequest,
+  fetchMyCarryoverRequests,
 } from "@/api/workerVacationCarryoverRequestsApi";
 import type { WorkCalendarHolidayKind } from "@/types/workCalendars";
 import { getErrorMessage } from "@/lib/errorMessage";
@@ -100,8 +102,20 @@ const WorkerMyCalendar = () => {
     () => vacationRequests.find((r) => r.status === "PENDING" && r.calendarYear === year),
     [vacationRequests, year]
   );
+  const { data: myCarryoverRequests = [] } = useQuery({
+    queryKey: queryKeys.myCarryoverRequests,
+    queryFn: fetchMyCarryoverRequests,
+    enabled: !!workerId,
+  });
 
   const sourceYear = year - 1;
+  const pendingCarryover = useMemo(
+    () =>
+      myCarryoverRequests.find(
+        (r) => r.status === "PENDING" && r.sourceYear === sourceYear && r.targetYear === year
+      ),
+    [myCarryoverRequests, sourceYear, year]
+  );
   const { data: carryAllow = 0 } = useQuery({
     queryKey: ["approvedCarryoverAllowance", workerId, year, sourceYear] as const,
     queryFn: () => fetchApprovedCarryoverAllowance(workerId!, year, sourceYear),
@@ -244,6 +258,8 @@ const WorkerMyCalendar = () => {
       await queryClient.invalidateQueries({ queryKey: ["approvedCarryoverAllowance"] });
       await queryClient.invalidateQueries({ queryKey: ["unusedStandardPrevYear"] });
       await queryClient.invalidateQueries({ queryKey: queryKeys.adminVacationSummaries(year) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.myCarryoverRequests });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pendingCarryoverRequests });
       toast({ title: t("admin.workerMyCalendar.carryover_toast_sent") });
     },
     onError: (e) => {
@@ -295,7 +311,8 @@ const WorkerMyCalendar = () => {
     Number.isFinite(carryParsed) &&
     carryParsed >= 1 &&
     carryParsed <= unusedPrev &&
-    !carryoverMutation.isPending;
+    !carryoverMutation.isPending &&
+    !pendingCarryover;
 
   if (!user) return null;
 
@@ -418,15 +435,6 @@ const WorkerMyCalendar = () => {
         </CardContent>
       </Card>
 
-      {pendingRequestForYear ? (
-        <Card className="border-amber-500/40 bg-amber-500/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{t("admin.workerMyCalendar.pending_title")}</CardTitle>
-            <CardDescription>{t("admin.workerMyCalendar.pending_desc")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : null}
-
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">{t("admin.workerMyCalendar.carryover_card_title")}</CardTitle>
@@ -453,7 +461,7 @@ const WorkerMyCalendar = () => {
                     className="w-28 h-9"
                     value={carryDaysRequested}
                     onChange={(e) => setCarryDaysRequested(e.target.value)}
-                    disabled={carryoverMutation.isPending}
+                    disabled={carryoverMutation.isPending || !!pendingCarryover}
                   />
                 </div>
                 <Button
@@ -468,13 +476,14 @@ const WorkerMyCalendar = () => {
                   {t("admin.workerMyCalendar.carryover_send")}
                 </Button>
               </div>
+              {pendingCarryover ? <PendingRequestNotice /> : null}
               <Textarea
                 value={carryMessage}
                 onChange={(e) => setCarryMessage(e.target.value)}
                 rows={2}
                 maxLength={1000}
                 placeholder={t("admin.workerMyCalendar.carryover_message_ph")}
-                disabled={carryoverMutation.isPending}
+                disabled={carryoverMutation.isPending || !!pendingCarryover}
               />
             </>
           ) : (
@@ -558,6 +567,7 @@ const WorkerMyCalendar = () => {
               ? t("admin.workerMyCalendar.request_sending")
               : t("admin.workerMyCalendar.request_send")}
           </Button>
+          {pendingRequestForYear ? <PendingRequestNotice /> : null}
         </CardContent>
       </Card>
     </div>

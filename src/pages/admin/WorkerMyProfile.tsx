@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Loader2, Send } from "lucide-react";
+import { CalendarDays, Check, Layers, Loader2, Minus, Pencil, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,13 +24,67 @@ import {
   useHasPendingWorkerRequest,
   useWorkerProfileChangeHistory,
 } from "@/hooks/useWorkerProfileChangeRequests";
-import { updateMyWorkCalendarSite } from "@/api/companyWorkersApi";
+import {
+  useHasPendingWorkerCalendarRequest,
+  useWorkerCalendarChangeHistory,
+} from "@/hooks/useWorkerCalendarChangeRequests";
 import { submitWorkerProfileChangeRequest } from "@/api/workerProfileChangeRequestsApi";
+import { submitWorkerCalendarChangeRequest } from "@/api/workerCalendarChangeRequestsApi";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { PendingRequestNotice } from "@/components/admin/PendingRequestNotice";
 import { queryKeys } from "@/lib/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import type { WorkerPersonalDataSuggestion } from "@/types/workerProfileChangeRequests";
 import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
+import {
+  ALL_WORKER_MODULES,
+  REGISTRY_MODULE_KEYS,
+  type WorkerModuleKey,
+} from "@/types/backoffice";
+import { isWorkerModuleEnabled, workerModuleLabel } from "@/lib/workerModules";
+
+type ModuleItem = { key: WorkerModuleKey; label: string; enabled: boolean };
+
+function ModuleGroup({
+  title,
+  items,
+  onLabel,
+  offLabel,
+}: {
+  title: string;
+  items: ModuleItem[];
+  onLabel: string;
+  offLabel: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {items.map((item) => (
+          <li
+            key={item.key}
+            className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+          >
+            <span className={item.enabled ? "text-sm" : "text-sm text-muted-foreground"}>
+              {item.label}
+            </span>
+            {item.enabled ? (
+              <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">
+                <Check className="h-3 w-3" aria-hidden />
+                {onLabel}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1 text-muted-foreground">
+                <Minus className="h-3 w-3" aria-hidden />
+                {offLabel}
+              </Badge>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 type FormValues = {
   firstName: string;
@@ -56,18 +110,66 @@ const WorkerMyProfile = () => {
     [workers, workerId]
   );
   const { data: hasPending } = useHasPendingWorkerRequest(workerId);
+  const { data: hasPendingCalendar } = useHasPendingWorkerCalendarRequest(workerId);
   const { data: history = [] } = useWorkerProfileChangeHistory(workerId);
+  const { data: calendarHistory = [] } = useWorkerCalendarChangeHistory(workerId);
+  /** Sede realmente guardada en la ficha, no la que haya seleccionada sin guardar. */
+  const assignedCalendarSite = useMemo(
+    () => calendarSites.find((s) => s.id === worker?.workCalendarSiteId),
+    [calendarSites, worker]
+  );
+
+  const role = user?.role ?? null;
+  const userModules = user?.enabledModules ?? [];
+  const toModuleItems = useMemo(
+    () => (keys: readonly WorkerModuleKey[]): ModuleItem[] =>
+      keys.map((key) => ({
+        key,
+        label: workerModuleLabel(key, t),
+        enabled: isWorkerModuleEnabled(role, userModules, key),
+      })),
+    [role, userModules, t]
+  );
+  const intranetModules = useMemo(
+    () => toModuleItems(ALL_WORKER_MODULES),
+    [toModuleItems]
+  );
+  const registryModules = useMemo(
+    () => toModuleItems(REGISTRY_MODULE_KEYS),
+    [toModuleItems]
+  );
 
   const [calendarSiteId, setCalendarSiteId] = useState("");
+  const [editingPersonal, setEditingPersonal] = useState(false);
+  const [editingCalendar, setEditingCalendar] = useState(false);
+  const [calendarMessage, setCalendarMessage] = useState("");
   useEffect(() => {
     if (worker) setCalendarSiteId(worker.workCalendarSiteId);
   }, [worker]);
+  useEffect(() => {
+    if (hasPending) setEditingPersonal(false);
+  }, [hasPending]);
+  useEffect(() => {
+    if (hasPendingCalendar) setEditingCalendar(false);
+  }, [hasPendingCalendar]);
 
-  const calendarMutation = useMutation({
-    mutationFn: (siteId: string) => updateMyWorkCalendarSite(workerId!, siteId),
+  const calendarRequestMutation = useMutation({
+    mutationFn: () =>
+      submitWorkerCalendarChangeRequest({
+        suggestedSiteId: calendarSiteId,
+        workerMessage: calendarMessage,
+      }),
     onSuccess: async () => {
-      toast({ title: t("admin.workerProfile.calendar_toast_saved") });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
+      toast({ title: t("admin.workerProfile.toast_sent") });
+      setEditingCalendar(false);
+      setCalendarMessage("");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workerCalendarChangeRequests });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.workerCalendarChangeRequestsFor(workerId ?? ""),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: [...queryKeys.workerCalendarChangeRequests, "hasPending", workerId ?? ""] as const,
+      });
     },
     onError: (e) => {
       toast({
@@ -137,6 +239,7 @@ const WorkerMyProfile = () => {
     },
     onSuccess: async () => {
       toast({ title: t("admin.workerProfile.toast_sent") });
+      setEditingPersonal(false);
       form.setValue("workerMessage", "");
       await queryClient.invalidateQueries({ queryKey: queryKeys.workerProfileChangeRequests });
       await queryClient.invalidateQueries({
@@ -159,6 +262,38 @@ const WorkerMyProfile = () => {
     submitMutation.mutate(values);
   };
 
+  const cancelPersonalEdit = () => {
+    setEditingPersonal(false);
+    if (!worker) return;
+    form.reset({
+      firstName: worker.firstName,
+      lastName: worker.lastName,
+      dni: worker.dni,
+      email: worker.email,
+      mobile: worker.mobile,
+      postalAddress: worker.postalAddress,
+      city: worker.city,
+      workerMessage: "",
+    });
+  };
+
+  const cancelCalendarEdit = () => {
+    setEditingCalendar(false);
+    setCalendarMessage("");
+    if (worker) setCalendarSiteId(worker.workCalendarSiteId);
+  };
+
+  const lockedInputClass = "read-only:cursor-default read-only:bg-muted/50";
+
+  const combinedHistory = useMemo(
+    () =>
+      [
+        ...history.map((h) => ({ ...h, kind: "PERSONAL" as const })),
+        ...calendarHistory.map((h) => ({ ...h, kind: "CALENDAR" as const })),
+      ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [history, calendarHistory]
+  );
+
   const localeTag =
     language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const formatDt = (iso: string) =>
@@ -169,20 +304,49 @@ const WorkerMyProfile = () => {
 
   if (!user) return null;
 
-  if (!workerId) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight">{t("admin.workerProfile.title")}</h1>
-        <p className="text-muted-foreground text-sm">{t("admin.workerProfile.no_worker_link")}</p>
-      </div>
-    );
-  }
-
-  if (loadingWorkers || !worker) {
+  if (workerId && (loadingWorkers || !worker)) {
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
         <Loader2 className="h-6 w-6 animate-spin" />
         {t("admin.common.loading")}
+      </div>
+    );
+  }
+
+  const modulesCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Layers className="h-4 w-4 shrink-0" aria-hidden />
+          {t("admin.workerProfile.modules_title")}
+        </CardTitle>
+        <CardDescription>{t("admin.workerProfile.modules_desc")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <ModuleGroup
+          title={t("admin.moduleActivation.bulk_section_intranet")}
+          items={intranetModules}
+          onLabel={t("admin.workerProfile.modules_on")}
+          offLabel={t("admin.workerProfile.modules_off")}
+        />
+        <ModuleGroup
+          title={t("admin.moduleActivation.bulk_section_masters")}
+          items={registryModules}
+          onLabel={t("admin.workerProfile.modules_on")}
+          offLabel={t("admin.workerProfile.modules_off")}
+        />
+      </CardContent>
+    </Card>
+  );
+
+  if (!workerId || !worker) {
+    return (
+      <div className="space-y-8 max-w-2xl">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{t("admin.workerProfile.title")}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{t("admin.workerProfile.no_worker_link")}</p>
+        </div>
+        {modulesCard}
       </div>
     );
   }
@@ -194,71 +358,26 @@ const WorkerMyProfile = () => {
         <p className="text-muted-foreground text-sm mt-1">{t("admin.workerProfile.subtitle")}</p>
       </div>
 
-      {hasPending && (
-        <Card className="border-amber-500/40 bg-amber-500/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{t("admin.workerProfile.pending_banner_title")}</CardTitle>
-            <CardDescription>{t("admin.workerProfile.pending_banner_desc")}</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 shrink-0" aria-hidden />
-            {t("admin.workerProfile.calendar_title")}
-          </CardTitle>
-          <CardDescription>{t("admin.workerProfile.calendar_desc")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2 max-w-md">
-            <label className="text-sm font-medium leading-none" htmlFor="worker-calendar-site">
-              {t("admin.workers.field_calendar")}
-            </label>
-            <SearchableSelect
-              id="worker-calendar-site"
-              value={calendarSiteId}
-              onValueChange={setCalendarSiteId}
-              options={calendarSites.map((s) => ({ value: s.id, label: s.name }))}
-              disabled={calendarMutation.isPending || calendarSites.length === 0}
-              className="w-full"
-            />
-          </div>
-          <div className="space-y-1 max-w-md">
-            <p className="text-sm font-medium">{t("admin.workerProfile.vacation_days_readonly")}</p>
-            <p className="text-sm text-muted-foreground">
-              {worker ? worker.vacationDays : "—"}{" "}
-              <span className="text-xs">{t("admin.workerProfile.vacation_days_hint")}</span>
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            className="gap-2"
-            disabled={
-              calendarMutation.isPending || !worker || calendarSiteId === worker.workCalendarSiteId
-            }
-            onClick={() => calendarMutation.mutate(calendarSiteId)}
-          >
-            {calendarMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : null}
-            {calendarMutation.isPending
-              ? t("admin.workerProfile.calendar_saving")
-              : t("admin.workerProfile.calendar_save")}
-          </Button>
-        </CardContent>
-      </Card>
-
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t("admin.workerProfile.form_title")}</CardTitle>
-              <CardDescription>{t("admin.workerProfile.form_desc")}</CardDescription>
+              <CardDescription>
+                {editingPersonal
+                  ? t("admin.workerProfile.form_desc_editing")
+                  : t("admin.workerProfile.form_desc")}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-lg border bg-muted/40 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  {t("admin.workerProfile.employment_label")}
+                </p>
+                <p className="mt-1 text-sm font-medium">
+                  {t(`admin.workers.emp.${worker.employmentType}`)}
+                </p>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -267,7 +386,7 @@ const WorkerMyProfile = () => {
                     <FormItem>
                       <FormLabel>{t("admin.workerProfile.field_first_name")}</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} readOnly={!editingPersonal} className={lockedInputClass} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -280,7 +399,7 @@ const WorkerMyProfile = () => {
                     <FormItem>
                       <FormLabel>{t("admin.workerProfile.field_last_name")}</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} readOnly={!editingPersonal} className={lockedInputClass} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -294,7 +413,7 @@ const WorkerMyProfile = () => {
                   <FormItem>
                     <FormLabel>{t("admin.workerProfile.field_dni")}</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input {...field} readOnly={!editingPersonal} className={lockedInputClass} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -307,7 +426,7 @@ const WorkerMyProfile = () => {
                   <FormItem>
                     <FormLabel>{t("admin.workerProfile.field_email")}</FormLabel>
                     <FormControl>
-                      <Input type="email" {...field} />
+                        <Input type="email" {...field} readOnly={!editingPersonal} className={lockedInputClass} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -320,7 +439,7 @@ const WorkerMyProfile = () => {
                   <FormItem>
                     <FormLabel>{t("admin.workerProfile.field_mobile")}</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input {...field} readOnly={!editingPersonal} className={lockedInputClass} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -333,7 +452,7 @@ const WorkerMyProfile = () => {
                   <FormItem>
                     <FormLabel>{t("admin.workerProfile.field_address")}</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input {...field} readOnly={!editingPersonal} className={lockedInputClass} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -346,52 +465,196 @@ const WorkerMyProfile = () => {
                   <FormItem>
                     <FormLabel>{t("admin.workerProfile.field_city")}</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input {...field} readOnly={!editingPersonal} className={lockedInputClass} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="workerMessage"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("admin.workerProfile.field_message")}</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        rows={3}
-                        placeholder={t("admin.workerProfile.field_message_ph")}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button type="submit" disabled={submitMutation.isPending || hasPending} className="gap-2">
-                {submitMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-                {t("admin.workerProfile.submit")}
-              </Button>
+              {editingPersonal ? (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="workerMessage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("admin.workerProfile.field_message")}</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            rows={3}
+                            placeholder={t("admin.workerProfile.field_message_ph")}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="submit" disabled={submitMutation.isPending} className="gap-2">
+                      {submitMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      {t("admin.workerProfile.submit")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={submitMutation.isPending}
+                      onClick={cancelPersonalEdit}
+                    >
+                      {t("admin.workerProfile.cancel_edit")}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="gap-2"
+                    disabled={Boolean(hasPending)}
+                    onClick={() => setEditingPersonal(true)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    {t("admin.workerProfile.request_edit")}
+                  </Button>
+                  {hasPending ? <PendingRequestNotice /> : null}
+                </div>
+              )}
             </CardContent>
           </Card>
         </form>
       </Form>
 
-      {history.length > 0 && (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 shrink-0" aria-hidden />
+            {t("admin.workerProfile.calendar_title")}
+          </CardTitle>
+          <CardDescription>
+            {editingCalendar
+              ? t("admin.workerProfile.calendar_desc_editing")
+              : t("admin.workerProfile.calendar_desc")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border bg-muted/40 px-4 py-3 max-w-md">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t("admin.workerProfile.calendar_assigned_label")}
+            </p>
+            <p className="mt-1 text-base font-semibold">
+              {assignedCalendarSite?.name ?? t("admin.workerProfile.calendar_assigned_none")}
+            </p>
+          </div>
+          <div className="space-y-1 max-w-md">
+            <p className="text-sm font-medium">{t("admin.workerProfile.vacation_days_readonly")}</p>
+            <p className="text-sm text-muted-foreground">
+              {worker.vacationDays}{" "}
+              <span className="text-xs">{t("admin.workerProfile.vacation_days_hint")}</span>
+            </p>
+          </div>
+          {editingCalendar ? (
+            <>
+              <div className="space-y-2 max-w-md">
+                <label className="text-sm font-medium leading-none" htmlFor="worker-calendar-site">
+                  {t("admin.workerProfile.calendar_change_label")}
+                </label>
+                <SearchableSelect
+                  id="worker-calendar-site"
+                  value={calendarSiteId}
+                  onValueChange={setCalendarSiteId}
+                  options={calendarSites.map((s) => ({
+                    value: s.id,
+                    label:
+                      s.id === worker.workCalendarSiteId
+                        ? `${s.name} (${t("admin.workerProfile.calendar_current_tag")})`
+                        : s.name,
+                  }))}
+                  disabled={calendarRequestMutation.isPending || calendarSites.length === 0}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2 max-w-md">
+                <label className="text-sm font-medium leading-none" htmlFor="worker-calendar-message">
+                  {t("admin.workerProfile.field_message")}
+                </label>
+                <Textarea
+                  id="worker-calendar-message"
+                  rows={3}
+                  placeholder={t("admin.workerProfile.field_message_ph")}
+                  value={calendarMessage}
+                  onChange={(e) => setCalendarMessage(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  className="gap-2"
+                  disabled={
+                    calendarRequestMutation.isPending ||
+                    calendarSiteId === worker.workCalendarSiteId
+                  }
+                  onClick={() => calendarRequestMutation.mutate()}
+                >
+                  {calendarRequestMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  {t("admin.workerProfile.submit")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={calendarRequestMutation.isPending}
+                  onClick={cancelCalendarEdit}
+                >
+                  {t("admin.workerProfile.cancel_edit")}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="gap-2"
+                disabled={Boolean(hasPendingCalendar)}
+                onClick={() => {
+                  setCalendarSiteId(worker.workCalendarSiteId);
+                  setEditingCalendar(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+                {t("admin.workerProfile.request_edit")}
+              </Button>
+              {hasPendingCalendar ? <PendingRequestNotice /> : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {modulesCard}
+
+      {combinedHistory.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t("admin.workerProfile.history_title")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            {history.map((h) => (
-              <div key={h.id} className="rounded-lg border p-3 space-y-1">
+            {combinedHistory.map((h) => (
+              <div key={`${h.kind}-${h.id}`} className="rounded-lg border p-3 space-y-1">
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-muted-foreground">{formatDt(h.createdAt)}</span>
+                  <Badge variant="outline">
+                    {h.kind === "CALENDAR"
+                      ? t("admin.workerProfile.history_kind_calendar")
+                      : t("admin.workerProfile.history_kind_personal")}
+                  </Badge>
                   {h.status === "PENDING" && (
                     <Badge variant="secondary">{t("admin.workerProfile.status_pending")}</Badge>
                   )}
@@ -404,6 +667,13 @@ const WorkerMyProfile = () => {
                     <Badge variant="destructive">{t("admin.workerProfile.status_rejected")}</Badge>
                   )}
                 </div>
+                {h.kind === "CALENDAR" && (
+                  <p className="text-xs text-muted-foreground">
+                    {calendarSites.find((s) => s.id === h.previousSiteId)?.name ?? h.previousSiteId}
+                    {" → "}
+                    {calendarSites.find((s) => s.id === h.suggestedSiteId)?.name ?? h.suggestedSiteId}
+                  </p>
+                )}
                 {h.status === "REJECTED" && h.rejectionReason && (
                   <p className="text-xs text-muted-foreground">
                     {t("admin.workerProfile.reject_reason")}: {h.rejectionReason}

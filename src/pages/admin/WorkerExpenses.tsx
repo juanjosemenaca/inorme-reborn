@@ -33,6 +33,7 @@ import {
   uploadExpenseSheetAttachment,
 } from "@/api/workerExpenseSheetsApi";
 import { ExpenseSheetAttachmentsEditor } from "@/components/admin/ExpenseSheetAttachmentsBlock";
+import { PendingRequestNotice } from "@/components/admin/PendingRequestNotice";
 import type {
   WorkerExpenseCategoryKey,
   WorkerExpenseLineAmounts,
@@ -511,28 +512,31 @@ const WorkerExpenses = () => {
               />
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!editable || saveMutation.isPending}
-                onClick={() => saveMutation.mutate()}
-              >
-                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                {t("admin.expenses.save_draft")}
-              </Button>
-              <Button
-                type="button"
-                disabled={!editable || submitMutation.isPending}
-                onClick={() => submitMutation.mutate()}
-              >
-                {submitMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" />
-                )}
-                {t("admin.expenses.submit")}
-              </Button>
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!editable || saveMutation.isPending}
+                  onClick={() => saveMutation.mutate()}
+                >
+                  {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  {t("admin.expenses.save_draft")}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!editable || submitMutation.isPending}
+                  onClick={() => submitMutation.mutate()}
+                >
+                  {submitMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {t("admin.expenses.submit")}
+                </Button>
+              </div>
+              {sheet.status === "SUBMITTED" ? <PendingRequestNotice /> : null}
             </div>
           </CardContent>
         </Card>

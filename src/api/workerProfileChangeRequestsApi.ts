@@ -1,6 +1,12 @@
 import { requireSupabase } from "@/api/supabaseRequire";
-import { syncBackofficeUserFromCompanyWorker, getProfileByAuthUserId } from "@/api/backofficeUsersApi";
+import { createBackofficeMessage, createBackofficeMessagesToRecipients } from "@/api/backofficeMessagesApi";
+import {
+  fetchBackofficeUsers,
+  getProfileByAuthUserId,
+  syncBackofficeUserFromCompanyWorker,
+} from "@/api/backofficeUsersApi";
 import { getCompanyWorkerById, updateCompanyWorker } from "@/api/companyWorkersApi";
+import { companyWorkerDisplayName } from "@/types/companyWorkers";
 import type { WorkerProfileChangeRequestRow } from "@/types/database";
 import type {
   WorkerPersonalDataSuggestion,
@@ -36,6 +42,86 @@ function parseSuggestion(raw: Record<string, unknown>): WorkerPersonalDataSugges
     postalAddress: s("postalAddress"),
     city: s("city"),
   };
+}
+
+const PROFILE_FIELD_LABELS: Record<keyof WorkerPersonalDataSuggestion, string> = {
+  firstName: "Nombre",
+  lastName: "Apellidos",
+  dni: "DNI / NIE",
+  email: "Email",
+  mobile: "Teléfono",
+  postalAddress: "Dirección",
+  city: "Ciudad",
+};
+
+function formatProfileDiff(
+  prev: WorkerPersonalDataSuggestion,
+  next: WorkerPersonalDataSuggestion
+): string {
+  const keys = Object.keys(PROFILE_FIELD_LABELS) as (keyof WorkerPersonalDataSuggestion)[];
+  const lines: string[] = [];
+  for (const k of keys) {
+    const a = (prev[k] ?? "").trim();
+    const b = (next[k] ?? "").trim();
+    if (a !== b) lines.push(`${PROFILE_FIELD_LABELS[k]}: ${a || "—"} → ${b || "—"}`);
+  }
+  return lines.length > 0 ? lines.map((l) => `- ${l}`).join("\n") : "—";
+}
+
+async function notifyAdminsOfProfileRequest(input: {
+  requestId: string;
+  workerName: string;
+  previous: WorkerPersonalDataSuggestion;
+  suggested: WorkerPersonalDataSuggestion;
+  workerMessage: string;
+}): Promise<void> {
+  const admins = (await fetchBackofficeUsers()).filter((u) => u.role === "ADMIN" && u.active);
+  const diffs = formatProfileDiff(input.previous, input.suggested);
+  const extra = input.workerMessage
+    ? `\n\nMensaje del trabajador:\n${input.workerMessage}`
+    : "";
+  try {
+    await createBackofficeMessagesToRecipients(
+      admins.map((a) => a.id),
+      {
+        category: "WORKER_PROFILE_CHANGE",
+        title: "Solicitud de modificación de ficha",
+        body: `${input.workerName} ha solicitado cambiar sus datos personales.\n\nCambios propuestos:\n${diffs}${extra}\n\nRevísalo en Usuarios → Solicitudes de ficha.`,
+        payload: {
+          kind: "worker_profile_change",
+          requestId: input.requestId,
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[messages] No se pudo avisar a administración de la solicitud de ficha:", e);
+  }
+}
+
+async function notifyWorkerOfProfileDecision(input: {
+  workerBackofficeUserId: string;
+  requestId: string;
+  approved: boolean;
+  rejectionReason?: string;
+}): Promise<void> {
+  try {
+    await createBackofficeMessage(input.workerBackofficeUserId, {
+      category: "WORKER_PROFILE_CHANGE",
+      title: input.approved
+        ? "Solicitud de ficha aceptada"
+        : "Solicitud de ficha rechazada",
+      body: input.approved
+        ? "Administración ha aceptado tu solicitud de modificación de datos personales. Los datos nuevos ya están guardados en tu ficha."
+        : `Administración ha rechazado tu solicitud de modificación de datos personales.\nMotivo: ${input.rejectionReason ?? "—"}`,
+      payload: {
+        kind: "worker_profile_change_result",
+        requestId: input.requestId,
+        approved: input.approved,
+      },
+    });
+  } catch (e) {
+    console.error("[messages] No se pudo avisar al trabajador del resultado de la ficha:", e);
+  }
 }
 
 export function snapshotFromWorker(w: CompanyWorkerRecord): WorkerPersonalDataSuggestion {
@@ -144,15 +230,26 @@ export async function submitWorkerProfileChangeRequest(
   if (unchanged) {
     throw new Error("No hay cambios respecto a los datos actuales.");
   }
-  const { error } = await sb.from("worker_profile_change_requests").insert({
-    company_worker_id: workerId,
-    backoffice_user_id: profile.id,
-    status: "PENDING",
-    worker_message: input.workerMessage.trim(),
-    suggested,
-    previous_snapshot: previous,
-  });
+  const { data: inserted, error } = await sb
+    .from("worker_profile_change_requests")
+    .insert({
+      company_worker_id: workerId,
+      backoffice_user_id: profile.id,
+      status: "PENDING",
+      worker_message: input.workerMessage.trim(),
+      suggested,
+      previous_snapshot: previous,
+    })
+    .select("id")
+    .single();
   if (error) throw error;
+  await notifyAdminsOfProfileRequest({
+    requestId: inserted.id,
+    workerName: companyWorkerDisplayName(current),
+    previous,
+    suggested,
+    workerMessage: input.workerMessage.trim(),
+  });
 }
 
 export async function approveWorkerProfileChangeRequest(requestId: string): Promise<void> {
@@ -195,6 +292,11 @@ export async function approveWorkerProfileChangeRequest(requestId: string): Prom
     })
     .eq("id", requestId);
   if (upErr) throw upErr;
+  await notifyWorkerOfProfileDecision({
+    workerBackofficeUserId: r.backoffice_user_id,
+    requestId,
+    approved: true,
+  });
 }
 
 export async function rejectWorkerProfileChangeRequest(
@@ -231,6 +333,12 @@ export async function rejectWorkerProfileChangeRequest(
     })
     .eq("id", requestId);
   if (error) throw error;
+  await notifyWorkerOfProfileDecision({
+    workerBackofficeUserId: r.backoffice_user_id,
+    requestId,
+    approved: false,
+    rejectionReason: reason,
+  });
 }
 
 export async function deleteWorkerProfileChangeRequest(requestId: string): Promise<void> {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,18 +7,36 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useMyTimeClockEvents } from "@/hooks/useTimeTracking";
+import { useMyBackofficeMessages } from "@/hooks/useBackofficeMessages";
 import { computeDailyTimeSummaries, requestTimeClockCorrection } from "@/api/timeTrackingApi";
 import { useToast } from "@/hooks/use-toast";
+import { queryKeys } from "@/lib/queryKeys";
 import { todayIso, timeClockKindLabel } from "@/pages/admin/workerTimeClockShared";
+import { PendingRequestNotice } from "@/components/admin/PendingRequestNotice";
 
 const WorkerTimeClockCorrection = () => {
   const { t, language } = useLanguage();
+  const { user } = useAdminAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [correctionMessage, setCorrectionMessage] = useState("");
   const [correctionDate, setCorrectionDate] = useState(todayIso());
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit" });
+
+  const { data: messages = [] } = useMyBackofficeMessages(true);
+  const hasPendingCorrection = useMemo(
+    () =>
+      messages.some((m) => {
+        if (m.category !== "TIME_CLOCK_CORRECTION") return false;
+        if (m.senderBackofficeUserId !== user?.userId) return false;
+        const status = (m.payload as { requestStatus?: string }).requestStatus ?? "PENDING";
+        return status === "PENDING";
+      }),
+    [messages, user?.userId]
+  );
 
   const { data: correctionDayEvents = [], isLoading, isError, error } = useMyTimeClockEvents(
     correctionDate || todayIso(),
@@ -33,9 +51,10 @@ const WorkerTimeClockCorrection = () => {
   const correctionMutation = useMutation({
     mutationFn: () =>
       requestTimeClockCorrection({ message: correctionMessage.trim(), relatedDate: correctionDate || undefined }),
-    onSuccess: () => {
+    onSuccess: async () => {
       setCorrectionMessage("");
       toast({ title: t("admin.timeClock.toast_request_sent") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
     },
     onError: (e) => {
       toast({
@@ -112,16 +131,19 @@ const WorkerTimeClockCorrection = () => {
               <p className="text-sm text-muted-foreground">{t("admin.timeClock.request_fix_day_empty")}</p>
             )}
           </div>
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              className="min-h-11 gap-1.5 touch-manipulation text-base sm:min-h-10 sm:text-sm"
-              onClick={() => correctionMutation.mutate()}
-              disabled={!correctionMessage.trim() || correctionMutation.isPending}
-            >
-              <Send className="h-4 w-4 shrink-0" aria-hidden />
-              {t("admin.timeClock.request_fix_send")}
-            </Button>
+          <div className="space-y-2">
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                className="min-h-11 gap-1.5 touch-manipulation text-base sm:min-h-10 sm:text-sm"
+                onClick={() => correctionMutation.mutate()}
+                disabled={!correctionMessage.trim() || correctionMutation.isPending}
+              >
+                <Send className="h-4 w-4 shrink-0" aria-hidden />
+                {t("admin.timeClock.request_fix_send")}
+              </Button>
+            </div>
+            {hasPendingCorrection ? <PendingRequestNotice /> : null}
           </div>
         </CardContent>
       </Card>

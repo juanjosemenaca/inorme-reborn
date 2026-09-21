@@ -213,7 +213,22 @@ export async function updateCompanyWorker(
 
 /**
  * Actualiza sede y días de vacaciones según el calendario por defecto de la nueva sede.
- * Solo la ficha vinculada al usuario autenticado.
+ */
+export async function applyWorkCalendarSiteToWorker(
+  companyWorkerId: string,
+  workCalendarSiteId: string
+): Promise<CompanyWorkerRecord> {
+  const site = await getWorkCalendarSiteById(workCalendarSiteId);
+  if (!site) throw new Error("Sede no encontrada.");
+  return updateCompanyWorker(companyWorkerId, {
+    workCalendarSiteId,
+    vacationDays: site.vacationDaysDefault,
+  });
+}
+
+/**
+ * El trabajador ya no cambia la sede al instante: hay que solicitarlo.
+ * Se mantiene por si un administrador con la misma ficha la usa; exige ficha propia.
  */
 export async function updateMyWorkCalendarSite(
   companyWorkerId: string,
@@ -228,12 +243,7 @@ export async function updateMyWorkCalendarSite(
   if (!profile?.companyWorkerId || profile.companyWorkerId !== companyWorkerId) {
     throw new Error("No puedes modificar la ficha de otro trabajador.");
   }
-  const site = await getWorkCalendarSiteById(workCalendarSiteId);
-  if (!site) throw new Error("Sede no encontrada.");
-  return updateCompanyWorker(companyWorkerId, {
-    workCalendarSiteId,
-    vacationDays: site.vacationDaysDefault,
-  });
+  return applyWorkCalendarSiteToWorker(companyWorkerId, workCalendarSiteId);
 }
 
 export async function deleteCompanyWorker(id: string): Promise<void> {

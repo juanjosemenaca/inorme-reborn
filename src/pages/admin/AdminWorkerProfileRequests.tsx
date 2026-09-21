@@ -31,10 +31,18 @@ import {
   deleteWorkerProfileChangeRequest,
   rejectWorkerProfileChangeRequest,
 } from "@/api/workerProfileChangeRequestsApi";
+import {
+  approveWorkerCalendarChangeRequest,
+  deleteWorkerCalendarChangeRequest,
+  rejectWorkerCalendarChangeRequest,
+} from "@/api/workerCalendarChangeRequestsApi";
 import { queryKeys } from "@/lib/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import { companyWorkerDisplayName } from "@/types/companyWorkers";
 import type { WorkerProfileChangeRequestRecord } from "@/types/workerProfileChangeRequests";
+import type { WorkerCalendarChangeRequestRecord } from "@/types/workerCalendarChangeRequests";
+import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
+import { useAllWorkerCalendarChangeRequests } from "@/hooks/useWorkerCalendarChangeRequests";
 
 const AdminWorkerProfileRequests = () => {
   const { t, language } = useLanguage();
@@ -42,10 +50,16 @@ const AdminWorkerProfileRequests = () => {
   const queryClient = useQueryClient();
   const { data: workers = [] } = useCompanyWorkers();
   const { data: requests = [], isLoading, isError, error } = useAllWorkerProfileChangeRequests();
+  const { data: calendarRequests = [], isLoading: loadingCalendar } = useAllWorkerCalendarChangeRequests();
+  const { data: calendarSites = [] } = useWorkCalendarSites();
   const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectTarget, setRejectTarget] = useState<WorkerProfileChangeRequestRecord | null>(null);
+  const [rejectKind, setRejectKind] = useState<"PERSONAL" | "CALENDAR">("PERSONAL");
+  const [rejectTarget, setRejectTarget] = useState<
+    WorkerProfileChangeRequestRecord | WorkerCalendarChangeRequestRecord | null
+  >(null);
   const [rejectReason, setRejectReason] = useState("");
   const [deleteProfileRequestId, setDeleteProfileRequestId] = useState<string | null>(null);
+  const [deleteCalendarRequestId, setDeleteCalendarRequestId] = useState<string | null>(null);
 
   const localeTag =
     language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
@@ -59,6 +73,8 @@ const AdminWorkerProfileRequests = () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.workerProfileChangeRequests });
       await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
       await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessageUnreadCount });
     },
     onError: (e) => {
       toast({
@@ -70,14 +86,52 @@ const AdminWorkerProfileRequests = () => {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      rejectWorkerProfileChangeRequest(id, reason),
+    mutationFn: ({ id, reason, kind }: { id: string; reason: string; kind: "PERSONAL" | "CALENDAR" }) =>
+      kind === "CALENDAR"
+        ? rejectWorkerCalendarChangeRequest(id, reason)
+        : rejectWorkerProfileChangeRequest(id, reason),
     onSuccess: async () => {
       toast({ title: t("admin.workerProfileRequests.toast_rejected") });
       setRejectOpen(false);
       setRejectTarget(null);
       setRejectReason("");
       await queryClient.invalidateQueries({ queryKey: queryKeys.workerProfileChangeRequests });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workerCalendarChangeRequests });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessageUnreadCount });
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const approveCalendarMutation = useMutation({
+    mutationFn: approveWorkerCalendarChangeRequest,
+    onSuccess: async () => {
+      toast({ title: t("admin.workerProfileRequests.toast_calendar_approved") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workerCalendarChangeRequests });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companyWorkers });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessageUnreadCount });
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteCalendarMutation = useMutation({
+    mutationFn: deleteWorkerCalendarChangeRequest,
+    onSuccess: async () => {
+      toast({ title: t("admin.workerProfileRequests.toast_deleted") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workerCalendarChangeRequests });
     },
     onError: (e) => {
       toast({
@@ -108,7 +162,11 @@ const AdminWorkerProfileRequests = () => {
     return w ? companyWorkerDisplayName(w) : companyWorkerId;
   };
 
-  const openReject = (req: WorkerProfileChangeRequestRecord) => {
+  const openReject = (
+    req: WorkerProfileChangeRequestRecord | WorkerCalendarChangeRequestRecord,
+    kind: "PERSONAL" | "CALENDAR"
+  ) => {
+    setRejectKind(kind);
     setRejectTarget(req);
     setRejectReason("");
     setRejectOpen(true);
@@ -116,10 +174,12 @@ const AdminWorkerProfileRequests = () => {
 
   const confirmReject = () => {
     if (!rejectTarget) return;
-    rejectMutation.mutate({ id: rejectTarget.id, reason: rejectReason });
+    rejectMutation.mutate({ id: rejectTarget.id, reason: rejectReason, kind: rejectKind });
   };
 
-  if (isLoading) {
+  const siteName = (id: string) => calendarSites.find((s) => s.id === id)?.name ?? id;
+
+  if (isLoading || loadingCalendar) {
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
         <Loader2 className="h-6 w-6 animate-spin" />
@@ -210,7 +270,7 @@ const AdminWorkerProfileRequests = () => {
                               variant="outline"
                               className="gap-1 text-destructive"
                               disabled={rejectMutation.isPending}
-                              onClick={() => openReject(req)}
+                              onClick={() => openReject(req, "PERSONAL")}
                             >
                               <X className="h-3.5 w-3.5" />
                               {t("admin.workerProfileRequests.reject")}
@@ -223,6 +283,94 @@ const AdminWorkerProfileRequests = () => {
                           className="gap-1 text-destructive"
                           disabled={deleteMutation.isPending}
                           onClick={() => setDeleteProfileRequestId(req.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {t("admin.common.delete")}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("admin.workerProfileRequests.calendar_title")}</CardTitle>
+          <CardDescription>
+            {t("admin.common.showing")} {calendarRequests.length}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {calendarRequests.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              {t("admin.workerProfileRequests.calendar_empty")}
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("admin.workerProfileRequests.col_worker")}</TableHead>
+                  <TableHead>{t("admin.workerProfileRequests.col_date")}</TableHead>
+                  <TableHead>{t("admin.common.status")}</TableHead>
+                  <TableHead>{t("admin.workerProfileRequests.col_from")}</TableHead>
+                  <TableHead>{t("admin.workerProfileRequests.col_to")}</TableHead>
+                  <TableHead>{t("admin.workerProfileRequests.col_message")}</TableHead>
+                  <TableHead className="text-right w-[160px]">{t("admin.common.actions")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {calendarRequests.map((req) => (
+                  <TableRow key={req.id}>
+                    <TableCell className="font-medium whitespace-nowrap">
+                      {workerName(req.companyWorkerId)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                      {formatDt(req.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={req.status === "PENDING" ? "default" : "outline"}>{req.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">{siteName(req.previousSiteId)}</TableCell>
+                    <TableCell className="text-sm">{siteName(req.suggestedSiteId)}</TableCell>
+                    <TableCell className="text-sm max-w-[200px]">
+                      {req.workerMessage || "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        {req.status === "PENDING" ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="gap-1"
+                              disabled={approveCalendarMutation.isPending}
+                              onClick={() => approveCalendarMutation.mutate(req.id)}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              {t("admin.workerProfileRequests.approve")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 text-destructive"
+                              disabled={rejectMutation.isPending}
+                              onClick={() => openReject(req, "CALENDAR")}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              {t("admin.workerProfileRequests.reject")}
+                            </Button>
+                          </>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="gap-1 text-destructive"
+                          disabled={deleteCalendarMutation.isPending}
+                          onClick={() => setDeleteCalendarRequestId(req.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           {t("admin.common.delete")}
@@ -278,6 +426,18 @@ const AdminWorkerProfileRequests = () => {
         title={t("admin.workerProfileRequests.delete_confirm_title")}
         description={t("admin.workerProfileRequests.delete_confirm_desc")}
         disabled={deleteMutation.isPending}
+      />
+      <DoubleConfirmAlertDialog
+        open={deleteCalendarRequestId != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteCalendarRequestId(null);
+        }}
+        onConfirm={() => {
+          if (deleteCalendarRequestId) deleteCalendarMutation.mutate(deleteCalendarRequestId);
+        }}
+        title={t("admin.workerProfileRequests.delete_confirm_title")}
+        description={t("admin.workerProfileRequests.delete_confirm_desc")}
+        disabled={deleteCalendarMutation.isPending}
       />
     </div>
   );
