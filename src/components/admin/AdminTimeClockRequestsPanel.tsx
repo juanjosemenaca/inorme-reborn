@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Inbox, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,12 @@ import {
 } from "@/api/backofficeMessagesApi";
 import { queryKeys } from "@/lib/queryKeys";
 import { DoubleConfirmAlertDialog } from "@/components/ui/double-confirm-alert-dialog";
+import {
+  isTimeClockCorrectionForRecipient,
+  timeClockCorrectionStatus,
+} from "@/lib/timeClockCorrectionRequests";
 
-const AdminTimeClockRequests = () => {
+export function AdminTimeClockRequestsPanel() {
   const { t, language } = useLanguage();
   const { user } = useAdminAuth();
   const queryClient = useQueryClient();
@@ -36,7 +40,7 @@ const AdminTimeClockRequests = () => {
   const requests = useMemo(
     () =>
       messages
-        .filter((m) => m.category === "TIME_CLOCK_CORRECTION" && m.recipientBackofficeUserId === myUserId)
+        .filter((m) => isTimeClockCorrectionForRecipient(m, myUserId))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [messages, myUserId]
   );
@@ -47,7 +51,7 @@ const AdminTimeClockRequests = () => {
     requestStatus?: "PENDING" | "APPROVED" | "REJECTED";
     reviewNote?: string | null;
   };
-  const activeStatus = activePayload.requestStatus ?? "PENDING";
+  const activeStatus = timeClockCorrectionStatus(activeRequest?.payload);
 
   const localeTag = language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
   const formatDt = (iso: string) =>
@@ -84,13 +88,14 @@ const AdminTimeClockRequests = () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessages });
       await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeMessageUnreadCount });
       setActiveRequestId(null);
+      setDeleteTimeClockRequestId(null);
     },
   });
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-        <Loader2 className="h-6 w-6 animate-spin" />
+      <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
         {t("admin.common.loading")}
       </div>
     );
@@ -104,25 +109,19 @@ const AdminTimeClockRequests = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Inbox className="h-6 w-6 text-primary" />
-          {t("admin.timeClock.requests_title")}
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">{t("admin.timeClock.requests_subtitle")}</p>
-      </div>
-
+    <>
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">{t("admin.timeClock.requests_inbox_title")}</CardTitle>
+        <CardHeader>
+          <CardTitle className="text-base">{t("admin.workerProfileRequests.timeclock_title")}</CardTitle>
           <CardDescription>
             {t("admin.common.showing")} {requests.length}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {requests.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">{t("admin.timeClock.requests_empty")}</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              {t("admin.workerProfileRequests.timeclock_empty")}
+            </p>
           ) : (
             <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
               <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
@@ -134,7 +133,7 @@ const AdminTimeClockRequests = () => {
                   };
                   const workerId = payload.workerId ?? "";
                   const workerName = workerNameById.get(workerId) ?? t("admin.messages.user_unknown");
-                  const status = payload.requestStatus ?? "PENDING";
+                  const status = timeClockCorrectionStatus(m.payload);
                   const active = activeRequest?.id === m.id;
                   return (
                     <button
@@ -226,15 +225,11 @@ const AdminTimeClockRequests = () => {
                       variant="ghost"
                       className="text-destructive"
                       disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(activeRequest.id)}
+                      onClick={() => setDeleteTimeClockRequestId(activeRequest.id)}
                     >
                       {t("admin.timeClock.request_delete")}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      asChild
-                    >
+                    <Button type="button" variant="outline" asChild>
                       <Link to="/admin/control-fichajes">{t("admin.timeClock.request_open_timeclock")}</Link>
                     </Button>
                   </div>
@@ -257,8 +252,6 @@ const AdminTimeClockRequests = () => {
         description={t("admin.timeClock.request_delete_confirm_desc")}
         disabled={deleteMutation.isPending}
       />
-    </div>
+    </>
   );
-};
-
-export default AdminTimeClockRequests;
+}

@@ -17,7 +17,7 @@ import { getResolvedDisplayName } from "@/types/backoffice";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 export type AdminLoginResult =
-  | { ok: true; needsPasswordChange: boolean }
+  | { ok: true; needsPasswordChange: boolean; role: UserRole | null }
   | { ok: false; message: string };
 
 type AdminAuthContextValue = {
@@ -208,7 +208,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         companyWorkerId: profile.companyWorkerId,
         enabledModules: profile.enabledModules,
       });
-      return { ok: true, needsPasswordChange: needsPwd };
+      return { ok: true, needsPasswordChange: needsPwd, role: normalizeUserRole(profile.role) };
     },
     [t]
   );

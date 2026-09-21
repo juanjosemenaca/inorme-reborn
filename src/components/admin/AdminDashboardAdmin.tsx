@@ -3,31 +3,39 @@ import { Link } from "react-router-dom";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import {
   Building2,
+  CalendarDays,
   ClipboardList,
   Clock3,
   Contact2,
   Euro,
   FileText,
-  FileUser,
   FolderKanban,
+  IdCard,
+  Layers,
   Loader2,
   MessageSquare,
   Palmtree,
   TriangleAlert,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BackofficeTodayDateCard } from "@/components/admin/BackofficeTodayDateCard";
 import { useMyBackofficeMessages } from "@/hooks/useBackofficeMessages";
 import { useMyDmsDocumentReviewsAsAssignee } from "@/hooks/useMyDmsDocumentReviews";
 import { usePendingWorkerProfileChangeRequests } from "@/hooks/useWorkerProfileChangeRequests";
-import { usePendingWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
+import { usePendingWorkerCalendarChangeRequests } from "@/hooks/useWorkerCalendarChangeRequests";
+import { usePendingWorkerModuleChangeRequests } from "@/hooks/useWorkerModuleChangeRequests";
+import { pendingTimeClockCorrectionCount } from "@/lib/timeClockCorrectionRequests";
+import {
+  usePendingCarryoverRequests,
+  usePendingWorkerVacationChangeRequests,
+} from "@/hooks/useWorkerVacationChangeRequests";
 import { usePendingWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import type { BackofficeSession } from "@/types/backoffice";
-import { ADMIN_PATHS } from "@/constants/adminPaths";
+import { ADMIN_PATHS, solicitudesGroupHref } from "@/constants/adminPaths";
 import { cn } from "@/lib/utils";
 import {
   billingInvoiceHasCollectionOutstanding,
@@ -70,6 +78,62 @@ const DASHBOARD_BILLING_PIE_COLORS = [
 function countProjectsOngoing(projects: { endDate: string }[]): number {
   const today = new Date().toISOString().slice(0, 10);
   return projects.filter((p) => p.endDate.slice(0, 10) >= today).length;
+}
+
+function PendingAttentionCard({
+  to,
+  icon: Icon,
+  title,
+  hint,
+  count,
+  pendingLabel,
+  openLabel,
+}: {
+  to: string;
+  icon: typeof IdCard;
+  title: string;
+  hint: string;
+  count: number;
+  pendingLabel: string;
+  openLabel: string;
+}) {
+  const hasPending = count > 0;
+  return (
+    <Link
+      to={to}
+      className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Card
+        className={cn(
+          "flex h-full flex-col border-2 shadow-sm transition-colors group-hover:border-primary/50 group-hover:bg-muted/30",
+          hasPending &&
+            "border-amber-500/70 bg-amber-50/90 dark:border-amber-700/70 dark:bg-amber-950/40"
+        )}
+      >
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <Icon className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+            <CardTitle className="text-base">{title}</CardTitle>
+          </div>
+          <CardDescription>{hint}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-1 flex-col justify-between gap-4">
+          <div className="flex items-baseline gap-2">
+            <span
+              className={cn(
+                "text-4xl font-bold tabular-nums tracking-tight",
+                hasPending ? "text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {count > 99 ? "99+" : count}
+            </span>
+            <span className="text-sm text-muted-foreground">{pendingLabel}</span>
+          </div>
+          <span className="text-sm font-medium text-primary group-hover:underline">{openLabel}</span>
+        </CardContent>
+      </Card>
+    </Link>
+  );
 }
 
 function calendarYmShift(monthsDelta: number): string {
@@ -193,8 +257,14 @@ export function AdminDashboardAdmin({ session }: Props) {
     usePendingWorkerExpenseSheets(fetchPending);
   const { data: pendingProfileRequests, isPending: profilePending } =
     usePendingWorkerProfileChangeRequests(fetchPending);
+  const { data: pendingCalendarRequests, isPending: calendarPending } =
+    usePendingWorkerCalendarChangeRequests(fetchPending);
+  const { data: pendingModuleRequests, isPending: modulePending } =
+    usePendingWorkerModuleChangeRequests(fetchPending);
   const { data: pendingVacationRequests, isPending: vacationPending } =
     usePendingWorkerVacationChangeRequests(fetchPending);
+  const { data: pendingCarryoverRequests, isPending: carryoverPending } =
+    usePendingCarryoverRequests(fetchPending);
   const { data: backofficeMessages, isPending: messagesPending } = useMyBackofficeMessages(fetchPending);
   const { data: pendingDocReviews, isPending: docsPending } =
     useMyDmsDocumentReviewsAsAssignee(fetchPending);
@@ -202,35 +272,47 @@ export function AdminDashboardAdmin({ session }: Props) {
   const myUserId = session.userId;
 
   const pendingExpenseCount = pendingExpenseSheets?.length ?? 0;
-  const pendingProfileCount = pendingProfileRequests?.length ?? 0;
-  const pendingVacationCount = pendingVacationRequests?.length ?? 0;
+  const pendingPersonalCount = pendingProfileRequests?.length ?? 0;
+  const pendingCalendarCount = pendingCalendarRequests?.length ?? 0;
+  const pendingModulesCount = pendingModuleRequests?.length ?? 0;
+  const pendingVacationCount =
+    (pendingVacationRequests?.length ?? 0) + (pendingCarryoverRequests?.length ?? 0);
   const pendingAssignedDocsCount = pendingDocReviews?.length ?? 0;
 
   const { pendingTimeClockCount, unreadChatCount } = useMemo(() => {
     const msgs = backofficeMessages ?? [];
-    let tc = 0;
     let chat = 0;
     for (const m of msgs) {
       if (m.recipientBackofficeUserId !== myUserId || m.readAt !== null) continue;
-      if (m.category === "TIME_CLOCK_CORRECTION") {
-        const st = (m.payload as { requestStatus?: string }).requestStatus ?? "PENDING";
-        if (st === "PENDING") tc += 1;
-        continue;
-      }
+      if (m.category === "TIME_CLOCK_CORRECTION") continue;
       chat += 1;
     }
-    return { pendingTimeClockCount: tc, unreadChatCount: chat };
+    return {
+      pendingTimeClockCount: pendingTimeClockCorrectionCount(msgs, myUserId),
+      unreadChatCount: chat,
+    };
   }, [backofficeMessages, myUserId]);
+  const pendingModificationCount =
+    pendingPersonalCount +
+    pendingCalendarCount +
+    pendingModulesCount +
+    pendingTimeClockCount +
+    pendingVacationCount;
 
   const listsInitialLoading =
     fetchPending &&
-    (expensePending || profilePending || vacationPending || messagesPending || docsPending);
+    (expensePending ||
+      profilePending ||
+      calendarPending ||
+      modulePending ||
+      vacationPending ||
+      carryoverPending ||
+      messagesPending ||
+      docsPending);
 
   const hasPendingStrip =
-    pendingProfileCount > 0 ||
-    pendingVacationCount > 0 ||
+    pendingModificationCount > 0 ||
     pendingExpenseCount > 0 ||
-    pendingTimeClockCount > 0 ||
     unreadChatCount > 0 ||
     pendingAssignedDocsCount > 0;
 
@@ -313,11 +395,11 @@ export function AdminDashboardAdmin({ session }: Props) {
   );
   const billingLast3MonthsPieHasData = billingLast3MonthsPieData.length > 0;
 
-  const showAssignedDocsCard =
-    fetchPending && !docsPending && pendingAssignedDocsCount > 0;
+  const pendingLabel = t("admin.dashboard.admin_pending_label");
+  const openRequestLabel = t("admin.dashboard.admin_open_request_type");
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6" data-admin-dashboard="pending-first">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
         <div className="min-w-0 flex-1">
           <h2 className="text-2xl font-bold tracking-tight">{t("admin.dashboard.worker_title")}</h2>
@@ -333,7 +415,121 @@ export function AdminDashboardAdmin({ session }: Props) {
         />
       </div>
 
-      {supabaseOk ? (
+      <section className="space-y-4" aria-label={t("admin.dashboard.admin_attention_title")}>
+        {listsInitialLoading ? (
+          <Card className="flex flex-col border-2 shadow-sm">
+            <CardContent className="flex items-center gap-2 py-10 text-muted-foreground">
+              <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+              {t("admin.common.loading")}
+            </CardContent>
+          </Card>
+        ) : hasPendingStrip ? (
+          <>
+            <Alert className="border-amber-500/50 bg-amber-50/90 dark:border-amber-800/50 dark:bg-amber-950/35">
+              <TriangleAlert className="h-4 w-4 text-amber-800 dark:text-amber-200" aria-hidden />
+              <AlertTitle>{t("admin.dashboard.admin_attention_title")}</AlertTitle>
+              <AlertDescription className="text-muted-foreground">
+                {t("admin.dashboard.admin_attention_description")}
+              </AlertDescription>
+            </Alert>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {pendingPersonalCount > 0 ? (
+                <PendingAttentionCard
+                  to={solicitudesGroupHref("PERSONAL")}
+                  icon={IdCard}
+                  title={t("admin.workerProfileRequests.pending_title")}
+                  hint={t("admin.workerProfileRequests.group_personal_hint")}
+                  count={pendingPersonalCount}
+                  pendingLabel={pendingLabel}
+                  openLabel={openRequestLabel}
+                />
+              ) : null}
+              {pendingCalendarCount > 0 ? (
+                <PendingAttentionCard
+                  to={solicitudesGroupHref("CALENDAR")}
+                  icon={CalendarDays}
+                  title={t("admin.workerProfileRequests.calendar_title")}
+                  hint={t("admin.workerProfileRequests.group_calendar_hint")}
+                  count={pendingCalendarCount}
+                  pendingLabel={pendingLabel}
+                  openLabel={openRequestLabel}
+                />
+              ) : null}
+              {pendingVacationCount > 0 ? (
+                <PendingAttentionCard
+                  to={solicitudesGroupHref("VACATIONS")}
+                  icon={Palmtree}
+                  title={t("admin.workerProfileRequests.vacations_title")}
+                  hint={t("admin.workerProfileRequests.group_vacations_hint")}
+                  count={pendingVacationCount}
+                  pendingLabel={pendingLabel}
+                  openLabel={openRequestLabel}
+                />
+              ) : null}
+              {pendingModulesCount > 0 ? (
+                <PendingAttentionCard
+                  to={solicitudesGroupHref("MODULES")}
+                  icon={Layers}
+                  title={t("admin.workerProfileRequests.modules_title")}
+                  hint={t("admin.workerProfileRequests.group_modules_hint")}
+                  count={pendingModulesCount}
+                  pendingLabel={pendingLabel}
+                  openLabel={openRequestLabel}
+                />
+              ) : null}
+              {pendingTimeClockCount > 0 ? (
+                <PendingAttentionCard
+                  to={solicitudesGroupHref("TIME_CLOCK")}
+                  icon={Clock3}
+                  title={t("admin.workerProfileRequests.timeclock_title")}
+                  hint={t("admin.workerProfileRequests.group_timeclock_hint")}
+                  count={pendingTimeClockCount}
+                  pendingLabel={pendingLabel}
+                  openLabel={openRequestLabel}
+                />
+              ) : null}
+              {unreadChatCount > 0 ? (
+                <PendingAttentionCard
+                  to={ADMIN_PATHS.mensajesTrabajadores}
+                  icon={MessageSquare}
+                  title={t("admin.layout.nav_worker_messages_admin")}
+                  hint={t("admin.dashboard.admin_card_messages_hint")}
+                  count={unreadChatCount}
+                  pendingLabel={t("admin.dashboard.worker_messages_unread_label")}
+                  openLabel={t("admin.dashboard.admin_open_messages")}
+                />
+              ) : null}
+              {pendingExpenseCount > 0 ? (
+                <PendingAttentionCard
+                  to={ADMIN_PATHS.gastosTrabajadores}
+                  icon={Euro}
+                  title={t("admin.layout.nav_worker_expenses_admin")}
+                  hint={t("admin.dashboard.admin_card_expenses_hint")}
+                  count={pendingExpenseCount}
+                  pendingLabel={pendingLabel}
+                  openLabel={t("admin.dashboard.admin_open_expenses")}
+                />
+              ) : null}
+              {pendingAssignedDocsCount > 0 ? (
+                <PendingAttentionCard
+                  to="/admin/documentos-pendientes"
+                  icon={ClipboardList}
+                  title={t("admin.dashboard.worker_assigned_docs_title")}
+                  hint={t("admin.dashboard.worker_assigned_docs_hint")}
+                  count={pendingAssignedDocsCount}
+                  pendingLabel={t("admin.dashboard.worker_assigned_docs_count_label")}
+                  openLabel={t("admin.dashboard.worker_assigned_docs_link")}
+                />
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t("admin.dashboard.admin_all_clear")}</p>
+        )}
+      </section>
+
+      {supabaseOk && !listsInitialLoading ? (
         <>
           {overviewPending ? (
             <Card className="flex flex-col border-2 shadow-sm">
@@ -713,191 +909,6 @@ export function AdminDashboardAdmin({ session }: Props) {
             )
           ) : null}
         </>
-      ) : null}
-
-      {listsInitialLoading ? (
-        <Card className="flex flex-col border-2 shadow-sm md:col-span-2 xl:col-span-3">
-          <CardContent className="flex items-center gap-2 py-10 text-muted-foreground">
-            <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
-            {t("admin.common.loading")}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {!listsInitialLoading && hasPendingStrip ? (
-        <Alert className="border-amber-500/50 bg-amber-50/90 dark:border-amber-800/50 dark:bg-amber-950/35">
-          <TriangleAlert className="h-4 w-4 text-amber-800 dark:text-amber-200" aria-hidden />
-          <AlertTitle>{t("admin.dashboard.admin_attention_title")}</AlertTitle>
-          <AlertDescription className="text-muted-foreground">
-            {t("admin.dashboard.admin_attention_description")}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {!listsInitialLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {pendingExpenseCount > 0 ? (
-            <Card className="flex flex-col border-2 shadow-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <Euro className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-                  <CardTitle className="text-base">{t("admin.layout.nav_worker_expenses_admin")}</CardTitle>
-                </div>
-                <CardDescription>{t("admin.dashboard.admin_card_expenses_hint")}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col justify-between gap-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
-                    {pendingExpenseCount > 99 ? "99+" : pendingExpenseCount}
-                  </span>
-                  <span className="text-sm text-muted-foreground">{t("admin.dashboard.admin_pending_label")}</span>
-                </div>
-                <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
-                  <Link to={ADMIN_PATHS.gastosTrabajadores} className="inline-flex items-center gap-2">
-                    <Euro className="h-4 w-4" aria-hidden />
-                    {t("admin.dashboard.admin_open_expenses")}
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {pendingProfileCount > 0 ? (
-            <Card className="flex flex-col border-2 shadow-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <FileUser className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-                  <CardTitle className="text-base">{t("admin.layout.nav_profile_requests")}</CardTitle>
-                </div>
-                <CardDescription>{t("admin.dashboard.admin_card_profile_hint")}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col justify-between gap-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
-                    {pendingProfileCount > 99 ? "99+" : pendingProfileCount}
-                  </span>
-                  <span className="text-sm text-muted-foreground">{t("admin.dashboard.admin_pending_label")}</span>
-                </div>
-                <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
-                  <Link to={ADMIN_PATHS.solicitudesFicha} className="inline-flex items-center gap-2">
-                    <FileUser className="h-4 w-4" aria-hidden />
-                    {t("admin.dashboard.admin_open_profile")}
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {pendingVacationCount > 0 ? (
-            <Card className="flex flex-col border-2 shadow-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <Palmtree className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-                  <CardTitle className="text-base">{t("admin.layout.nav_vacation_requests")}</CardTitle>
-                </div>
-                <CardDescription>{t("admin.dashboard.admin_card_vacation_hint")}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col justify-between gap-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
-                    {pendingVacationCount > 99 ? "99+" : pendingVacationCount}
-                  </span>
-                  <span className="text-sm text-muted-foreground">{t("admin.dashboard.admin_pending_label")}</span>
-                </div>
-                <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
-                  <Link to={ADMIN_PATHS.solicitudesVacaciones} className="inline-flex items-center gap-2">
-                    <Palmtree className="h-4 w-4" aria-hidden />
-                    {t("admin.dashboard.admin_open_vacation")}
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {pendingTimeClockCount > 0 ? (
-            <Card className="flex flex-col border-2 shadow-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <Clock3 className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-                  <CardTitle className="text-base">{t("admin.timeClock.requests_title")}</CardTitle>
-                </div>
-                <CardDescription>{t("admin.dashboard.admin_card_timeclock_hint")}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col justify-between gap-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
-                    {pendingTimeClockCount > 99 ? "99+" : pendingTimeClockCount}
-                  </span>
-                  <span className="text-sm text-muted-foreground">{t("admin.dashboard.admin_pending_label")}</span>
-                </div>
-                <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
-                  <Link to={ADMIN_PATHS.solicitudesFichajes} className="inline-flex items-center gap-2">
-                    <Clock3 className="h-4 w-4" aria-hidden />
-                    {t("admin.dashboard.admin_open_timeclock")}
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {showAssignedDocsCard ? (
-            <Card className="flex flex-col border-2 border-primary/25 shadow-sm md:col-span-2 xl:col-span-1">
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <ClipboardList className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-                  <CardTitle className="text-base">{t("admin.dashboard.worker_assigned_docs_title")}</CardTitle>
-                </div>
-                <CardDescription>{t("admin.dashboard.worker_assigned_docs_hint")}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col justify-between gap-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
-                    {pendingAssignedDocsCount}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {t("admin.dashboard.worker_assigned_docs_count_label")}
-                  </span>
-                </div>
-                <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
-                  <Link to="/admin/documentos-pendientes" className="inline-flex items-center gap-2">
-                    <ClipboardList className="h-4 w-4" aria-hidden />
-                    {t("admin.dashboard.worker_assigned_docs_link")}
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {unreadChatCount > 0 ? (
-            <Card className="flex flex-col border-2 shadow-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-                  <CardTitle className="text-base">{t("admin.layout.nav_worker_messages_admin")}</CardTitle>
-                </div>
-                <CardDescription>{t("admin.dashboard.admin_card_messages_hint")}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col justify-between gap-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
-                    {unreadChatCount > 99 ? "99+" : unreadChatCount}
-                  </span>
-                  <span className="text-sm text-muted-foreground">{t("admin.dashboard.worker_messages_unread_label")}</span>
-                </div>
-                <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
-                  <Link to={ADMIN_PATHS.mensajesTrabajadores} className="inline-flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4" aria-hidden />
-                    {t("admin.dashboard.admin_open_messages")}
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
-        </div>
-      ) : null}
-
-      {!listsInitialLoading && !hasPendingStrip ? (
-        <p className="text-sm text-muted-foreground">{t("admin.dashboard.admin_all_clear")}</p>
       ) : null}
     </div>
   );

@@ -8,6 +8,9 @@ export const queryKeys = {
   workerCalendarChangeRequests: ["workerCalendarChangeRequests"] as const,
   workerCalendarChangeRequestsFor: (companyWorkerId: string) =>
     ["workerCalendarChangeRequests", companyWorkerId] as const,
+  workerModuleChangeRequests: ["workerModuleChangeRequests"] as const,
+  workerModuleChangeRequestsFor: (companyWorkerId: string) =>
+    ["workerModuleChangeRequests", companyWorkerId] as const,
   backofficeUsers: ["backofficeUsers"] as const,
   backofficeMessages: ["backofficeMessages"] as const,
   backofficeMessageUnreadCount: ["backofficeMessageUnreadCount"] as const,

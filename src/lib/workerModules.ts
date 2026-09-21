@@ -1,8 +1,17 @@
 import {
+  ALL_WORKER_MODULES,
+  REGISTRY_MODULE_KEYS,
   isRegistryWorkerModule,
   type UserRole,
   type WorkerModuleKey,
 } from "@/types/backoffice";
+
+const ALL_REQUESTABLE_MODULES: readonly WorkerModuleKey[] = [
+  ...ALL_WORKER_MODULES,
+  ...REGISTRY_MODULE_KEYS,
+];
+
+const ALLOWED_MODULE_SET = new Set<string>(ALL_REQUESTABLE_MODULES);
 
 /** Etiqueta traducida de un módulo, compartida por activación de módulos y «Mi ficha». */
 export function workerModuleLabel(
@@ -47,4 +56,32 @@ export function isWorkerModuleEnabled(
   if (role === "ADMIN" && (module === "DMS" || module === "FACTURACION")) return true;
   if (role === "ADMIN" && isRegistryWorkerModule(module)) return true;
   return enabledModules.includes(module);
+}
+
+export function requestableWorkerModules(): readonly WorkerModuleKey[] {
+  return ALL_REQUESTABLE_MODULES;
+}
+
+export function normalizeModuleList(mods: readonly string[]): WorkerModuleKey[] {
+  const unique = new Set<WorkerModuleKey>();
+  for (const m of mods) {
+    if (ALLOWED_MODULE_SET.has(m)) unique.add(m as WorkerModuleKey);
+  }
+  return ALL_REQUESTABLE_MODULES.filter((m) => unique.has(m));
+}
+
+export function modulesEqual(a: readonly string[], b: readonly string[]): boolean {
+  return normalizeModuleList(a).join(",") === normalizeModuleList(b).join(",");
+}
+
+export function moduleListDiff(
+  previous: readonly string[],
+  suggested: readonly string[]
+): { added: WorkerModuleKey[]; removed: WorkerModuleKey[] } {
+  const prev = new Set(normalizeModuleList(previous));
+  const next = new Set(normalizeModuleList(suggested));
+  return {
+    added: ALL_REQUESTABLE_MODULES.filter((m) => next.has(m) && !prev.has(m)),
+    removed: ALL_REQUESTABLE_MODULES.filter((m) => prev.has(m) && !next.has(m)),
+  };
 }

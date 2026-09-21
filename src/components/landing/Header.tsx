@@ -112,7 +112,7 @@ const Header = ({ alwaysSolid = false }: HeaderProps) => {
                   </button>
                 ))}
                 <Link
-                  to="/admin/login"
+                  to="/admin"
                   onClick={() => setSheetOpen(false)}
                   className="w-full px-4 py-3 text-left text-sm font-medium uppercase text-primary hover:bg-muted rounded-lg"
                 >

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,10 @@ import { useToast } from "@/hooks/use-toast";
 import { queryKeys } from "@/lib/queryKeys";
 import { useCompanyWorkers } from "@/hooks/useCompanyWorkers";
 import { useWorkCalendarSites } from "@/hooks/useWorkCalendarSites";
-import { useAllWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
+import {
+  useAllWorkerVacationChangeRequests,
+  usePendingCarryoverRequests,
+} from "@/hooks/useWorkerVacationChangeRequests";
 import {
   approveWorkerVacationChangeRequest,
   deleteWorkerVacationChangeRequest,
@@ -37,7 +40,6 @@ import {
 } from "@/api/workerVacationChangeRequestsApi";
 import {
   approveCarryoverRequest,
-  fetchPendingCarryoverRequests,
   rejectCarryoverRequest,
 } from "@/api/workerVacationCarryoverRequestsApi";
 import { companyWorkerDisplayName } from "@/types/companyWorkers";
@@ -64,17 +66,14 @@ function DiffSummary({ req }: { req: WorkerVacationChangeRequestRecord }) {
   );
 }
 
-const AdminVacationRequests = () => {
+export function AdminVacationRequestsPanel() {
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: workers = [] } = useCompanyWorkers();
   const { data: sites = [] } = useWorkCalendarSites();
   const { data: requests = [], isLoading, isError, error } = useAllWorkerVacationChangeRequests();
-  const { data: carryoverPending = [], isLoading: carryLoading } = useQuery({
-    queryKey: queryKeys.pendingCarryoverRequests,
-    queryFn: fetchPendingCarryoverRequests,
-  });
+  const { data: carryoverPending = [], isLoading: carryLoading } = usePendingCarryoverRequests();
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<WorkerVacationChangeRequestRecord | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -195,8 +194,8 @@ const AdminVacationRequests = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-        <Loader2 className="h-6 w-6 animate-spin" />
+      <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
         {t("admin.common.loading")}
       </div>
     );
@@ -211,13 +210,6 @@ const AdminVacationRequests = () => {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("admin.vacationRequests.title")}</h1>
-        <p className="text-muted-foreground text-sm mt-1 max-w-3xl">
-          {t("admin.vacationRequests.subtitle")}
-        </p>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base">{t("admin.vacationRequests.carryover_section_title")}</CardTitle>
@@ -488,6 +480,4 @@ const AdminVacationRequests = () => {
       />
     </div>
   );
-};
-
-export default AdminVacationRequests;
+}

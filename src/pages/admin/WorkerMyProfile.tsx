@@ -28,8 +28,14 @@ import {
   useHasPendingWorkerCalendarRequest,
   useWorkerCalendarChangeHistory,
 } from "@/hooks/useWorkerCalendarChangeRequests";
+import {
+  useHasPendingWorkerModuleRequest,
+  useWorkerModuleChangeHistory,
+} from "@/hooks/useWorkerModuleChangeRequests";
 import { submitWorkerProfileChangeRequest } from "@/api/workerProfileChangeRequestsApi";
 import { submitWorkerCalendarChangeRequest } from "@/api/workerCalendarChangeRequestsApi";
+import { submitWorkerModuleChangeRequest } from "@/api/workerModuleChangeRequestsApi";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { PendingRequestNotice } from "@/components/admin/PendingRequestNotice";
 import { queryKeys } from "@/lib/queryKeys";
@@ -41,7 +47,13 @@ import {
   REGISTRY_MODULE_KEYS,
   type WorkerModuleKey,
 } from "@/types/backoffice";
-import { isWorkerModuleEnabled, workerModuleLabel } from "@/lib/workerModules";
+import {
+  isWorkerModuleEnabled,
+  moduleListDiff,
+  modulesEqual,
+  normalizeModuleList,
+  workerModuleLabel,
+} from "@/lib/workerModules";
 
 type ModuleItem = { key: WorkerModuleKey; label: string; enabled: boolean };
 
@@ -50,21 +62,39 @@ function ModuleGroup({
   items,
   onLabel,
   offLabel,
+  selectable = false,
+  selectedKeys,
+  onToggle,
 }: {
   title: string;
   items: ModuleItem[];
   onLabel: string;
   offLabel: string;
+  selectable?: boolean;
+  selectedKeys?: ReadonlySet<WorkerModuleKey>;
+  onToggle?: (key: WorkerModuleKey, enabled: boolean) => void;
 }) {
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
       <ul className="grid gap-2 sm:grid-cols-2">
-        {items.map((item) => (
+        {items.map((item) => {
+          const checked = selectable ? Boolean(selectedKeys?.has(item.key)) : item.enabled;
+          return (
           <li
             key={item.key}
             className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
           >
+            {selectable ? (
+              <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(v) => onToggle?.(item.key, v === true)}
+                />
+                <span className="truncate">{item.label}</span>
+              </label>
+            ) : (
+              <>
             <span className={item.enabled ? "text-sm" : "text-sm text-muted-foreground"}>
               {item.label}
             </span>
@@ -79,8 +109,11 @@ function ModuleGroup({
                 {offLabel}
               </Badge>
             )}
+              </>
+            )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
@@ -111,8 +144,10 @@ const WorkerMyProfile = () => {
   );
   const { data: hasPending } = useHasPendingWorkerRequest(workerId);
   const { data: hasPendingCalendar } = useHasPendingWorkerCalendarRequest(workerId);
+  const { data: hasPendingModules } = useHasPendingWorkerModuleRequest(workerId);
   const { data: history = [] } = useWorkerProfileChangeHistory(workerId);
   const { data: calendarHistory = [] } = useWorkerCalendarChangeHistory(workerId);
+  const { data: moduleHistory = [] } = useWorkerModuleChangeHistory(workerId);
   /** Sede realmente guardada en la ficha, no la que haya seleccionada sin guardar. */
   const assignedCalendarSite = useMemo(
     () => calendarSites.find((s) => s.id === worker?.workCalendarSiteId),
@@ -142,16 +177,25 @@ const WorkerMyProfile = () => {
   const [calendarSiteId, setCalendarSiteId] = useState("");
   const [editingPersonal, setEditingPersonal] = useState(false);
   const [editingCalendar, setEditingCalendar] = useState(false);
+  const [editingModules, setEditingModules] = useState(false);
   const [calendarMessage, setCalendarMessage] = useState("");
+  const [moduleMessage, setModuleMessage] = useState("");
+  const [draftModules, setDraftModules] = useState<WorkerModuleKey[]>([]);
   useEffect(() => {
     if (worker) setCalendarSiteId(worker.workCalendarSiteId);
   }, [worker]);
+  useEffect(() => {
+    setDraftModules(normalizeModuleList(userModules));
+  }, [userModules]);
   useEffect(() => {
     if (hasPending) setEditingPersonal(false);
   }, [hasPending]);
   useEffect(() => {
     if (hasPendingCalendar) setEditingCalendar(false);
   }, [hasPendingCalendar]);
+  useEffect(() => {
+    if (hasPendingModules) setEditingModules(false);
+  }, [hasPendingModules]);
 
   const calendarRequestMutation = useMutation({
     mutationFn: () =>
@@ -169,6 +213,33 @@ const WorkerMyProfile = () => {
       });
       await queryClient.invalidateQueries({
         queryKey: [...queryKeys.workerCalendarChangeRequests, "hasPending", workerId ?? ""] as const,
+      });
+    },
+    onError: (e) => {
+      toast({
+        title: t("admin.common.error"),
+        description: e instanceof Error ? e.message : "",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const moduleRequestMutation = useMutation({
+    mutationFn: () =>
+      submitWorkerModuleChangeRequest({
+        suggestedModules: draftModules,
+        workerMessage: moduleMessage,
+      }),
+    onSuccess: async () => {
+      toast({ title: t("admin.workerProfile.toast_sent") });
+      setEditingModules(false);
+      setModuleMessage("");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workerModuleChangeRequests });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.workerModuleChangeRequestsFor(workerId ?? ""),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: [...queryKeys.workerModuleChangeRequests, "hasPending", workerId ?? ""] as const,
       });
     },
     onError: (e) => {
@@ -283,6 +354,22 @@ const WorkerMyProfile = () => {
     if (worker) setCalendarSiteId(worker.workCalendarSiteId);
   };
 
+  const cancelModulesEdit = () => {
+    setEditingModules(false);
+    setModuleMessage("");
+    setDraftModules(normalizeModuleList(userModules));
+  };
+
+  const draftModuleSet = useMemo(() => new Set(draftModules), [draftModules]);
+  const toggleDraftModule = (key: WorkerModuleKey, enabled: boolean) => {
+    setDraftModules((prev) => {
+      const next = new Set(prev);
+      if (enabled) next.add(key);
+      else next.delete(key);
+      return normalizeModuleList([...next]);
+    });
+  };
+
   const lockedInputClass = "read-only:cursor-default read-only:bg-muted/50";
 
   const combinedHistory = useMemo(
@@ -290,8 +377,9 @@ const WorkerMyProfile = () => {
       [
         ...history.map((h) => ({ ...h, kind: "PERSONAL" as const })),
         ...calendarHistory.map((h) => ({ ...h, kind: "CALENDAR" as const })),
+        ...moduleHistory.map((h) => ({ ...h, kind: "MODULES" as const })),
       ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [history, calendarHistory]
+    [history, calendarHistory, moduleHistory]
   );
 
   const localeTag =
@@ -320,7 +408,11 @@ const WorkerMyProfile = () => {
           <Layers className="h-4 w-4 shrink-0" aria-hidden />
           {t("admin.workerProfile.modules_title")}
         </CardTitle>
-        <CardDescription>{t("admin.workerProfile.modules_desc")}</CardDescription>
+        <CardDescription>
+          {editingModules
+            ? t("admin.workerProfile.modules_desc_editing")
+            : t("admin.workerProfile.modules_desc")}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <ModuleGroup
@@ -328,13 +420,79 @@ const WorkerMyProfile = () => {
           items={intranetModules}
           onLabel={t("admin.workerProfile.modules_on")}
           offLabel={t("admin.workerProfile.modules_off")}
+          selectable={editingModules}
+          selectedKeys={draftModuleSet}
+          onToggle={toggleDraftModule}
         />
         <ModuleGroup
           title={t("admin.moduleActivation.bulk_section_masters")}
           items={registryModules}
           onLabel={t("admin.workerProfile.modules_on")}
           offLabel={t("admin.workerProfile.modules_off")}
+          selectable={editingModules}
+          selectedKeys={draftModuleSet}
+          onToggle={toggleDraftModule}
         />
+        {workerId ? (
+          editingModules ? (
+            <>
+              <div className="space-y-2 max-w-md">
+                <label className="text-sm font-medium leading-none" htmlFor="worker-modules-message">
+                  {t("admin.workerProfile.field_message")}
+                </label>
+                <Textarea
+                  id="worker-modules-message"
+                  rows={3}
+                  placeholder={t("admin.workerProfile.field_message_ph")}
+                  value={moduleMessage}
+                  onChange={(e) => setModuleMessage(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  className="gap-2"
+                  disabled={
+                    moduleRequestMutation.isPending || modulesEqual(userModules, draftModules)
+                  }
+                  onClick={() => moduleRequestMutation.mutate()}
+                >
+                  {moduleRequestMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  {t("admin.workerProfile.submit")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={moduleRequestMutation.isPending}
+                  onClick={cancelModulesEdit}
+                >
+                  {t("admin.workerProfile.cancel_edit")}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="gap-2"
+                disabled={Boolean(hasPendingModules)}
+                onClick={() => {
+                  setDraftModules(normalizeModuleList(userModules));
+                  setEditingModules(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+                {t("admin.workerProfile.request_edit")}
+              </Button>
+              {hasPendingModules ? <PendingRequestNotice /> : null}
+            </div>
+          )
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -653,7 +811,9 @@ const WorkerMyProfile = () => {
                   <Badge variant="outline">
                     {h.kind === "CALENDAR"
                       ? t("admin.workerProfile.history_kind_calendar")
-                      : t("admin.workerProfile.history_kind_personal")}
+                      : h.kind === "MODULES"
+                        ? t("admin.workerProfile.history_kind_modules")
+                        : t("admin.workerProfile.history_kind_personal")}
                   </Badge>
                   {h.status === "PENDING" && (
                     <Badge variant="secondary">{t("admin.workerProfile.status_pending")}</Badge>
@@ -672,6 +832,25 @@ const WorkerMyProfile = () => {
                     {calendarSites.find((s) => s.id === h.previousSiteId)?.name ?? h.previousSiteId}
                     {" → "}
                     {calendarSites.find((s) => s.id === h.suggestedSiteId)?.name ?? h.suggestedSiteId}
+                  </p>
+                )}
+                {h.kind === "MODULES" && (
+                  <p className="text-xs text-muted-foreground">
+                    {(() => {
+                      const { added, removed } = moduleListDiff(h.previousModules, h.suggestedModules);
+                      const bits: string[] = [];
+                      if (added.length) {
+                        bits.push(
+                          `${t("admin.workerProfile.modules_add")}: ${added.map((m) => workerModuleLabel(m, t)).join(", ")}`
+                        );
+                      }
+                      if (removed.length) {
+                        bits.push(
+                          `${t("admin.workerProfile.modules_remove")}: ${removed.map((m) => workerModuleLabel(m, t)).join(", ")}`
+                        );
+                      }
+                      return bits.join(" · ") || "—";
+                    })()}
                   </p>
                 )}
                 {h.status === "REJECTED" && h.rejectionReason && (

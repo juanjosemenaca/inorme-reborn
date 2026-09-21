@@ -152,10 +152,12 @@ const AdminLogin = () => {
     const result = await login(email, password);
     setLoading(false);
     if (result.ok) {
-      navigate(
-        result.needsPasswordChange ? "/admin/cambiar-contrasena" : from,
-        { replace: true }
-      );
+      const dest = result.needsPasswordChange
+        ? "/admin/cambiar-contrasena"
+        : result.role === "ADMIN"
+          ? "/admin"
+          : from;
+      navigate(dest, { replace: true });
     } else {
       setError(result.message);
     }

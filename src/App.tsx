@@ -25,7 +25,6 @@ import AdminProviders from "./pages/admin/AdminProviders";
 import AdminCompanyWorkers from "./pages/admin/AdminCompanyWorkers";
 import AdminWorkCalendars from "./pages/admin/AdminWorkCalendars";
 import AdminVacations from "./pages/admin/AdminVacations";
-import AdminVacationRequests from "./pages/admin/AdminVacationRequests";
 import AdminChangePassword from "./pages/admin/AdminChangePassword";
 import WorkerMyProfile from "./pages/admin/WorkerMyProfile";
 import WorkerMyCalendar from "./pages/admin/WorkerMyCalendar";
@@ -38,7 +37,6 @@ import WorkerTimeClockFichar from "./pages/admin/WorkerTimeClockFichar";
 import WorkerTimeClockCorrection from "./pages/admin/WorkerTimeClockCorrection";
 import WorkerTimeClockHistory from "./pages/admin/WorkerTimeClockHistory";
 import AdminTimeClock from "./pages/admin/AdminTimeClock";
-import AdminTimeClockRequests from "./pages/admin/AdminTimeClockRequests";
 import AdminTimeClockReports from "./pages/admin/AdminTimeClockReports";
 import AdminUserModuleActivation from "./pages/admin/AdminUserModuleActivation";
 import WorkerAgenda from "./pages/admin/WorkerAgenda";
@@ -48,7 +46,7 @@ import AdminWorkerExpenses from "./pages/admin/AdminWorkerExpenses";
 import AdminBilling from "./pages/admin/AdminBilling";
 import AdminDms from "./pages/admin/AdminDms";
 import AdminBulkInvoices from "./pages/admin/AdminBulkInvoices";
-import { ADMIN_ROUTE_SEG } from "@/constants/adminPaths";
+import { ADMIN_ROUTE_SEG, solicitudesGroupHref } from "@/constants/adminPaths";
 
 const queryClient = new QueryClient();
 
@@ -146,7 +144,7 @@ const App = () => (
                 <Route
                   path="documentos-pendientes"
                   element={
-                    <RoleRoute allowedRoles={["WORKER"]}>
+                    <RoleRoute allowedRoles={["WORKER", "ADMIN"]}>
                       <WorkerPendingDocuments />
                     </RoleRoute>
                   }
@@ -192,7 +190,7 @@ const App = () => (
                   path={ADMIN_ROUTE_SEG.solicitudesFichajes}
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
-                      <AdminTimeClockRequests />
+                      <Navigate to={solicitudesGroupHref("TIME_CLOCK")} replace />
                     </RoleRoute>
                   }
                 />
@@ -296,7 +294,7 @@ const App = () => (
                   path={ADMIN_ROUTE_SEG.solicitudesVacaciones}
                   element={
                     <RoleRoute allowedRoles={["ADMIN"]}>
-                      <AdminVacationRequests />
+                      <Navigate to={solicitudesGroupHref("VACATIONS")} replace />
                     </RoleRoute>
                   }
                 />

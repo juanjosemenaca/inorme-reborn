@@ -47,9 +47,17 @@ import {
   useHasPendingWorkerCalendarRequest,
   usePendingWorkerCalendarChangeRequests,
 } from "@/hooks/useWorkerCalendarChangeRequests";
-import { usePendingWorkerVacationChangeRequests } from "@/hooks/useWorkerVacationChangeRequests";
+import {
+  useHasPendingWorkerModuleRequest,
+  usePendingWorkerModuleChangeRequests,
+} from "@/hooks/useWorkerModuleChangeRequests";
+import {
+  usePendingCarryoverRequests,
+  usePendingWorkerVacationChangeRequests,
+} from "@/hooks/useWorkerVacationChangeRequests";
 import { usePendingWorkerExpenseSheets } from "@/hooks/useWorkerExpenseSheets";
-import { useMyUnreadBackofficeMessageCount } from "@/hooks/useBackofficeMessages";
+import { useMyUnreadBackofficeMessageCount, useMyBackofficeMessages } from "@/hooks/useBackofficeMessages";
+import { pendingTimeClockCorrectionCount } from "@/lib/timeClockCorrectionRequests";
 import { useMyDmsDocumentReviewsAsAssignee } from "@/hooks/useMyDmsDocumentReviews";
 import { ADMIN_PATHS } from "@/constants/adminPaths";
 import { IntranetAttentionDialogs } from "@/components/admin/IntranetAttentionDialogs";
@@ -60,8 +68,8 @@ const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
   { to: "/admin/vacaciones", labelKey: "admin.layout.nav_vacations", icon: Palmtree, roles: ["ADMIN"] as const },
   {
-    to: ADMIN_PATHS.solicitudesVacaciones,
-    labelKey: "admin.layout.nav_vacation_requests",
+    to: ADMIN_PATHS.solicitudesFicha,
+    labelKey: "admin.layout.nav_profile_requests",
     icon: Inbox,
     roles: ["ADMIN"] as const,
   },
@@ -134,18 +142,6 @@ const NAV_KEYS = [
     to: "/admin/control-fichajes/informes",
     labelKey: "admin.layout.nav_time_clock_reports",
     icon: FileText,
-    roles: ["ADMIN"] as const,
-  },
-  {
-    to: ADMIN_PATHS.solicitudesFichajes,
-    labelKey: "admin.layout.nav_time_clock_requests",
-    icon: Inbox,
-    roles: ["ADMIN"] as const,
-  },
-  {
-    to: ADMIN_PATHS.solicitudesFicha,
-    labelKey: "admin.layout.nav_profile_requests",
-    icon: Inbox,
     roles: ["ADMIN"] as const,
   },
   { to: "/admin/usuarios", labelKey: "admin.layout.nav_users_list", icon: Users, roles: ["ADMIN"] as const },
@@ -227,10 +223,8 @@ const ADMIN_MAIN_NAV_SEGMENTS: AdminMainNavSegment[] = [
 ];
 
 const ADMIN_MESSAGE_CHILD_ROUTES = [
-  ADMIN_PATHS.solicitudesVacaciones,
   ADMIN_PATHS.solicitudesFicha,
   ADMIN_PATHS.mensajesTrabajadores,
-  ADMIN_PATHS.solicitudesFichajes,
 ] as const;
 
 const USERS_SECTION_ROUTES = [
@@ -274,7 +268,22 @@ const AdminLayout = () => {
   const { data: pendingCalendarRequests = [] } = usePendingWorkerCalendarChangeRequests(
     isAdmin && supabaseOk && !!user
   );
-  const pendingAdminProfileCount = pendingProfileRequests.length + pendingCalendarRequests.length;
+  const { data: pendingModuleRequests = [] } = usePendingWorkerModuleChangeRequests(
+    isAdmin && supabaseOk && !!user
+  );
+  const pendingAdminProfileCount =
+    pendingProfileRequests.length + pendingCalendarRequests.length + pendingModuleRequests.length;
+  const { data: backofficeMessages = [] } = useMyBackofficeMessages(isAdmin && supabaseOk && !!user);
+  const pendingTimeClockCount = pendingTimeClockCorrectionCount(backofficeMessages, user?.userId ?? "");
+  const { data: pendingVacationRequests = [] } = usePendingWorkerVacationChangeRequests(
+    isAdmin && supabaseOk && !!user
+  );
+  const { data: pendingCarryoverRequests = [] } = usePendingCarryoverRequests(
+    isAdmin && supabaseOk && !!user
+  );
+  const pendingVacationRequestCount = pendingVacationRequests.length + pendingCarryoverRequests.length;
+  const pendingModificationCount =
+    pendingAdminProfileCount + pendingTimeClockCount + pendingVacationRequestCount;
   const userRole = normalizeRole(user?.role);
   const enabledModules = user?.enabledModules ?? [];
   const workerEnabledModules = userRole === "WORKER" ? enabledModules : [];
@@ -284,6 +293,9 @@ const AdminLayout = () => {
   const { data: workerHasPendingCalendarRequest = false } = useHasPendingWorkerCalendarRequest(
     userRole === "WORKER" || userRole === "ADMIN" ? user?.companyWorkerId ?? null : null
   );
+  const { data: workerHasPendingModuleRequest = false } = useHasPendingWorkerModuleRequest(
+    userRole === "WORKER" || userRole === "ADMIN" ? user?.companyWorkerId ?? null : null
+  );
   const { data: unreadMessageCount = 0 } = useMyUnreadBackofficeMessageCount(
     supabaseOk && !!user && (userRole === "WORKER" || userRole === "ADMIN")
   );
@@ -291,15 +303,11 @@ const AdminLayout = () => {
     supabaseOk && userRole === "WORKER" && !!user
   );
   const pendingAssignedDocsCount = myPendingDmsReviews.length;
-  const { data: pendingVacationRequests = [] } = usePendingWorkerVacationChangeRequests(
-    isAdmin && supabaseOk && !!user
-  );
-  const pendingVacationRequestCount = pendingVacationRequests.length;
   const { data: pendingExpenseSheets = [] } = usePendingWorkerExpenseSheets(
     isAdmin && supabaseOk && !!user
   );
   const pendingExpenseSheetCount = pendingExpenseSheets.length;
-  const pendingAdminMessagesCount = pendingAdminProfileCount + pendingVacationRequestCount;
+  const pendingAdminMessagesCount = pendingModificationCount;
 
   const navItems = NAV_KEYS.filter((item) => {
     if (userRole === null || !item.roles.includes(userRole)) return false;
@@ -372,9 +380,12 @@ const AdminLayout = () => {
   const adminSidebarDmsItem = isAdmin
     ? (navItemsWithoutAdminMessages.find((i) => i.to === "/admin/documentos") ?? null)
     : null;
-  const isAdminMessagesSectionActive = ADMIN_MESSAGE_CHILD_ROUTES.some(
-    (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
-  );
+  const isAdminMessagesSectionActive =
+    ADMIN_MESSAGE_CHILD_ROUTES.some(
+      (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
+    ) ||
+    location.pathname === ADMIN_PATHS.solicitudesFichajes ||
+    location.pathname === ADMIN_PATHS.solicitudesVacaciones;
   const [adminMessagesOpen, setAdminMessagesOpen] = useState(isAdminMessagesSectionActive);
 
   useEffect(() => {
@@ -403,15 +414,17 @@ const AdminLayout = () => {
   }, [isWorkerTimeClockSectionActive]);
 
   const navNeedsAttention = (to: string) => {
-    if (to === ADMIN_PATHS.solicitudesFicha && userRole === "ADMIN") return pendingAdminProfileCount > 0;
-    if (to === ADMIN_PATHS.solicitudesVacaciones && userRole === "ADMIN")
-      return pendingVacationRequestCount > 0;
+    if (to === ADMIN_PATHS.solicitudesFicha && userRole === "ADMIN") return pendingModificationCount > 0;
     if (to === ADMIN_PATHS.gastosTrabajadores && userRole === "ADMIN") return pendingExpenseSheetCount > 0;
     if (to === "/admin/mensajes" && (userRole === "WORKER" || userRole === "ADMIN"))
       return unreadMessageCount > 0;
     if (to === "/admin/documentos-pendientes" && userRole === "WORKER") return pendingAssignedDocsCount > 0;
     if (to === "/admin/mi-ficha" && (userRole === "WORKER" || userRole === "ADMIN"))
-      return workerHasPendingProfileRequest || workerHasPendingCalendarRequest;
+      return (
+        workerHasPendingProfileRequest ||
+        workerHasPendingCalendarRequest ||
+        workerHasPendingModuleRequest
+      );
     return false;
   };
 
@@ -441,6 +454,13 @@ const AdminLayout = () => {
     if (path === "/admin/usuarios") return pathname === "/admin/usuarios";
     /** Evita marcar «Control de fichajes» activo en «Informes fichajes». */
     if (path === "/admin/control-fichajes") return pathname === "/admin/control-fichajes";
+    if (path === ADMIN_PATHS.solicitudesFicha) {
+      return (
+        pathname === path ||
+        pathname === ADMIN_PATHS.solicitudesFichajes ||
+        pathname === ADMIN_PATHS.solicitudesVacaciones
+      );
+    }
     return pathname === path || pathname.startsWith(`${path}/`);
   };
 
@@ -460,10 +480,10 @@ const AdminLayout = () => {
       const active = isNavActive(item.to);
       const attention = navNeedsAttention(item.to);
       const pendingLabel =
-        item.to === ADMIN_PATHS.solicitudesFicha && pendingAdminProfileCount > 0
+        item.to === ADMIN_PATHS.solicitudesFicha && pendingModificationCount > 0
           ? t("admin.layout.nav_pending_profile_requests_aria").replace(
               "{{count}}",
-              String(pendingAdminProfileCount)
+              String(pendingModificationCount)
             )
           : attention && item.to === "/admin/mi-ficha"
             ? t("admin.layout.nav_my_profile_pending_aria")
@@ -761,23 +781,14 @@ const AdminLayout = () => {
                 const active = isNavActive(item.to);
                 const attention = navNeedsAttention(item.to);
                 const childCount =
-                  item.to === ADMIN_PATHS.solicitudesVacaciones
-                    ? pendingVacationRequestCount
-                    : item.to === ADMIN_PATHS.solicitudesFicha
-                      ? pendingAdminProfileCount
-                      : 0;
+                  item.to === ADMIN_PATHS.solicitudesFicha ? pendingModificationCount : 0;
                 const pendingLabel =
-                  item.to === ADMIN_PATHS.solicitudesFicha && pendingAdminProfileCount > 0
+                  item.to === ADMIN_PATHS.solicitudesFicha && pendingModificationCount > 0
                     ? t("admin.layout.nav_pending_profile_requests_aria").replace(
                         "{{count}}",
-                        String(pendingAdminProfileCount)
+                        String(pendingModificationCount)
                       )
-                    : item.to === ADMIN_PATHS.solicitudesVacaciones && pendingVacationRequestCount > 0
-                      ? t("admin.layout.nav_vacation_requests_pending_aria").replace(
-                          "{{count}}",
-                          String(pendingVacationRequestCount)
-                        )
-                      : undefined;
+                    : undefined;
                 return (
                   <Link
                     key={item.to}

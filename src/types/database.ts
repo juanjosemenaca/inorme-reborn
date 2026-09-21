@@ -201,6 +201,21 @@ export interface WorkerCalendarChangeRequestRow {
   updated_at: string;
 }
 
+export interface WorkerModuleChangeRequestRow {
+  id: string;
+  company_worker_id: string;
+  backoffice_user_id: string;
+  status: DbWorkerProfileChangeStatus;
+  worker_message: string;
+  previous_modules: string[];
+  suggested_modules: string[];
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface WorkerVacationChangeRequestRow {
   id: string;
   company_worker_id: string;

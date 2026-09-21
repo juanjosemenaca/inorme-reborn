@@ -5,6 +5,7 @@ import {
   fetchWorkerVacationChangeRequestsForWorker,
   hasPendingWorkerVacationRequest,
 } from "@/api/workerVacationChangeRequestsApi";
+import { fetchPendingCarryoverRequests } from "@/api/workerVacationCarryoverRequestsApi";
 import { queryKeys } from "@/lib/queryKeys";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
@@ -46,5 +47,13 @@ export function useHasPendingWorkerVacationRequest(
     ] as const,
     queryFn: () => hasPendingWorkerVacationRequest(companyWorkerId!, calendarYear),
     enabled: isSupabaseConfigured() && enabled && !!companyWorkerId,
+  });
+}
+
+export function usePendingCarryoverRequests(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.pendingCarryoverRequests,
+    queryFn: fetchPendingCarryoverRequests,
+    enabled: isSupabaseConfigured() && enabled,
   });
 }
