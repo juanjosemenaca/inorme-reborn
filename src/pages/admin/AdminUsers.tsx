@@ -48,6 +48,7 @@ import {
   updateUser,
   deleteUser,
   countAdmins,
+  resetBackofficeUserPassword,
 } from "@/api/backofficeUsersApi";
 import type { BackofficeUserRecord, UserRole } from "@/types/backoffice";
 import { getResolvedDisplayName } from "@/types/backoffice";
@@ -86,8 +87,11 @@ const AdminUsers = () => {
   const [editing, setEditing] = useState<BackofficeUserRecord | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<BackofficeUserRecord | null>(null);
-  const [initialPasswordReveal, setInitialPasswordReveal] = useState<string | null>(null);
+  const [passwordReveal, setPasswordReveal] = useState<{ password: string; kind: "create" | "reset" } | null>(
+    null
+  );
   const [forceTarget, setForceTarget] = useState<BackofficeUserRecord | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   const localeTag =
     language === "en" ? "en-GB" : language === "ca" ? "ca-ES" : "es-ES";
@@ -173,7 +177,7 @@ const AdminUsers = () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
       toast({ title: t("admin.users.toast_created") });
       setDialogOpen(false);
-      setInitialPasswordReveal(initialPassword);
+      setPasswordReveal({ password: initialPassword, kind: "create" });
     } catch (e) {
       toast({
         title: t("admin.common.error"),
@@ -251,17 +255,21 @@ const AdminUsers = () => {
   const confirmForcePasswordChange = async () => {
     if (!forceTarget) return;
     try {
-      await updateUser(forceTarget.id, { forcePasswordChange: true });
+      setResettingPassword(true);
+      const temporaryPassword = await resetBackofficeUserPassword(forceTarget.id);
       await queryClient.invalidateQueries({ queryKey: queryKeys.backofficeUsers });
-      toast({ title: t("admin.users.toast_force_change") });
+      setForceTarget(null);
+      setPasswordReveal({ password: temporaryPassword, kind: "reset" });
+      toast({ title: t("admin.users.toast_reset_password") });
     } catch (e) {
       toast({
         title: t("admin.common.error"),
         description: e instanceof Error ? e.message : t("admin.users.operation_failed"),
         variant: "destructive",
       });
+    } finally {
+      setResettingPassword(false);
     }
-    setForceTarget(null);
   };
 
   const toggleActive = async (u: BackofficeUserRecord) => {
@@ -599,6 +607,12 @@ const AdminUsers = () => {
         selectableWorkersForEdit={selectableWorkersForEdit}
         onSubmitCreate={handleSubmitCreate}
         onSubmitEdit={handleSubmitEdit}
+        canResetPassword={session?.role === "ADMIN" && !!editing && session?.userId !== editing.id}
+        onResetPassword={() => {
+          if (!editing) return;
+          setDialogOpen(false);
+          setForceTarget(editing);
+        }}
       />
 
       <DoubleConfirmAlertDialog
@@ -619,35 +633,48 @@ const AdminUsers = () => {
         }
       />
 
-      <AlertDialog open={!!initialPasswordReveal} onOpenChange={(o) => !o && setInitialPasswordReveal(null)}>
+      <AlertDialog open={!!passwordReveal} onOpenChange={(o) => !o && setPasswordReveal(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("admin.users.initial_password_title")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("admin.users.initial_password_desc")}</AlertDialogDescription>
+            <AlertDialogTitle>
+              {passwordReveal?.kind === "reset"
+                ? t("admin.users.reset_password_title")
+                : t("admin.users.initial_password_title")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {passwordReveal?.kind === "reset"
+                ? t("admin.users.reset_password_desc")
+                : t("admin.users.initial_password_desc")}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex gap-2">
-            <Input readOnly value={initialPasswordReveal ?? ""} className="font-mono text-sm" />
+            <Input readOnly value={passwordReveal?.password ?? ""} className="font-mono text-sm" />
             <Button
               type="button"
               variant="outline"
               size="icon"
               title={t("admin.users.initial_password_copy")}
               onClick={() => {
-                if (initialPasswordReveal) void navigator.clipboard.writeText(initialPasswordReveal);
+                if (passwordReveal?.password) void navigator.clipboard.writeText(passwordReveal.password);
               }}
             >
               <Copy className="h-4 w-4" />
             </Button>
           </div>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setInitialPasswordReveal(null)}>
+            <AlertDialogAction onClick={() => setPasswordReveal(null)}>
               {t("admin.common.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={!!forceTarget} onOpenChange={(o) => !o && setForceTarget(null)}>
+      <AlertDialog
+        open={!!forceTarget}
+        onOpenChange={(o) => {
+          if (!o && !resettingPassword) setForceTarget(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("admin.users.force_change_title")}</AlertDialogTitle>
@@ -659,10 +686,14 @@ const AdminUsers = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t("admin.common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmForcePasswordChange()}>
-              {t("admin.common.confirm")}
-            </AlertDialogAction>
+            <AlertDialogCancel disabled={resettingPassword}>{t("admin.common.cancel")}</AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={resettingPassword}
+              onClick={() => void confirmForcePasswordChange()}
+            >
+              {resettingPassword ? t("admin.users.reset_password_saving") : t("admin.users.force_change")}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

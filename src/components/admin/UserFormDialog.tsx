@@ -77,6 +77,9 @@ type Props = {
   selectableWorkersForEdit?: CompanyWorkerRecord[];
   onSubmitCreate: (values: UserCreateFormValues) => void | Promise<void>;
   onSubmitEdit: (values: UserEditFormValues) => void | Promise<void>;
+  /** Reset de contraseña de otro usuario (el listado muestra la temporal). */
+  onResetPassword?: () => void;
+  canResetPassword?: boolean;
 };
 
 function UserFormDialogInner({
@@ -88,6 +91,8 @@ function UserFormDialogInner({
   selectableWorkersForEdit = [],
   onSubmitCreate,
   onSubmitEdit,
+  onResetPassword,
+  canResetPassword = false,
 }: Props) {
   const { t, language } = useLanguage();
 
@@ -570,6 +575,17 @@ function UserFormDialogInner({
                       </p>
                     );
                   })() : null}
+                  {canResetPassword && onResetPassword ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-1"
+                      onClick={onResetPassword}
+                    >
+                      {t("admin.users.force_change")}
+                    </Button>
+                  ) : null}
                 </div>
               )}
 

@@ -347,7 +347,7 @@ export async function updateUser(
       if (pwErr) throw new Error(pwErr.message);
     } else {
       throw new Error(
-        "Cambiar la contraseña de otro usuario solo desde Supabase Dashboard → Authentication → Users."
+        "Para resetear la contraseña de otro usuario usa «Resetear contraseña» en el listado."
       );
     }
   }
@@ -434,6 +434,27 @@ export async function updateUser(
   const { data: updated, error } = await sb.from("backoffice_users").update(patch).eq("id", id).select("*").single();
   if (error) throw error;
   return backofficeUserRowToDomain(updated as BackofficeUserRow);
+}
+
+/**
+ * Genera una contraseña temporal para otro usuario (solo ADMIN).
+ * La devuelve una sola vez para que el administrador se la comunique.
+ */
+export async function resetBackofficeUserPassword(userId: string): Promise<string> {
+  const sb = requireSupabase();
+  const { data, error } = await sb.functions.invoke("reset-backoffice-password", {
+    body: { userId },
+  });
+  const payload = data as { temporaryPassword?: string; error?: string } | null;
+  if (error) {
+    const fromBody = typeof payload?.error === "string" ? payload.error : null;
+    throw new Error(fromBody || error.message);
+  }
+  const password = payload?.temporaryPassword;
+  if (typeof password !== "string" || password.length < 8) {
+    throw new Error("No se pudo generar la contraseña temporal.");
+  }
+  return password;
 }
 
 export async function updateWorkerModules(

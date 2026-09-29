@@ -387,6 +387,9 @@ s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
 
+[functions.reset-backoffice-password]
+verify_jwt = true
+
 # [experimental.pgdelta]
 # When enabled, pg-delta becomes the active engine for supported schema flows.
 # enabled = false
