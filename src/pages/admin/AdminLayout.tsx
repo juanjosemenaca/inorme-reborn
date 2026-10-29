@@ -28,6 +28,8 @@ import {
   ClipboardList,
   Archive,
   FileSpreadsheet,
+  Sparkles,
+  LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,11 +63,13 @@ import { pendingTimeClockCorrectionCount } from "@/lib/timeClockCorrectionReques
 import { useMyDmsDocumentReviewsAsAssignee } from "@/hooks/useMyDmsDocumentReviews";
 import { ADMIN_PATHS } from "@/constants/adminPaths";
 import { IntranetAttentionDialogs } from "@/components/admin/IntranetAttentionDialogs";
+import { canUseAiAssistant } from "@/lib/ai/aiAccess";
 import { runProjectEndNotices } from "@/api/projectsApi";
 import { isWorkerModuleEnabled } from "@/lib/workerModules";
 
 const NAV_KEYS = [
   { to: "/admin", labelKey: "admin.layout.nav_panel", icon: LayoutDashboard, roles: ["ADMIN", "WORKER"] as const },
+  { to: "/admin/dashboard", labelKey: "admin.layout.nav_my_dashboard", icon: LayoutGrid, roles: ["ADMIN", "WORKER"] as const },
   { to: "/admin/vacaciones", labelKey: "admin.layout.nav_vacations", icon: Palmtree, roles: ["ADMIN"] as const },
   {
     to: ADMIN_PATHS.solicitudesFicha,
@@ -169,6 +173,8 @@ const NAV_KEYS = [
     icon: FileSpreadsheet,
     roles: ["ADMIN"] as const,
   },
+  /** Acceso decidido por `canUseAiAssistant` (ADMIN o WORKER con módulos de datos). */
+  { to: "/admin/ai", labelKey: "admin.layout.nav_ai_assistant", icon: Sparkles, roles: ["ADMIN", "WORKER"] as const },
 ] as const;
 
 /** Orden del lateral para trabajadores: bloque personal → separador → módulos activables (operativos). */
@@ -176,6 +182,7 @@ type WorkerSidebarSegment = { kind: "link"; path: string } | { kind: "time_clock
 
 const WORKER_SIDEBAR_PERSONAL_SEGMENTS: WorkerSidebarSegment[] = [
   { kind: "link", path: "/admin" },
+  { kind: "link", path: "/admin/dashboard" },
   { kind: "link", path: "/admin/mi-ficha" },
   { kind: "link", path: "/admin/mi-calendario" },
   { kind: "time_clock" },
@@ -186,6 +193,7 @@ const WORKER_SIDEBAR_PERSONAL_SEGMENTS: WorkerSidebarSegment[] = [
 ];
 
 const WORKER_SIDEBAR_OPERATIONAL_PATHS: readonly string[] = [
+  "/admin/ai",
   "/admin/facturacion",
   "/admin/documentos",
   "/admin/trabajadores",
@@ -206,6 +214,8 @@ type AdminMainNavSegment =
 
 const ADMIN_MAIN_NAV_SEGMENTS: AdminMainNavSegment[] = [
   { kind: "panel" },
+  { kind: "link", path: "/admin/dashboard" },
+  { kind: "link", path: "/admin/ai" },
   { kind: "messages_hub" },
   { kind: "users_submenu" },
   { kind: "link", path: "/admin/trabajadores" },
@@ -311,6 +321,7 @@ const AdminLayout = () => {
 
   const navItems = NAV_KEYS.filter((item) => {
     if (userRole === null || !item.roles.includes(userRole)) return false;
+    if (item.to === "/admin/ai") return canUseAiAssistant(userRole, enabledModules);
     if ("requiredModule" in item && item.requiredModule) {
       return isWorkerModuleEnabled(userRole, enabledModules, item.requiredModule);
     }

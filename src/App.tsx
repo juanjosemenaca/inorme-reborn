@@ -46,6 +46,8 @@ import AdminWorkerExpenses from "./pages/admin/AdminWorkerExpenses";
 import AdminBilling from "./pages/admin/AdminBilling";
 import AdminDms from "./pages/admin/AdminDms";
 import AdminBulkInvoices from "./pages/admin/AdminBulkInvoices";
+import AdminAiAssistant from "./pages/admin/AdminAiAssistant";
+import AdminPersonalDashboard from "./pages/admin/AdminPersonalDashboard";
 import { ADMIN_ROUTE_SEG, solicitudesGroupHref } from "@/constants/adminPaths";
 
 const queryClient = new QueryClient();
@@ -263,6 +265,22 @@ const App = () => (
                   element={
                     <RoleRoute allowedRoles={["ADMIN", "WORKER"]} requiredModule="ADMIN_COMPANY_WORKERS">
                       <AdminCompanyWorkers />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="dashboard"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN", "WORKER"]}>
+                      <AdminPersonalDashboard />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="ai"
+                  element={
+                    <RoleRoute allowedRoles={["ADMIN", "WORKER"]}>
+                      <AdminAiAssistant />
                     </RoleRoute>
                   }
                 />

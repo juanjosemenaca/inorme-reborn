@@ -51,4 +51,8 @@ export const queryKeys = {
   dmsDocumentLogs: (documentId: string) => ["dmsDocumentLogs", documentId] as const,
   dmsDocumentReviews: (documentId: string) => ["dmsDocumentReviews", documentId] as const,
   myDmsDocumentReviews: ["myDmsDocumentReviews"] as const,
+  dashboardWidgets: ["dashboardWidgets"] as const,
+  dashboardWidgetData: (widgetId: string, stamp: string) => ["dashboardWidgetData", widgetId, stamp] as const,
+  aiConversations: ["aiConversations"] as const,
+  aiMessages: (conversationId: string) => ["aiMessages", conversationId] as const,
 };
